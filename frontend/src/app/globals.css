@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../styles/hopepage.css";
+@import "../styles/register.css";
 
 :root {
   --background: #050505;

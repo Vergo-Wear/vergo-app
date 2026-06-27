@@ -1,0 +1,226 @@
+/* Styling for Register Page - Vergo Theme */
+
+.auth-page-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #050505;
+  color: #ffffff;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+.auth-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  position: relative;
+  background: radial-gradient(circle at 50% 30%, rgba(0, 255, 157, 0.03) 0%, rgba(5, 5, 5, 1) 70%);
+}
+
+.register-card {
+  width: 100%;
+  max-width: 460px;
+  background: #161618;
+  border-radius: 24px;
+  padding: 40px 36px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 1px rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.register-card-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.register-card-logo img {
+  object-fit: contain;
+}
+
+.register-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #ffffff;
+  margin-bottom: 32px;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.register-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-group {
+  position: relative;
+  width: 100%;
+}
+
+.custom-input {
+  width: 100%;
+  height: 52px;
+  background: #0f0f11;
+  border: 1.5px solid #00FF9D;
+  border-radius: 10px;
+  padding: 0 18px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+  outline: none;
+  transition: all 0.25s ease;
+  box-shadow: 0 0 8px rgba(0, 255, 157, 0.05);
+}
+
+.custom-input::placeholder {
+  color: #8e8e93;
+  letter-spacing: 0.1em;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.custom-input:focus {
+  border-color: #00FF9D;
+  box-shadow: 0 0 15px rgba(0, 255, 157, 0.25);
+  background: #141417;
+}
+
+/* Mobile input with inline OTP button */
+.mobile-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.mobile-input-wrapper .custom-input {
+  padding-right: 140px;
+}
+
+.request-otp-btn {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  bottom: 6px;
+  background: #00FF9D;
+  color: #000000;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: none;
+  border-radius: 6px;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.request-otp-btn:hover:not(:disabled) {
+  background: #00e08b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 255, 157, 0.3);
+}
+
+.request-otp-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #2a3832;
+  color: #80cda7;
+}
+
+.register-submit-btn {
+  width: 100%;
+  height: 52px;
+  margin-top: 10px;
+  background: #00FF9D;
+  color: #000000;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(0, 255, 157, 0.2);
+}
+
+.register-submit-btn:hover:not(:disabled) {
+  background: #00e08b;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(0, 255, 157, 0.4);
+}
+
+.register-submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.register-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Validation Feedback & Notifications */
+.feedback-message {
+  font-size: 0.8rem;
+  padding: 8px 12px;
+  border-radius: 6px;
+  text-align: center;
+  margin-top: 4px;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.feedback-message.success {
+  background: rgba(0, 255, 157, 0.1);
+  color: #00FF9D;
+  border: 1px solid rgba(0, 255, 157, 0.2);
+}
+
+.feedback-message.error {
+  background: rgba(255, 77, 77, 0.1);
+  color: #ff4d4d;
+  border: 1px solid rgba(255, 77, 77, 0.2);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 520px) {
+  .register-card {
+    padding: 30px 20px;
+    border-radius: 18px;
+  }
+  .mobile-input-wrapper .custom-input {
+    padding-right: 120px;
+  }
+  .request-otp-btn {
+    font-size: 0.7rem;
+    padding: 0 10px;
+  }
+}
