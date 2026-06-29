@@ -1,9 +1,10 @@
-import ProductCard from "./ProductCard";
+import ProductCard from "../ProductCard/ProductCard";
 import { products } from "@/data/product";
+import "./collection.css";
 
 export default function Collection() {
   return (
-    <section className="collection">
+    <section id="collection" className="collection">
       <div className="collection-header">
         <div className="collection-title-area">
           <h2>The Collection</h2>

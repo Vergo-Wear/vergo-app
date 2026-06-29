@@ -1,0 +1,220 @@
+/* Styling for Employee Dashboard - Vergo Theme */
+.employee-layout-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #050505;
+  color: #ffffff;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+.employee-header {
+  height: 70px;
+  background: rgba(10, 10, 10, 0.75);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.employee-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #ffffff;
+}
+
+.employee-nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.employee-nav-link {
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: #8e8e93;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.employee-nav-link:hover, .employee-nav-link.active {
+  color: #00FF9D;
+}
+
+.employee-user-badge {
+  background: rgba(0, 255, 157, 0.1);
+  border: 1px solid rgba(0, 255, 157, 0.2);
+  color: #00FF9D;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.employee-main {
+  flex: 1;
+  padding: 32px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.employee-title-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.employee-title-section h1 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.employee-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+/* Dashboard Cards */
+.employee-card {
+  background: #111113;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.employee-card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ffffff;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Task lists and tables */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.task-item {
+  background: #161618;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.task-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 255, 157, 0.3);
+}
+
+.task-info {
+  text-align: left;
+}
+
+.task-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.task-meta {
+  font-size: 0.75rem;
+  color: #8e8e93;
+}
+
+.task-status-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.task-status-badge.pending {
+  background: rgba(255, 179, 0, 0.1);
+  color: #ffb300;
+  border: 1px solid rgba(255, 179, 0, 0.2);
+}
+
+.task-status-badge.completed {
+  background: rgba(0, 255, 157, 0.1);
+  color: #00FF9D;
+  border: 1px solid rgba(0, 255, 157, 0.2);
+}
+
+/* Scanner Action Panel */
+.scanner-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  border: 2px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.01);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scanner-panel:hover {
+  background: rgba(0, 255, 157, 0.02);
+  border-color: #00FF9D;
+}
+
+.scanner-icon {
+  width: 48px;
+  height: 48px;
+  color: #8e8e93;
+  margin-bottom: 16px;
+  transition: color 0.2s ease;
+}
+
+.scanner-panel:hover .scanner-icon {
+  color: #00FF9D;
+}
+
+.scanner-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.scanner-subtext {
+  font-size: 0.75rem;
+  color: #8e8e93;
+}
+
+@media screen and (max-width: 900px) {
+  .employee-grid {
+    grid-template-columns: 1fr;
+  }
+}

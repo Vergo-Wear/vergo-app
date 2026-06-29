@@ -1,4 +1,5 @@
 import Image from "next/image";
+import "./product-card.css";
 
 export default function ProductCard({ product }: any) {
   return (
