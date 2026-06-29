@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 
 // Product data matching Figma design
 const productGallery = [
@@ -78,7 +76,6 @@ export default function ProductDetailPage() {
 
   return (
     <div className="product-detail-wrapper">
-      <Navbar />
 
       <main className="product-detail-container">
         {/* Breadcrumbs */}
@@ -268,8 +265,6 @@ export default function ProductDetailPage() {
           </div>
         </section>
       </main>
-
-      <Footer />
 
       {/* Toast notification */}
       {toast && (

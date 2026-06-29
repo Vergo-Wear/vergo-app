@@ -1,4 +1,5 @@
 import Image from "next/image";
+import "./footer.css";
 
 export default function Footer() {
   return (
@@ -10,6 +11,7 @@ export default function Footer() {
             alt="VERGO"
             width={120}
             height={36}
+            style={{ width: "auto", height: "auto" }}
           />
         </div>
 

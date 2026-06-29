@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -83,7 +81,6 @@ export default function RegisterPage() {
 
   return (
     <div className="auth-page-wrapper">
-      <Navbar />
 
       <main className="auth-container">
         <div className="register-card">
@@ -95,7 +92,7 @@ export default function RegisterPage() {
               width={130}
               height={40}
               priority
-              style={{ objectFit: "contain" }}
+              style={{ objectFit: "contain", width: "auto", height: "auto" }}
             />
           </div>
 
@@ -195,8 +192,6 @@ export default function RegisterPage() {
           </form>
         </div>
       </main>
-
-      <Footer />
     </div>
   );
 }

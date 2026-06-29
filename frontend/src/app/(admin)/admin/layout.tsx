@@ -159,7 +159,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               width={110}
               height={32}
               priority
-              style={{ objectFit: "contain" }}
+              style={{ objectFit: "contain", width: "auto", height: "auto" }}
             />
           </div>
           <div className="text-[9px] font-bold tracking-[0.25em] text-[#8e8e93] uppercase ml-1">
@@ -175,11 +175,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.name}
                 href={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${
-                  isActive
+                className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${isActive
                     ? "bg-[rgba(255,255,255,0.08)] text-white"
                     : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
-                }`}
+                  }`}
               >
                 {item.icon}
                 <span>{item.name}</span>
@@ -197,11 +196,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.name}
                 href={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${
-                  isActive
+                className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${isActive
                     ? "bg-[rgba(255,255,255,0.08)] text-white"
                     : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
-                }`}
+                  }`}
               >
                 {item.icon}
                 <span>{item.name}</span>

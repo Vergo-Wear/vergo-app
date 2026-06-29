@@ -1,0 +1,97 @@
+/* Hero Styling */
+.hero {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 80px);
+  min-height: 650px;
+  max-height: 900px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  padding: 0 80px;
+}
+
+.hero-overlay {
+  max-width: 650px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 28px;
+}
+
+.available {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #000000;
+  background: var(--accent);
+  padding: 6px 14px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.hero-overlay h1 {
+  font-size: 5rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.hero-overlay p {
+  font-size: 1.15rem;
+  font-weight: 300;
+  line-height: 1.6;
+  color: var(--accent-muted);
+  max-width: 480px;
+}
+
+.hero-overlay button {
+  background: var(--accent);
+  color: #050505;
+  border: 1px solid var(--accent);
+  padding: 16px 36px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  text-transform: uppercase;
+}
+
+.hero-overlay button:hover {
+  background: transparent;
+  color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* Tablet Screens (1024px and below) */
+@media screen and (max-width: 1024px) {
+  .hero {
+    padding: 0 48px;
+  }
+
+  .hero-overlay h1 {
+    font-size: 4rem;
+  }
+}
+
+/* Mobile Screens (768px and below) */
+@media screen and (max-width: 768px) {
+  .hero {
+    height: 550px;
+    min-height: auto;
+    padding: 0 24px;
+  }
+
+  .hero-overlay h1 {
+    font-size: 2.75rem;
+  }
+
+  .hero-overlay p {
+    font-size: 1rem;
+  }
+}
