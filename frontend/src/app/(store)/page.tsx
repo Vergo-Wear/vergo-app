@@ -1,5 +1,5 @@
 import Hero from "@/components/Hero/Hero";
-import Collection from "@/components/Collection/Collection";
+import Highlights from "@/components/Highlights/Highlights";
 import Newsletter from "@/components/Newsletter/Newsletter";
 
 export default function Home() {
@@ -7,7 +7,7 @@ export default function Home() {
     <>
       <div className="hero-collection-container">
         <Hero />
-        <Collection />
+        <Highlights />
       </div>
       <Newsletter />
     </>

@@ -14,13 +14,12 @@ export interface NavbarProps {
     email: string;
   };
   onLogoutClick?: () => void;
-  onSearch?: (query: string) => void;
   links?: Array<{ label: string; href: string }>;
 }
 
 const defaultLinks = [
   { label: "HOME", href: "/" },
-  { label: "COLLECTION", href: "/#collection" },
+  { label: "COLLECTION", href: "/collection" },
   { label: "ABOUT US", href: "/#aboutus" },
 ];
 
@@ -29,23 +28,12 @@ export default function Navbar({
   isLoggedIn = false,
   user,
   onLogoutClick,
-  onSearch,
   links,
 }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
 
   const navLinks = links || defaultLinks;
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (onSearch) {
-      onSearch(searchQuery);
-    } else if (searchQuery.trim()) {
-      router.push(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
-    }
-  };
 
   return (
     <nav className="navbar">
@@ -74,30 +62,6 @@ export default function Navbar({
 
         {/* Action icons / buttons */}
         <div className="nav-actions">
-          <form onSubmit={handleSearchSubmit} className="nav-search">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="nav-search-icon"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-              />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search items..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="nav-search-input"
-            />
-          </form>
-
           <Link href="/cart" className="icon-btn relative-btn" aria-label="Cart">
             <svg
               xmlns="http://www.w3.org/2000/svg"

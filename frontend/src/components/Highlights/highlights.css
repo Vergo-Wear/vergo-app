@@ -1,11 +1,11 @@
-/* Collection Styling */
-.collection {
+/* Highlights Styling */
+.highlights {
   max-width: 1440px;
   margin: 0 auto;
   padding: 120px 48px;
 }
 
-.collection-header {
+.highlights-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
@@ -15,14 +15,14 @@
   width: 100%;
 }
 
-.collection-title-area {
+.highlights-title-area {
   display: flex;
   flex-direction: column;
   gap: 8px;
   text-align: left;
 }
 
-.collection-header h2 {
+.highlights-header h2 {
   font-size: 2.5rem;
   font-weight: 800;
   letter-spacing: -0.01em;
@@ -66,7 +66,7 @@
 
 /* Tablet Screens (1024px and below) */
 @media screen and (max-width: 1024px) {
-  .collection {
+  .highlights {
     padding: 96px 32px;
   }
 
@@ -78,18 +78,18 @@
 
 /* Mobile Screens (768px and below) */
 @media screen and (max-width: 768px) {
-  .collection {
+  .highlights {
     padding: 80px 24px;
   }
 
-  .collection-header {
+  .highlights-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
     margin-bottom: 48px;
   }
 
-  .collection-header h2 {
+  .highlights-header h2 {
     font-size: 2.25rem;
   }
 
@@ -97,4 +97,48 @@
     grid-template-columns: 1fr;
     gap: 36px;
   }
+}
+
+/* View More Button styling */
+.view-more-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 56px;
+  width: 100%;
+}
+
+.view-more-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #ffffff;
+  text-decoration: none;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 16px 36px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  background: transparent;
+  cursor: pointer;
+}
+
+.view-more-link:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.view-more-link svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.3s ease;
+}
+
+.view-more-link:hover svg {
+  transform: translateX(4px);
 }
