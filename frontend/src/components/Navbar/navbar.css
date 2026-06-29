@@ -220,7 +220,7 @@
   z-index: 101;
 }
 
-.user-profile-menu:hover .user-dropdown {
+.user-dropdown.show {
   display: flex;
 }
 
