@@ -224,3 +224,61 @@
     padding: 0 10px;
   }
 }
+
+/* Auth divider for Sign In page */
+.auth-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 10px 0;
+}
+
+/* Centered heading for secondary auth sections */
+.auth-section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #a0a0a5;
+  text-align: center;
+  margin-top: 8px;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+/* Secondary (faded) auth button styling */
+.auth-secondary-btn {
+  width: 100%;
+  height: 52px;
+  background: rgba(0, 255, 157, 0.08);
+  color: #00FF9D;
+  border: 1.5px solid rgba(0, 255, 157, 0.25);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-secondary-btn:hover:not(:disabled) {
+  background: rgba(0, 255, 157, 0.18);
+  border-color: #00e08b;
+  color: #ffffff;
+  box-shadow: 0 0 15px rgba(0, 255, 157, 0.1);
+  transform: translateY(-1px);
+}
+
+.auth-secondary-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.auth-secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+

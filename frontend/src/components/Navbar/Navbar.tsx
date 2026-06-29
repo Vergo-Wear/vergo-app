@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,7 @@ export interface NavbarProps {
   user?: {
     name: string;
     email: string;
+    avatarUrl?: string;
   };
   onLogoutClick?: () => void;
   links?: Array<{ label: string; href: string }>;
@@ -32,6 +33,60 @@ export default function Navbar({
 }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
+
+  const [currentUser, setCurrentUser] = useState<NavbarProps["user"]>(user);
+  const [loggedInState, setLoggedInState] = useState<boolean>(isLoggedIn);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  useEffect(() => {
+    const loadAuthState = () => {
+      const storedUser = localStorage.getItem("vergo_user");
+      const storedLoggedIn = localStorage.getItem("vergo_is_logged_in");
+
+      if (storedLoggedIn === "true" && storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setCurrentUser(parsedUser);
+          setLoggedInState(true);
+        } catch (e) {
+          console.error("Error parsing user data from localStorage:", e);
+        }
+      } else {
+        setCurrentUser(user);
+        setLoggedInState(isLoggedIn);
+      }
+    };
+
+    loadAuthState();
+
+    const handleAuthChange = () => {
+      loadAuthState();
+    };
+
+    window.addEventListener("vergo-auth-change", handleAuthChange);
+    window.addEventListener("storage", handleAuthChange);
+
+    return () => {
+      window.removeEventListener("vergo-auth-change", handleAuthChange);
+      window.removeEventListener("storage", handleAuthChange);
+    };
+  }, [user, isLoggedIn]);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".user-profile-menu")) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener("click", handleOutsideClick);
+    return () => {
+      document.removeEventListener("click", handleOutsideClick);
+    };
+  }, [showDropdown]);
 
   const navLinks = links || defaultLinks;
 
@@ -80,19 +135,42 @@ export default function Navbar({
             <span className="cart-badge">{cartCount}</span>
           </Link>
 
-          {isLoggedIn ? (
+          {loggedInState ? (
             <div className="user-profile-menu">
-              <div className="user-initials" aria-haspopup="true">
-                {user?.name ? user.name[0].toUpperCase() : "U"}
+              <div
+                className="user-initials"
+                aria-haspopup="true"
+                onClick={() => setShowDropdown((prev) => !prev)}
+                style={currentUser?.avatarUrl ? { padding: 0, overflow: "hidden", background: "transparent" } : undefined}
+              >
+                {currentUser?.avatarUrl ? (
+                  <Image
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.name || "User Profile"}
+                    width={38}
+                    height={38}
+                    className="user-avatar-img"
+                    style={{ borderRadius: "50%", objectFit: "cover", width: "100%", height: "100%" }}
+                  />
+                ) : (
+                  currentUser?.name ? currentUser.name[0].toUpperCase() : "U"
+                )}
               </div>
-              <div className="user-dropdown">
-                <span className="user-email">{user?.email || "user@vergowear.com"}</span>
+              <div className={`user-dropdown ${showDropdown ? "show" : ""}`}>
+                <span className="user-email">{currentUser?.email || "user@vergowear.com"}</span>
                 <hr className="dropdown-divider" />
-                <Link href="/admin" className="dropdown-item">Admin Dashboard</Link>
-                <Link href="/profile" className="dropdown-item">My Account</Link>
+                <Link href="/profile" className="dropdown-item" onClick={() => setShowDropdown(false)}>My Account</Link>
                 <button
                   onClick={() => {
-                    if (onLogoutClick) onLogoutClick();
+                    setShowDropdown(false);
+                    if (onLogoutClick) {
+                      onLogoutClick();
+                    } else {
+                      localStorage.removeItem("vergo_user");
+                      localStorage.removeItem("vergo_is_logged_in");
+                      window.dispatchEvent(new Event("vergo-auth-change"));
+                      router.push("/");
+                    }
                   }}
                   className="dropdown-item logout-btn-item"
                 >
@@ -105,7 +183,7 @@ export default function Navbar({
               <Link href="/auth/register" className="nav-register-link">
                 Register
               </Link>
-              <Link href="/auth/register" className="login-btn">
+              <Link href="/auth/login" className="login-btn">
                 Login
               </Link>
             </>
@@ -141,7 +219,7 @@ export default function Navbar({
               </Link>
             </li>
           ))}
-          {isLoggedIn ? (
+          {loggedInState ? (
             <>
               <li>
                 <Link href="/profile" onClick={() => setIsOpen(false)}>
@@ -153,7 +231,14 @@ export default function Navbar({
                   className="mobile-logout-btn"
                   onClick={() => {
                     setIsOpen(false);
-                    if (onLogoutClick) onLogoutClick();
+                    if (onLogoutClick) {
+                      onLogoutClick();
+                    } else {
+                      localStorage.removeItem("vergo_user");
+                      localStorage.removeItem("vergo_is_logged_in");
+                      window.dispatchEvent(new Event("vergo-auth-change"));
+                      router.push("/");
+                    }
                   }}
                 >
                   Logout
@@ -164,7 +249,7 @@ export default function Navbar({
             <>
               <li>
                 <Link
-                  href="/auth/register"
+                  href="/auth/login"
                   className="mobile-login-btn"
                   onClick={() => setIsOpen(false)}
                 >

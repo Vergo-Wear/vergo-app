@@ -4,12 +4,9 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-export default function RegisterPage() {
+export default function LoginPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
     mobileNumber: "",
     code: "",
   });
@@ -50,17 +47,6 @@ export default function RegisterPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validation checks
-    if (!formData.firstName.trim() || !formData.lastName.trim()) {
-      setMessage({ text: "Please enter both your First Name and Last Name.", type: "error" });
-      return;
-    }
-
-    if (!formData.email.trim() || !formData.email.includes("@")) {
-      setMessage({ text: "Please enter a valid email address.", type: "error" });
-      return;
-    }
 
     const cleanedMobile = formData.mobileNumber.replace(/\D/g, "");
     if (cleanedMobile.length !== 10) {
@@ -76,7 +62,7 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     setMessage(null);
 
-    // Simulate successful registration
+    // Simulate successful sign-in
     setTimeout(() => {
       setIsSubmitting(false);
 
@@ -85,8 +71,8 @@ export default function RegisterPage() {
       localStorage.setItem(
         "vergo_user",
         JSON.stringify({
-          name: `${formData.firstName} ${formData.lastName}`,
-          email: formData.email,
+          name: "Vergo Customer",
+          email: "customer@vergowear.com",
           avatarUrl: "/images/default-avatar.png",
         })
       );
@@ -94,8 +80,8 @@ export default function RegisterPage() {
       // Dispatch authentication change event to trigger Navbar update
       window.dispatchEvent(new Event("vergo-auth-change"));
 
-      setMessage({ text: "Registration successful! Welcome to VERGO. Redirecting...", type: "success" });
-
+      setMessage({ text: "Sign in successful! Redirecting...", type: "success" });
+      
       // Redirect to home/store page
       setTimeout(() => {
         router.push("/");
@@ -105,7 +91,6 @@ export default function RegisterPage() {
 
   return (
     <div className="auth-page-wrapper">
-
       <main className="auth-container">
         <div className="register-card">
           {/* Brand Logo at top of card */}
@@ -120,48 +105,9 @@ export default function RegisterPage() {
             />
           </div>
 
-          <h1 className="register-title">SIGN UP</h1>
+          <h1 className="register-title">SIGN IN</h1>
 
           <form className="register-form" onSubmit={handleSubmit}>
-            {/* First Name Input */}
-            <div className="input-group">
-              <input
-                type="text"
-                name="firstName"
-                placeholder="FIRST NAME"
-                value={formData.firstName}
-                onChange={handleChange}
-                className="custom-input"
-                autoComplete="given-name"
-              />
-            </div>
-
-            {/* Last Name Input */}
-            <div className="input-group">
-              <input
-                type="text"
-                name="lastName"
-                placeholder="LAST NAME"
-                value={formData.lastName}
-                onChange={handleChange}
-                className="custom-input"
-                autoComplete="family-name"
-              />
-            </div>
-
-            {/* Email Input */}
-            <div className="input-group">
-              <input
-                type="email"
-                name="email"
-                placeholder="EMAIL"
-                value={formData.email}
-                onChange={handleChange}
-                className="custom-input"
-                autoComplete="email"
-              />
-            </div>
-
             {/* Mobile Number with Request OTP */}
             <div className="input-group">
               <div className="mobile-input-wrapper">
@@ -205,28 +151,28 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* Submit Register Button */}
+            {/* Submit Login Button */}
             <button
               type="submit"
               disabled={isSubmitting}
               className="register-submit-btn"
             >
-              {isSubmitting ? "REGISTERING..." : "REGISTER"}
+              {isSubmitting ? "LOGGING IN..." : "LOG IN"}
             </button>
 
             {/* Divider Line */}
             <div className="auth-divider"></div>
 
             {/* Section Header */}
-            <div className="auth-section-title">ALREADY HAVE AN ACCOUNT?</div>
+            <div className="auth-section-title">NEW CUSTOMER</div>
 
-            {/* Login Button */}
+            {/* Register Button */}
             <button
               type="button"
-              onClick={() => router.push("/auth/login")}
+              onClick={() => router.push("/auth/register")}
               className="auth-secondary-btn"
             >
-              LOG IN
+              REGISTER
             </button>
           </form>
         </div>
