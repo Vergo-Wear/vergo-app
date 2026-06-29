@@ -21,7 +21,7 @@ export interface NavbarProps {
 const defaultLinks = [
   { label: "HOME", href: "/" },
   { label: "COLLECTION", href: "/#collection" },
-  { label: "ABOUT", href: "/#about" },
+  { label: "ABOUT US", href: "/#aboutus" },
 ];
 
 export default function Navbar({

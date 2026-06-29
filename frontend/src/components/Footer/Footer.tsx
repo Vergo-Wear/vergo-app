@@ -16,7 +16,6 @@ export default function Footer() {
         </div>
 
         <div className="footer-nav">
-          <a href="#" className="footer-link">RETURNS</a>
           <a href="#" className="footer-link">PRIVACY POLICY</a>
           <a href="#" className="footer-link">TERMS OF SERVICE</a>
           <a href="#" className="footer-link">CONTACT US</a>
