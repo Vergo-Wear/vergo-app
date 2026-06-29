@@ -1,6 +1,15 @@
+"use client";
+
 import "./hero.css";
 
 export default function Hero() {
+  const handleScrollToCollection = () => {
+    const element = document.getElementById("highlights");
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
   return (
     <section id="home" className="hero">
       <div className="hero-overlay">
@@ -22,7 +31,7 @@ export default function Hero() {
           Proof of authenticity for every thread.
         </p>
 
-        <button>
+        <button onClick={handleScrollToCollection}>
           Shop Latest Drop
         </button>
 

@@ -2,6 +2,7 @@
 @import "../styles/hopepage.css";
 @import "../styles/register.css";
 @import "../styles/product-detail.css";
+@import "../styles/collection-page.css";
 
 :root {
   --background: #050505;
