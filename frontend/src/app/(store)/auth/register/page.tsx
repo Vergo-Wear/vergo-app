@@ -92,7 +92,7 @@ export default function RegisterPage() {
               width={130}
               height={40}
               priority
-              style={{ objectFit: "contain", height: "auto" }}
+              style={{ objectFit: "contain", width: "auto", height: "auto" }}
             />
           </div>
 

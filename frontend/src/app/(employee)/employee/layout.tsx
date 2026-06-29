@@ -17,7 +17,7 @@ export default function EmployeeLayout({
             alt="VERGO"
             width={100}
             height={30}
-            style={{ objectFit: "contain", height: "auto" }}
+            style={{ objectFit: "contain", width: "auto", height: "auto" }}
           />
           <span>STAFF</span>
         </div>
