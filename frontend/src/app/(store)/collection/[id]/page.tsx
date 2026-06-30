@@ -4,6 +4,7 @@ import { useState, use, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { products } from "@/data/product";
+import ProductFeedback from "@/components/ProductFeedback";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -223,7 +224,7 @@ export default function ProductDetailPage({ params }: PageProps) {
             </div>
           </div>
         </section>
-
+        
         {/* Complete The Look Section */}
         {completeTheLookItems.length > 0 && (
           <section className="complete-look-section">
@@ -255,6 +256,9 @@ export default function ProductDetailPage({ params }: PageProps) {
             </div>
           </section>
         )}
+
+        {/* Product Feedback & Reviews Section */}
+        <ProductFeedback productId={product.id} productCategory={product.category} />
       </main>
 
       {/* Toast notification */}
