@@ -4,9 +4,10 @@ import { useState, useMemo, useRef, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import ProductCard from "@/components/ProductCard/ProductCard";
-import { products } from "@/data/product";
+import { useProducts } from "@/hooks/useProducts";
 
 function CollectionContent() {
+  const products = useProducts();
   const searchParams = useSearchParams();
   const router = useRouter();
   const searchQuery = searchParams.get("search") || "";
@@ -96,7 +97,7 @@ function CollectionContent() {
       if (p.category) list.add(p.category);
     });
     return Array.from(list);
-  }, []);
+  }, [products]);
 
   const sizesList = useMemo(() => {
     const list = new Set<string>();
@@ -104,7 +105,7 @@ function CollectionContent() {
       p.sizes?.forEach((s) => list.add(s));
     });
     return Array.from(list).sort();
-  }, []);
+  }, [products]);
 
   const colorsList = useMemo(() => {
     const list = new Set<string>();
@@ -112,7 +113,7 @@ function CollectionContent() {
       p.colors?.forEach((c) => list.add(c));
     });
     return Array.from(list).sort();
-  }, []);
+  }, [products]);
 
   // Price range thresholds
   const priceRanges = [
@@ -206,7 +207,7 @@ function CollectionContent() {
     });
 
     return result;
-  }, [localSearch, selectedCategories, selectedSizes, selectedColors, selectedPriceRanges, selectedAvailability, sortBy]);
+  }, [products, localSearch, selectedCategories, selectedSizes, selectedColors, selectedPriceRanges, selectedAvailability, sortBy]);
 
   // Adjust pagination when product length changes
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage) || 1;
