@@ -1,11 +1,19 @@
+import Link from "next/link";
 import Image from "next/image";
+import { getSupabaseImageUrlById } from "@/lib/supabase-images";
 
-export default function AboutHero() {
+async function getAboutHeroImageUrl() {
+  return getSupabaseImageUrlById(4, "/images/hero-bg.jpg");
+}
+
+export default async function AboutHero() {
+  const heroImageUrl = await getAboutHeroImageUrl();
+
   return (
     <section className="relative w-full">
       <div className="relative h-[70vh] md:h-[60vh] lg:h-[72vh]">
         <Image
-          src="/images/hero-bg.jpg"
+          src={heroImageUrl}
           alt="About background"
           fill
           sizes="100vw"
@@ -26,12 +34,12 @@ export default function AboutHero() {
             </p>
 
             <div className="mt-8 flex justify-center gap-4">
-              <a
+              <Link
                 href="/collection"
                 className="inline-flex items-center px-6 py-3 bg-emerald-500 text-black font-extrabold rounded-md shadow-md hover:opacity-95"
               >
                 Shop Collection
-              </a>
+              </Link>
               <a
                 href="#brand"
                 className="inline-flex items-center px-6 py-3 border border-white/10 text-white font-extrabold rounded-md hover:bg-white/5"
