@@ -1,9 +1,13 @@
+"use client";
+
 import Link from "next/link";
 import ProductCard from "../ProductCard/ProductCard";
-import { products } from "@/data/product";
+import { useProducts } from "@/hooks/useProducts";
 import "./highlights.css";
 
 export default function Highlights() {
+  const products = useProducts();
+
   return (
     <section id="highlights" className="highlights">
       <div className="highlights-header">

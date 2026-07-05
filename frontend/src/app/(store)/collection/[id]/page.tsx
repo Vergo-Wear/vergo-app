@@ -3,7 +3,7 @@
 import { useState, use, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { products } from "@/data/product";
+import { useProducts } from "@/hooks/useProducts";
 import ProductFeedback from "@/components/ProductFeedback";
 
 interface PageProps {
@@ -11,13 +11,14 @@ interface PageProps {
 }
 
 export default function ProductDetailPage({ params }: PageProps) {
+  const products = useProducts();
   const resolvedParams = use(params);
   const productId = parseInt(resolvedParams.id, 10);
 
   // Retrieve product from data
   const product = useMemo(() => {
     return products.find((p) => p.id === productId);
-  }, [productId]);
+  }, [products, productId]);
 
   // Gallery state
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -54,7 +55,7 @@ export default function ProductDetailPage({ params }: PageProps) {
     return products
       .filter((p) => p.id !== product.id)
       .slice(0, 4);
-  }, [product]);
+  }, [products, product]);
 
   if (!product) {
     return (
