@@ -3,6 +3,7 @@
 @import "../styles/register.css";
 @import "../styles/product-detail.css";
 @import "../styles/collection-page.css";
+@import "../styles/profile.css";
 
 :root {
   --background: #050505;
