@@ -52,7 +52,7 @@ export default function ProfilePage() {
     const storedLoggedIn = localStorage.getItem("vergo_is_logged_in");
     const storedUser = localStorage.getItem("vergo_user");
 
-    let currentUser = {
+    let currentUser: { name: string; email: string; phone?: string; avatarUrl?: string } = {
       name: "VERGO_CUSTOMER",
       email: "VERGOCUSTOMER@COOL.NET",
       phone: "+94 71 0870 119",
