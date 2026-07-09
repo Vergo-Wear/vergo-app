@@ -3,6 +3,7 @@
 import { useState, use, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useProducts } from "@/hooks/useProducts";
 import ProductFeedback from "@/components/ProductFeedback";
 
@@ -14,6 +15,8 @@ export default function ProductDetailPage({ params }: PageProps) {
   const products = useProducts();
   const resolvedParams = use(params);
   const productId = parseInt(resolvedParams.id, 10);
+  const searchParams = useSearchParams();
+  const autoOpenFeedback = searchParams ? searchParams.get("add-feedback") === "true" : false;
 
   // Retrieve product from data
   const product = useMemo(() => {
@@ -259,7 +262,7 @@ export default function ProductDetailPage({ params }: PageProps) {
         )}
 
         {/* Product Feedback & Reviews Section */}
-        <ProductFeedback productId={product.id} productCategory={product.category} />
+        <ProductFeedback productId={product.id} productCategory={product.category} autoOpenForm={autoOpenFeedback} />
       </main>
 
       {/* Toast notification */}

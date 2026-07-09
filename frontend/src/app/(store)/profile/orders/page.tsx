@@ -204,6 +204,17 @@ export default function OrderHistoryPage() {
     setVisibleCount((prev) => Math.min(prev + 3, orders.length));
   };
 
+  const handleOrderReceived = (orderId: string) => {
+    const updatedOrders = orders.map((o) => {
+      if (o.id === orderId) {
+        return { ...o, status: "Delivered" as const, paymentStatus: "Paid" as const };
+      }
+      return o;
+    });
+    setOrders(updatedOrders);
+    localStorage.setItem("vergo_customer_orders", JSON.stringify(updatedOrders));
+  };
+
   if (!mounted) return null;
 
   // Logged-out state
@@ -384,14 +395,35 @@ export default function OrderHistoryPage() {
                       View Details
                     </Link>
 
-                    {order.status === "Delivered" ? (
+                    {order.status === "Delivered" && (
                       <button 
                         onClick={() => router.push(`/collection`)}
                         className="order-action-btn btn-buy-again"
                       >
                         Buy Again
                       </button>
-                    ) : (
+                    )}
+
+                    {order.status === "In Transit" && (
+                      <>
+                        <button 
+                          onClick={() => handleOrderReceived(order.id)}
+                          className="order-action-btn btn-track-package"
+                          style={{ background: "#00FF9D", color: "#000000" }}
+                        >
+                          Order Received
+                        </button>
+                        <button 
+                          onClick={() => router.push(`/profile/orders/${order.id}`)}
+                          className="order-action-btn btn-track-package"
+                          style={{ background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.15)" }}
+                        >
+                          Track
+                        </button>
+                      </>
+                    )}
+
+                    {order.status !== "Delivered" && order.status !== "In Transit" && order.status !== "Cancelled" && (
                       <button 
                         onClick={() => router.push(`/profile/orders/${order.id}`)}
                         className="order-action-btn btn-track-package"

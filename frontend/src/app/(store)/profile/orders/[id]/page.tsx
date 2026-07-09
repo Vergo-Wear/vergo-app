@@ -43,6 +43,40 @@ export default function OrderDetailPage({ params }: PageProps) {
   const [mounted, setMounted] = useState(false);
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
+  const handleOrderReceived = () => {
+    if (!order) return;
+    const storedOrders = localStorage.getItem("vergo_customer_orders");
+    if (storedOrders) {
+      try {
+        const parsedOrders: Order[] = JSON.parse(storedOrders);
+        const updated = parsedOrders.map((o) => {
+          if (o.id === order.id) {
+            return { ...o, status: "Delivered" as const, paymentStatus: "Paid" as const };
+          }
+          return o;
+        });
+        localStorage.setItem("vergo_customer_orders", JSON.stringify(updated));
+        setOrder({
+          ...order,
+          status: "Delivered",
+          paymentStatus: "Paid"
+        });
+      } catch (e) {
+        console.error("Error setting order received:", e);
+      }
+    }
+  };
+
+  const handleFeedbackClick = () => {
+    if (!order) return;
+    if (order.items.length > 1) {
+      setShowFeedbackModal(true);
+    } else if (order.items.length === 1) {
+      router.push(`/collection/${order.items[0].productId}?add-feedback=true`);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -292,12 +326,43 @@ export default function OrderDetailPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {order.status !== "Delivered" && order.status !== "Cancelled" && (
+              {order.status === "In Transit" && (
+                <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <button 
+                    onClick={handleOrderReceived}
+                    className="shop-now-btn" 
+                    style={{ width: "100%", textAlign: "center", background: "#00FF9D", color: "#000", cursor: "pointer" }}
+                  >
+                    Order Received
+                  </button>
+                  <button 
+                    onClick={() => alert("Tracking feature coming soon! Waybill is being processed.")}
+                    className="shop-now-btn" 
+                    style={{ width: "100%", textAlign: "center", background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer" }}
+                  >
+                    Track Package
+                  </button>
+                </div>
+              )}
+
+              {order.status === "Delivered" && (
+                <div style={{ marginTop: "24px" }}>
+                  <button 
+                    onClick={handleFeedbackClick}
+                    className="shop-now-btn" 
+                    style={{ width: "100%", textAlign: "center", background: "#00FF9D", color: "#000", cursor: "pointer" }}
+                  >
+                    Add Feedback
+                  </button>
+                </div>
+              )}
+
+              {order.status !== "Delivered" && order.status !== "In Transit" && order.status !== "Cancelled" && (
                 <div style={{ marginTop: "24px" }}>
                   <button 
                     onClick={() => alert("Tracking feature coming soon! Waybill is being processed.")}
                     className="shop-now-btn" 
-                    style={{ width: "100%", textAlign: "center", background: "#00FF9D", color: "#000" }}
+                    style={{ width: "100%", textAlign: "center", background: "#00FF9D", color: "#000", cursor: "pointer" }}
                   >
                     Track Package
                   </button>
@@ -308,6 +373,59 @@ export default function OrderDetailPage({ params }: PageProps) {
 
         </div>
       </div>
+
+      {/* Pop-up modal to select an item to review (only shown if multiple items in order) */}
+      {showFeedbackModal && (
+        <div className="profile-modal-overlay" onClick={() => setShowFeedbackModal(false)}>
+          <div className="profile-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "450px" }}>
+            <button
+              type="button"
+              className="modal-close-trigger"
+              onClick={() => setShowFeedbackModal(false)}
+            >
+              &times;
+            </button>
+            <h3 className="modal-header-title" style={{ fontSize: "1.15rem", marginBottom: "20px", fontWeight: 900 }}>Review Purchased Item</h3>
+            <p style={{ color: "#8e8e93", fontSize: "0.8rem", margin: "-12px 0 20px 0", textTransform: "uppercase", fontWeight: 600, letterSpacing: "0.02em" }}>
+              Please select the product you wish to leave feedback for:
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {order.items.map((item, idx) => (
+                <div 
+                  key={idx} 
+                  style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: "14px", 
+                    padding: "12px", 
+                    background: "#18181a", 
+                    borderRadius: "8px", 
+                    border: "1px solid rgba(255,255,255,0.03)" 
+                  }}
+                >
+                  <div className="order-product-img-wrapper" style={{ width: "50px", height: "50px", padding: 0 }}>
+                    <Image src={item.image} alt={item.name} width={45} height={45} className="order-product-img" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ fontSize: "0.85rem", fontWeight: 800, margin: 0, textTransform: "uppercase", color: "#fff", letterSpacing: "0.02em" }}>{item.name}</h4>
+                    <p style={{ fontSize: "0.7rem", color: "#8e8e93", margin: "2px 0 0 0", fontWeight: 600 }}>Size: {item.size} | Color: {item.color}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowFeedbackModal(false);
+                      router.push(`/collection/${item.productId}?add-feedback=true`);
+                    }}
+                    className="order-action-btn btn-track-package"
+                    style={{ fontSize: "0.65rem", padding: "6px 12px", borderRadius: "4px" }}
+                  >
+                    Review
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
