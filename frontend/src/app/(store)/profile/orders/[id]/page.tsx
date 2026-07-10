@@ -45,29 +45,6 @@ export default function OrderDetailPage({ params }: PageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
-  const handleOrderReceived = () => {
-    if (!order) return;
-    const storedOrders = localStorage.getItem("vergo_customer_orders");
-    if (storedOrders) {
-      try {
-        const parsedOrders: Order[] = JSON.parse(storedOrders);
-        const updated = parsedOrders.map((o) => {
-          if (o.id === order.id) {
-            return { ...o, status: "Delivered" as const, paymentStatus: "Paid" as const };
-          }
-          return o;
-        });
-        localStorage.setItem("vergo_customer_orders", JSON.stringify(updated));
-        setOrder({
-          ...order,
-          status: "Delivered",
-          paymentStatus: "Paid"
-        });
-      } catch (e) {
-        console.error("Error setting order received:", e);
-      }
-    }
-  };
 
   const handleFeedbackClick = () => {
     if (!order) return;
@@ -326,25 +303,6 @@ export default function OrderDetailPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {order.status === "In Transit" && (
-                <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <button 
-                    onClick={handleOrderReceived}
-                    className="shop-now-btn" 
-                    style={{ width: "100%", textAlign: "center", background: "#00FF9D", color: "#000", cursor: "pointer" }}
-                  >
-                    Order Received
-                  </button>
-                  <button 
-                    onClick={() => alert("Tracking feature coming soon! Waybill is being processed.")}
-                    className="shop-now-btn" 
-                    style={{ width: "100%", textAlign: "center", background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer" }}
-                  >
-                    Track Package
-                  </button>
-                </div>
-              )}
-
               {order.status === "Delivered" && (
                 <div style={{ marginTop: "24px" }}>
                   <button 
@@ -357,7 +315,7 @@ export default function OrderDetailPage({ params }: PageProps) {
                 </div>
               )}
 
-              {order.status !== "Delivered" && order.status !== "In Transit" && order.status !== "Cancelled" && (
+              {order.status !== "Delivered" && order.status !== "Cancelled" && (
                 <div style={{ marginTop: "24px" }}>
                   <button 
                     onClick={() => alert("Tracking feature coming soon! Waybill is being processed.")}

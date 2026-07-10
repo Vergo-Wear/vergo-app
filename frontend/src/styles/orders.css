@@ -213,6 +213,7 @@
   color: #00FF9D;
   border: 1px solid rgba(0, 255, 157, 0.2);
 }
+
 .order-status-badge.delivered::before {
   background-color: #00FF9D;
 }
@@ -222,6 +223,7 @@
   color: #c8c8cd;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
+
 .order-status-badge.processing::before {
   background-color: #c8c8cd;
 }
@@ -231,6 +233,7 @@
   color: #ffb300;
   border: 1px solid rgba(255, 179, 0, 0.2);
 }
+
 .order-status-badge.in-transit::before {
   background-color: #ffb300;
 }
@@ -240,6 +243,7 @@
   color: #ff4d4d;
   border: 1px solid rgba(255, 77, 77, 0.2);
 }
+
 .order-status-badge.cancelled::before {
   background-color: #ff4d4d;
 }
@@ -654,34 +658,68 @@
   .order-detail-grid {
     grid-template-columns: 1fr;
   }
+
   .info-summary-grid {
     grid-template-columns: 1fr;
     gap: 16px;
   }
+
   .orders-title {
     font-size: 2rem;
   }
+
   .order-card {
     padding: 16px;
   }
+
   .order-card-header {
     flex-direction: column;
     gap: 12px;
   }
+
   .order-header-meta {
     gap: 20px;
     flex-wrap: wrap;
   }
+
   .order-card-footer {
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
   }
+
   .order-actions-container {
     width: 100%;
   }
+
   .order-action-btn {
     flex: 1;
     width: 100%;
   }
+}
+
+/* Font Family Overrides for Oswald & Inter */
+.orders-page-wrapper,
+.profile-modal-content {
+  font-family: 'Inter', sans-serif !important;
+}
+
+.orders-breadcrumbs,
+.orders-breadcrumbs a,
+.orders-breadcrumbs span,
+.orders-title,
+.order-header-value,
+.order-status-badge,
+.order-product-name,
+.order-total-value,
+.shop-now-btn,
+.order-detail-card-title,
+.detail-product-total,
+.invoice-calc-row.total-row span.val,
+.status-pill,
+.modal-header-title,
+.info-block-title,
+.empty-orders-title {
+  font-family: 'Oswald', sans-serif !important;
+  letter-spacing: 0.04em !important;
 }

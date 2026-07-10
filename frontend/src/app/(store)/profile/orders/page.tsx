@@ -51,13 +51,22 @@ export default function OrderHistoryPage() {
 
     // 2. Fetch or seed orders
     const storedOrders = localStorage.getItem("vergo_customer_orders");
+    let needsSeeding = !storedOrders;
     if (storedOrders) {
       try {
-        setOrders(JSON.parse(storedOrders));
+        const parsed = JSON.parse(storedOrders);
+        if (!parsed.some((o: any) => o.id === "VRG-8651")) {
+          needsSeeding = true;
+        } else {
+          setOrders(parsed);
+        }
       } catch (e) {
         console.error("Error parsing orders:", e);
+        needsSeeding = true;
       }
-    } else {
+    }
+
+    if (needsSeeding) {
       // Seed default orders to match screenshot + requirements
       const defaultOrders: Order[] = [
         {
@@ -141,6 +150,26 @@ export default function OrderHistoryPage() {
           ]
         },
         {
+          id: "VRG-8651",
+          date: "Jun 18, 2026",
+          status: "In Transit",
+          paymentMethod: "Bank Transfer",
+          paymentStatus: "Approved",
+          total: 1500.00,
+          items: [
+            {
+              productId: 5,
+              name: "Boxy Tee - Jet Black",
+              subTitle: "ESSENTIALS V1",
+              image: "/images/boxy_tee.png",
+              size: "S",
+              color: "Jet Black",
+              qty: 1,
+              price: 1500.00
+            }
+          ]
+        },
+        {
           id: "VRG-8711",
           date: "Jan 10, 2026",
           status: "Cancelled",
@@ -204,16 +233,7 @@ export default function OrderHistoryPage() {
     setVisibleCount((prev) => Math.min(prev + 3, orders.length));
   };
 
-  const handleOrderReceived = (orderId: string) => {
-    const updatedOrders = orders.map((o) => {
-      if (o.id === orderId) {
-        return { ...o, status: "Delivered" as const, paymentStatus: "Paid" as const };
-      }
-      return o;
-    });
-    setOrders(updatedOrders);
-    localStorage.setItem("vergo_customer_orders", JSON.stringify(updatedOrders));
-  };
+
 
   if (!mounted) return null;
 
@@ -395,35 +415,9 @@ export default function OrderHistoryPage() {
                       View Details
                     </Link>
 
-                    {order.status === "Delivered" && (
-                      <button 
-                        onClick={() => router.push(`/collection`)}
-                        className="order-action-btn btn-buy-again"
-                      >
-                        Buy Again
-                      </button>
-                    )}
 
-                    {order.status === "In Transit" && (
-                      <>
-                        <button 
-                          onClick={() => handleOrderReceived(order.id)}
-                          className="order-action-btn btn-track-package"
-                          style={{ background: "#00FF9D", color: "#000000" }}
-                        >
-                          Order Received
-                        </button>
-                        <button 
-                          onClick={() => router.push(`/profile/orders/${order.id}`)}
-                          className="order-action-btn btn-track-package"
-                          style={{ background: "transparent", color: "#ffffff", border: "1px solid rgba(255,255,255,0.15)" }}
-                        >
-                          Track
-                        </button>
-                      </>
-                    )}
 
-                    {order.status !== "Delivered" && order.status !== "In Transit" && order.status !== "Cancelled" && (
+                    {order.status !== "Delivered" && order.status !== "Cancelled" && (
                       <button 
                         onClick={() => router.push(`/profile/orders/${order.id}`)}
                         className="order-action-btn btn-track-package"
