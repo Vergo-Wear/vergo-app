@@ -38,7 +38,6 @@ export interface UserIdentificationResult {
     phone: string | null;
     address: string | null;
     position: string | null;
-    salary: any;
     hireDate: Date | null;
   } | null;
 }
@@ -153,7 +152,6 @@ export class UserRoleService {
               phone: employee.phone,
               address: employee.address,
               position: employee.position,
-              salary: employee.salary,
               hireDate: employee.hireDate,
             }
           : null,

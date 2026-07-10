@@ -1,6 +1,6 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
-import { UserRoleService } from './user-role.service';
+import { UserRoleService, UserIdentificationResult } from './user-role.service';
 import { UserRoleController } from './user-role.controller';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -216,7 +216,6 @@ describe('UserRole (Service & Controller)', () => {
         phone: '11112222',
         address: '456 Rd',
         position: 'Manager',
-        salary: 5000,
         hireDate: new Date(),
       };
 
