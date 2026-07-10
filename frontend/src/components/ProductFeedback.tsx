@@ -203,12 +203,26 @@ const StarRatingSelector = ({ rating, onChange, hoverRating, onHoverChange }: St
 interface ProductFeedbackProps {
   productId: number;
   productCategory: string;
+  autoOpenForm?: boolean;
 }
 
-export default function ProductFeedback({ productId, productCategory }: ProductFeedbackProps) {
+export default function ProductFeedback({ productId, productCategory, autoOpenForm }: ProductFeedbackProps) {
   // Reviews state (both static mock and user-submitted local reviews)
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenForm) {
+      setIsFormOpen(true);
+      const timer = setTimeout(() => {
+        const element = document.getElementById("product-reviews-section");
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [autoOpenForm]);
   const [activeLightboxImg, setActiveLightboxImg] = useState<string | null>(null);
 
   // Form Fields State
@@ -401,140 +415,144 @@ export default function ProductFeedback({ productId, productCategory }: ProductF
   };
 
   return (
-    <section className="feedback-section">
+    <section id="product-reviews-section" className="feedback-section">
       <div className="feedback-divider"></div>
       
       <div className="feedback-header">
         <h2 className="feedback-section-title">CUSTOMER RATINGS & REVIEWS</h2>
-        <button
-          type="button"
-          onClick={() => setIsFormOpen(!isFormOpen)}
-          className={`write-review-toggle-btn ${isFormOpen ? "active" : ""}`}
-        >
-          {isFormOpen ? "CLOSE FORM" : "WRITE A REVIEW"}
-        </button>
+        {autoOpenForm && (
+          <button
+            type="button"
+            onClick={() => setIsFormOpen(!isFormOpen)}
+            className={`write-review-toggle-btn ${isFormOpen ? "active" : ""}`}
+          >
+            {isFormOpen ? "CLOSE FORM" : "WRITE A REVIEW"}
+          </button>
+        )}
       </div>
 
       {/* Review Form - Collapsible container */}
-      <div className={`review-form-wrapper ${isFormOpen ? "open" : ""}`}>
-        <form onSubmit={handleSubmitReview} className="review-form">
-          <h3 className="form-title">SHARE YOUR VERDICT</h3>
-          
-          {formSuccess ? (
-            <div className="form-success-alert">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-              <div>
-                <h4>REVIEW SUBMITTED SUCCESSFULLY!</h4>
-                <p>Thank you for sharing your feedback with the Vergo community.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="form-grid">
-              {/* Star Selection Row */}
-              <div className="form-group">
-                <label className="form-label">YOUR RATING *</label>
-                <StarRatingSelector
-                  rating={rating}
-                  onChange={setRating}
-                  hoverRating={hoverRating}
-                  onHoverChange={setHoverRating}
-                />
-              </div>
-
-              {/* Reviewer Name Row */}
-              <div className="form-group">
-                <label htmlFor="reviewerName" className="form-label">YOUR NAME *</label>
-                <input
-                  id="reviewerName"
-                  type="text"
-                  placeholder="e.g. Sahan R."
-                  value={reviewerName}
-                  onChange={(e) => setReviewerName(e.target.value)}
-                  className="form-input"
-                  maxLength={50}
-                  required
-                />
-              </div>
-
-              {/* Review Comment Textarea */}
-              <div className="form-group full-width">
-                <label htmlFor="reviewComment" className="form-label">REVIEW COMMENT *</label>
-                <textarea
-                  id="reviewComment"
-                  placeholder="Tell us about the fabric weight, sizing, comfort, and general quality..."
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  className="form-textarea"
-                  rows={4}
-                  maxLength={1000}
-                  required
-                ></textarea>
-              </div>
-
-              {/* Photo Upload Row */}
-              <div className="form-group full-width">
-                <label className="form-label">ADD PHOTOS (MAX 3)</label>
-                <div className="photo-upload-container">
-                  <div
-                    className="photo-upload-zone"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="upload-icon">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                      <polyline points="21 15 16 10 5 21"></polyline>
-                    </svg>
-                    <span className="upload-text">CLICK TO UPLOAD PHOTOS</span>
-                    <span className="upload-subtext">Max 1MB per image. JPG, PNG, WEBP</span>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleImageChange}
-                      style={{ display: "none" }}
-                    />
-                  </div>
-
-                  {uploadedPhotos.length > 0 && (
-                    <div className="photo-previews-grid">
-                      {uploadedPhotos.map((photo, index) => (
-                        <div key={index} className="photo-preview-item">
-                          <Image
-                            src={photo}
-                            alt={`Upload Preview ${index + 1}`}
-                            fill
-                            className="preview-img"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePhoto(index)}
-                            className="remove-photo-btn"
-                            aria-label="Remove Photo"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+      {autoOpenForm && (
+        <div className={`review-form-wrapper ${isFormOpen ? "open" : ""}`}>
+          <form onSubmit={handleSubmitReview} className="review-form">
+            <h3 className="form-title">SHARE YOUR VERDICT</h3>
+            
+            {formSuccess ? (
+              <div className="form-success-alert">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <div>
+                  <h4>REVIEW SUBMITTED SUCCESSFULLY!</h4>
+                  <p>Thank you for sharing your feedback with the Vergo community.</p>
                 </div>
               </div>
+            ) : (
+              <div className="form-grid">
+                {/* Star Selection Row */}
+                <div className="form-group">
+                  <label className="form-label">YOUR RATING *</label>
+                  <StarRatingSelector
+                    rating={rating}
+                    onChange={setRating}
+                    hoverRating={hoverRating}
+                    onHoverChange={setHoverRating}
+                  />
+                </div>
 
-              {/* Form Action Row */}
-              {formError && <div className="form-error-message">{formError}</div>}
-              
-              <div className="form-submit-container full-width">
-                <button type="submit" className="submit-review-btn">
-                  SUBMIT FEEDBACK
-                </button>
+                {/* Reviewer Name Row */}
+                <div className="form-group">
+                  <label htmlFor="reviewerName" className="form-label">YOUR NAME *</label>
+                  <input
+                    id="reviewerName"
+                    type="text"
+                    placeholder="e.g. Sahan R."
+                    value={reviewerName}
+                    onChange={(e) => setReviewerName(e.target.value)}
+                    className="form-input"
+                    maxLength={50}
+                    required
+                  />
+                </div>
+
+                {/* Review Comment Textarea */}
+                <div className="form-group full-width">
+                  <label htmlFor="reviewComment" className="form-label">REVIEW COMMENT *</label>
+                  <textarea
+                    id="reviewComment"
+                    placeholder="Tell us about the fabric weight, sizing, comfort, and general quality..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    className="form-textarea"
+                    rows={4}
+                    maxLength={1000}
+                    required
+                  ></textarea>
+                </div>
+
+                {/* Photo Upload Row */}
+                <div className="form-group full-width">
+                  <label className="form-label">ADD PHOTOS (MAX 3)</label>
+                  <div className="photo-upload-container">
+                    <div
+                      className="photo-upload-zone"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="upload-icon">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                      </svg>
+                      <span className="upload-text">CLICK TO UPLOAD PHOTOS</span>
+                      <span className="upload-subtext">Max 1MB per image. JPG, PNG, WEBP</span>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleImageChange}
+                        style={{ display: "none" }}
+                      />
+                    </div>
+
+                    {uploadedPhotos.length > 0 && (
+                      <div className="photo-previews-grid">
+                        {uploadedPhotos.map((photo, index) => (
+                          <div key={index} className="photo-preview-item">
+                            <Image
+                              src={photo}
+                              alt={`Upload Preview ${index + 1}`}
+                              fill
+                              className="preview-img"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePhoto(index)}
+                              className="remove-photo-btn"
+                              aria-label="Remove Photo"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Form Action Row */}
+                {formError && <div className="form-error-message">{formError}</div>}
+                
+                <div className="form-submit-container full-width">
+                  <button type="submit" className="submit-review-btn">
+                    SUBMIT FEEDBACK
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </form>
-      </div>
+            )}
+          </form>
+        </div>
+      )}
 
       {/* Main Feedback Layout Grid */}
       <div className="feedback-layout-grid">

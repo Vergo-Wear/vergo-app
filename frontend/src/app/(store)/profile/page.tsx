@@ -284,12 +284,14 @@ export default function ProfilePage() {
         {/* Top Header section */}
         <div className="profile-header">
           <h1 className="profile-title">PROFILE</h1>
-          <button
-            type="button"
-            className="order-history-btn"
-          >
-            ORDER HISTORY
-          </button>
+          <Link href="/profile/orders">
+            <button
+              type="button"
+              className="order-history-btn"
+            >
+              ORDER HISTORY
+            </button>
+          </Link>
         </div>
 
         {/* Profile Card Summary */}

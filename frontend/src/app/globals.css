@@ -1,9 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Oswald:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "../styles/hopepage.css";
 @import "../styles/register.css";
 @import "../styles/product-detail.css";
 @import "../styles/collection-page.css";
 @import "../styles/profile.css";
+@import "../styles/orders.css";
 @import "../styles/cart.css";
 
 :root {
