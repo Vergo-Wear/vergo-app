@@ -1,0 +1,271 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+#wrap {
+  background: #111110;
+  padding: 20px;
+  min-height: 100vh;
+  width: 100%;
+}
+#erd svg { max-width: 100%; display: block; }
+#erd .er.relationshipLabel .label { fill: #aaa89e !important; font-size: 11px !important; }
+#erd .er.relationshipLabelBox { fill: #111110 !important; opacity: 1 !important; }
+#erd text { fill: #111110 !important; }
+#erd .er.label text { fill: #111110 !important; }
+#erd .entityLabel { fill: #111110 !important; }
+#erd .er.entityHeadingLabel { fill: #111110 !important; font-weight: 700 !important; }
+#erd .attributeBoxEven rect { fill: #d4d2c8 !important; stroke: none !important; }
+#erd .attributeBoxOdd  rect { fill: #c8c6bc !important; stroke: none !important; }
+#erd .er.entityBox { fill: #b8b6ac !important; stroke: #555550 !important; }
+#erd path.er.relationshipLine { stroke: #666660 !important; }
+</style>
+<div id="wrap"><div id="erd"></div></div>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: 'ui-monospace, "Cascadia Code", "Source Code Pro", monospace',
+  themeVariables: {
+    darkMode: false,
+    fontSize: '12px',
+    fontFamily: 'ui-monospace, "Cascadia Code", "Source Code Pro", monospace',
+    lineColor:              '#666660',
+    textColor:              '#111110',
+    primaryColor:           '#b8b6ac',
+    primaryBorderColor:     '#555550',
+    primaryTextColor:       '#111110',
+    secondaryColor:         '#c8c6bc',
+    tertiaryColor:          '#d4d2c8',
+    edgeLabelBackground:    '#111110',
+    attributeBackgroundColorEven: '#d4d2c8',
+    attributeBackgroundColorOdd:  '#c8c6bc',
+    nodeBorder:             '#555550',
+    clusterBkg:             '#b8b6ac',
+    titleColor:             '#111110',
+    relationLabelBackground:'#111110',
+    background:             '#111110',
+    mainBkg:                '#b8b6ac',
+    nodeBkg:                '#b8b6ac',
+    border1:                '#555550',
+    border2:                '#555550',
+  },
+});
+
+const diagram = `erDiagram
+  role {
+    uuid role_id PK
+    text role_name
+  }
+  branch {
+    uuid branch_id PK
+    text name
+    text address
+    text phone
+  }
+  category {
+    uuid category_id PK
+    text name
+    text description
+  }
+  supplier {
+    uuid supplier_id PK
+    text name
+    text phone
+    text email
+    text address
+  }
+  profiles {
+    uuid id PK
+    uuid role_id FK
+    text username
+    text status
+    timestamptz created_at
+  }
+  employee {
+    uuid employee_id PK
+    uuid profile_id FK
+    uuid branch_id FK
+    text first_name
+    text last_name
+    text position
+    numeric salary
+    date hire_date
+  }
+  customer {
+    uuid customer_id PK
+    uuid profile_id FK
+    text first_name
+    text last_name
+    text email
+    text default_shipping_address
+    timestamptz created_at
+  }
+  attendance {
+    uuid attendance_id PK
+    uuid employee_id FK
+    date date
+    timestamptz check_in
+    timestamptz check_out
+    text status
+  }
+  salary_record {
+    uuid salary_id PK
+    uuid employee_id FK
+    date month
+    numeric basic_salary
+    numeric bonus
+    numeric deduction
+    numeric net_salary
+  }
+  product {
+    uuid product_id PK
+    uuid category_id FK
+    uuid supplier_id FK
+    text name
+    numeric base_price
+    text status
+  }
+  product_variant {
+    uuid variant_id PK
+    uuid product_id FK
+    text sku
+    text size
+    text color
+    numeric price_adjustment
+    text image_url
+  }
+  inventory {
+    uuid inventory_id PK
+    uuid variant_id FK
+    uuid branch_id FK
+    int quantity
+    int reorder_level
+    timestamptz last_updated
+  }
+  cart {
+    uuid cart_id PK
+    uuid customer_id FK
+    text session_id
+    timestamptz created_at
+  }
+  cart_item {
+    uuid cart_item_id PK
+    uuid cart_id FK
+    uuid variant_id FK
+    int quantity
+  }
+  orders {
+    uuid order_id PK
+    uuid customer_id FK
+    uuid employee_id FK
+    uuid branch_id FK
+    timestamptz order_date
+    numeric total_amount
+    text payment_method
+    text shipping_address
+    text order_status
+  }
+  order_item {
+    uuid order_item_id PK
+    uuid order_id FK
+    uuid variant_id FK
+    int quantity
+    numeric unit_price
+    numeric subtotal
+  }
+  delivery {
+    uuid delivery_id PK
+    uuid order_id FK
+    uuid assigned_employee_id FK
+    text delivery_status
+    timestamptz delivered_at
+  }
+  notification {
+    uuid notification_id PK
+    uuid customer_id FK
+    uuid order_id FK
+    text message
+    text type
+    text status
+  }
+  purchase_order {
+    uuid purchase_order_id PK
+    uuid supplier_id FK
+    uuid employee_id FK
+    timestamptz order_date
+    text status
+    numeric total_amount
+  }
+  purchase_order_item {
+    uuid po_item_id PK
+    uuid purchase_order_id FK
+    uuid variant_id FK
+    int quantity
+    numeric cost_price
+  }
+
+  role ||--o{ profiles : "assigned to"
+  profiles ||--o| employee : "is"
+  profiles ||--o| customer : "is"
+  branch ||--o{ employee : "works at"
+  branch ||--o{ inventory : "stocks"
+  branch ||--o{ orders : "fulfilled by"
+  category ||--o{ product : "groups"
+  supplier ||--o{ product : "supplies"
+  supplier ||--o{ purchase_order : "receives"
+  employee ||--o{ attendance : "logs"
+  employee ||--o{ salary_record : "paid via"
+  employee ||--o{ orders : "processes"
+  employee ||--o{ delivery : "assigned to"
+  employee ||--o{ purchase_order : "creates"
+  customer ||--o{ cart : "has"
+  customer ||--o{ orders : "places"
+  customer ||--o{ notification : "receives"
+  product ||--o{ product_variant : "has"
+  product_variant ||--o{ inventory : "tracked in"
+  product_variant ||--o{ cart_item : "added to"
+  product_variant ||--o{ order_item : "included in"
+  product_variant ||--o{ purchase_order_item : "ordered via"
+  cart ||--o{ cart_item : "contains"
+  orders ||--o{ order_item : "contains"
+  orders ||--o| delivery : "fulfilled by"
+  orders ||--o{ notification : "triggers"
+  purchase_order ||--o{ purchase_order_item : "contains"
+`;
+
+const { svg } = await mermaid.render('erd-svg', diagram);
+document.getElementById('erd').innerHTML = svg;
+
+const erdSvg = document.querySelector('#erd svg');
+if (erdSvg) erdSvg.style.background = '#111110';
+
+document.querySelectorAll('#erd svg.erDiagram .node').forEach(node => {
+  const firstPath = node.querySelector('path[d]');
+  if (!firstPath) return;
+  const d = firstPath.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0], nums[2], nums[4], nums[6]];
+  const ys = [nums[1], nums[3], nums[5], nums[7]];
+  const x = Math.min(...xs), y = Math.min(...ys);
+  const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', x); rect.setAttribute('y', y);
+  rect.setAttribute('width', w); rect.setAttribute('height', h);
+  rect.setAttribute('rx', '8');
+  for (const a of ['fill','stroke','stroke-width','class','style']) {
+    if (firstPath.hasAttribute(a)) rect.setAttribute(a, firstPath.getAttribute(a));
+  }
+  firstPath.replaceWith(rect);
+});
+
+document.querySelectorAll('#erd svg text').forEach(t => {
+  t.setAttribute('fill', '#111110');
+});
+
+document.querySelectorAll('#erd svg rect[class*="attributeBox"]').forEach(r => {
+  r.setAttribute('stroke', 'none');
+});
+</script>
