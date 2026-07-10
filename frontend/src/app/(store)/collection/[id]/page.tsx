@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useProducts } from "@/hooks/useProducts";
 import ProductFeedback from "@/components/ProductFeedback";
+import { useCart } from "@/context/CartContext";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -17,6 +18,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   const productId = parseInt(resolvedParams.id, 10);
   const searchParams = useSearchParams();
   const autoOpenFeedback = searchParams ? searchParams.get("add-feedback") === "true" : false;
+  const { addToCart } = useCart();
 
   // Retrieve product from data
   const product = useMemo(() => {
@@ -45,6 +47,7 @@ export default function ProductDetailPage({ params }: PageProps) {
 
   const handleAddToCart = () => {
     if (!product) return;
+    addToCart(product, selectedSize, 1, product.colors?.[0] || undefined);
     setToast(`Added "${product.name}" (Size ${selectedSize}) to your cart!`);
     setTimeout(() => {
       setToast(null);

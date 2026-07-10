@@ -2,10 +2,12 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useCart } from "@/context/CartContext";
 import "./product-card.css";
 
 export default function ProductCard({ product }: any) {
   const router = useRouter();
+  const { addToCart } = useCart();
 
   const handleCardClick = () => {
     router.push(`/collection/${product.id}`);
@@ -40,6 +42,8 @@ export default function ProductCard({ product }: any) {
               className="quick-add-btn"
               onClick={(e) => {
                 e.stopPropagation();
+                const defaultSize = product.sizes && product.sizes.length > 0 ? product.sizes[0] : "M";
+                addToCart(product, defaultSize, 1, product.colors && product.colors.length > 0 ? product.colors[0] : undefined);
               }}
             >
               <span>Quick Add</span>

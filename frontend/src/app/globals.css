@@ -6,6 +6,7 @@
 @import "../styles/collection-page.css";
 @import "../styles/profile.css";
 @import "../styles/orders.css";
+@import "../styles/cart.css";
 
 :root {
   --background: #050505;

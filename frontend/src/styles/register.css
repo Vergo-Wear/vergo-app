@@ -96,51 +96,54 @@
   background: #141417;
 }
 
-/* Mobile input with inline OTP button */
-.mobile-input-wrapper {
+/* Password input with inline show/hide button */
+.password-input-wrapper {
   position: relative;
-  display: flex;
-  align-items: center;
   width: 100%;
 }
 
-.mobile-input-wrapper .custom-input {
-  padding-right: 140px;
+.password-input-wrapper .custom-input {
+  padding-right: 48px;
 }
 
-.request-otp-btn {
+.password-toggle-btn {
   position: absolute;
-  right: 6px;
-  top: 6px;
-  bottom: 6px;
-  background: #00FF9D;
-  color: #000000;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
   border: none;
-  border-radius: 6px;
-  padding: 0 14px;
+  color: #8e8e93;
   cursor: pointer;
-  transition: all 0.2s ease;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  white-space: nowrap;
-  text-transform: uppercase;
+  transition: color 0.2s ease;
 }
 
-.request-otp-btn:hover:not(:disabled) {
-  background: #00e08b;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 255, 157, 0.3);
+.password-toggle-btn:hover {
+  color: #00FF9D;
 }
 
-.request-otp-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background: #2a3832;
-  color: #80cda7;
+.password-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.5;
+}
+
+/* Side-by-side layout for desktop screens */
+.input-row {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .input-row {
+    flex-direction: column;
+    gap: 20px;
+  }
 }
 
 .register-submit-btn {
@@ -216,13 +219,6 @@
     padding: 30px 20px;
     border-radius: 18px;
   }
-  .mobile-input-wrapper .custom-input {
-    padding-right: 120px;
-  }
-  .request-otp-btn {
-    font-size: 0.7rem;
-    padding: 0 10px;
-  }
 }
 
 /* Auth divider for Sign In page */
@@ -279,6 +275,98 @@
 .auth-secondary-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Forgot Password styles */
+.forgot-password-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -12px;
+  margin-bottom: -4px;
+}
+
+.forgot-password-link {
+  font-size: 0.75rem;
+  color: #8e8e93;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.forgot-password-link:hover {
+  color: #00FF9D;
+}
+
+/* Google Auth Button styles */
+.google-btn {
+  width: 100%;
+  height: 52px;
+  background: #0f0f11;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  text-transform: uppercase;
+}
+
+.google-btn:hover {
+  background: rgba(0, 255, 157, 0.04);
+  border-color: #00FF9D;
+  color: #00FF9D;
+  box-shadow: 0 0 15px rgba(0, 255, 157, 0.1);
+  transform: translateY(-1px);
+}
+
+.google-btn:active {
+  transform: translateY(0);
+}
+
+.google-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Auth OR Divider styles */
+.auth-or-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  margin: 8px 0;
+}
+
+.auth-or-divider::before,
+.auth-or-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.auth-or-divider:not(:empty)::before {
+  margin-right: 1em;
+}
+
+.auth-or-divider:not(:empty)::after {
+  margin-left: 1em;
+}
+
+.auth-or-divider span {
+  font-size: 0.75rem;
+  color: #8e8e93;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 
 
