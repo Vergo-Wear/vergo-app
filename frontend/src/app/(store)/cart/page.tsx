@@ -1,0 +1,286 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCart } from "@/context/CartContext";
+
+export default function CartPage() {
+  const router = useRouter();
+  const {
+    cart,
+    updateQuantity,
+    removeFromCart,
+    cartCount,
+    cartSubtotal,
+    formatLkr,
+  } = useCart();
+
+  const handleCheckout = () => {
+    // Proceed to checkout logic (can navigate to checkout page or alert for now)
+    router.push("/checkout");
+  };
+
+  return (
+    <div className="cart-page-wrapper">
+      <div className="cart-page-container">
+        {/* Breadcrumbs */}
+        <nav className="cart-breadcrumbs" aria-label="Breadcrumb">
+          <Link href="/" className="cart-breadcrumb-link">HOME</Link>
+          <span className="cart-breadcrumb-separator">›</span>
+          <span className="cart-breadcrumb-current">YOUR CART</span>
+        </nav>
+
+        {/* Cart Header */}
+        <div className="cart-header">
+          <h1 className="cart-title">CART</h1>
+          <span className="cart-item-count">
+            {cartCount} {cartCount === 1 ? "ITEM" : "ITEMS"}
+          </span>
+        </div>
+
+        {cart.length === 0 ? (
+          /* Empty Cart State */
+          <div className="empty-cart-container">
+            <svg
+              className="empty-cart-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="1.5"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+              />
+            </svg>
+            <h2 className="empty-cart-title">Your Cart is Empty</h2>
+            <p className="empty-cart-message">
+              Looks like you haven't added anything to your cart yet. Explore our latest collections to find your perfect fit.
+            </p>
+            <Link href="/collection" className="empty-cart-btn">
+              Explore Collection
+            </Link>
+          </div>
+        ) : (
+          /* Cart Grid Layout */
+          <div className="cart-grid">
+            {/* Left Column: Cart Items */}
+            <div className="cart-items-list">
+              {cart.map((item) => (
+                <div
+                  key={`${item.product.id}-${item.size}`}
+                  className="cart-item-card"
+                >
+                  {/* Product Image */}
+                  <div className="cart-item-image-wrapper">
+                    <Image
+                      src={item.product.image}
+                      alt={item.product.name}
+                      fill
+                      className="cart-item-image"
+                      sizes="130px"
+                      priority
+                    />
+                  </div>
+
+                  {/* Product Details */}
+                  <div className="cart-item-info">
+                    <div className="cart-item-header">
+                      <h3 className="cart-item-name">{item.product.name}</h3>
+                      <p className="cart-item-subtitle">
+                        {item.color || item.product.colors?.[0] || "Default"}
+                      </p>
+                    </div>
+
+                    <div className="cart-item-details">
+                      {/* Size Display */}
+                      <div className="detail-group">
+                        <span className="detail-label">SIZE</span>
+                        <span className="detail-value">{item.size}</span>
+                      </div>
+
+                      {/* Quantity Selector */}
+                      <div className="detail-group">
+                        <span className="detail-label">QUANTITY</span>
+                        <div className="quantity-control">
+                          <button
+                            type="button"
+                            className="quantity-btn"
+                            onClick={() =>
+                              updateQuantity(
+                                item.product.id,
+                                item.size,
+                                item.quantity - 1
+                              )
+                            }
+                            aria-label="Decrease quantity"
+                          >
+                            -
+                          </button>
+                          <span className="quantity-value">{item.quantity}</span>
+                          <button
+                            type="button"
+                            className="quantity-btn"
+                            onClick={() =>
+                              updateQuantity(
+                                item.product.id,
+                                item.size,
+                                item.quantity + 1
+                              )
+                            }
+                            aria-label="Increase quantity"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Price display */}
+                    <div className="cart-item-price">
+                      {item.product.lkrPrice}
+                    </div>
+                  </div>
+
+                  {/* Remove Button */}
+                  <button
+                    type="button"
+                    className="cart-item-remove-btn"
+                    onClick={() => removeFromCart(item.product.id, item.size)}
+                    aria-label="Remove item"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="2"
+                      stroke="currentColor"
+                      className="w-5 h-5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M6 18 18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Right Column: Order Summary & Promo Code */}
+            <div className="cart-summary-column">
+              {/* Order Summary Box */}
+              <div className="summary-card">
+                <h2 className="summary-title">ORDER SUMMARY</h2>
+
+                <div className="summary-row">
+                  <span className="summary-label">SUBTOTAL</span>
+                  <span className="summary-value">{formatLkr(cartSubtotal)}</span>
+                </div>
+
+                <div className="summary-row">
+                  <span className="summary-label">
+                    DELIVERY <span className="delivery-badge">CITYPAK</span>
+                  </span>
+                  <span className="summary-value calculated-next">Calculated next</span>
+                </div>
+
+                <div className="summary-row">
+                  <span className="summary-label">TAXES</span>
+                  <span className="summary-value">LKR 0.00</span>
+                </div>
+
+                <hr className="summary-divider" />
+
+                <div className="total-row">
+                  <span className="total-label">TOTAL</span>
+                  <span className="total-value">{formatLkr(cartSubtotal)}</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCheckout}
+                  className="checkout-btn"
+                >
+                  PROCEED TO CHECKOUT
+                </button>
+
+                {/* Payment Options Icons */}
+                <div className="payment-icons">
+                  {/* Credit Card Icon */}
+                  <svg
+                    className="payment-icon"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z"
+                    />
+                  </svg>
+
+                  {/* Wallet / Phone Icon */}
+                  <svg
+                    className="payment-icon"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3"
+                    />
+                  </svg>
+
+                  {/* Contactless Icon */}
+                  <svg
+                    className="payment-icon"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
+                    />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Promo Code Card */}
+              <div className="summary-card promo-card">
+                <form
+                  onSubmit={(e) => e.preventDefault()}
+                  className="promo-form"
+                >
+                  <input
+                    type="text"
+                    placeholder="PROMO CODE"
+                    className="promo-input"
+                  />
+                  <button type="submit" className="promo-apply-btn">
+                    APPLY
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

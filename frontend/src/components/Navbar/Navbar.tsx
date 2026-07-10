@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCart } from "@/context/CartContext";
 import "./navbar.css";
 
 export interface NavbarProps {
@@ -25,12 +26,13 @@ const defaultLinks = [
 ];
 
 export default function Navbar({
-  cartCount = 0,
+  cartCount: cartCountProp = 0,
   isLoggedIn = false,
   user,
   onLogoutClick,
   links,
 }: NavbarProps) {
+  const { cartCount } = useCart();
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
 
