@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UserRoleModule } from './user-role/user-role.module';
+import { ProductCatalogueModule } from './product-catalogue/product-catalogue.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { UserRoleModule } from './user-role/user-role.module';
     }),
     PrismaModule,
     UserRoleModule,
+    ProductCatalogueModule,
   ],
   controllers: [AppController],
   providers: [AppService],

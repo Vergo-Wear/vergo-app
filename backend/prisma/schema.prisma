@@ -82,3 +82,86 @@ model Employee {
   @@schema("public")
 }
 
+model Category {
+  categoryId  String    @id @default(dbgenerated("gen_random_uuid()")) @map("category_id") @db.Uuid
+  name        String    @unique
+  description String?
+  products    Product[]
+
+  @@map("category")
+  @@schema("public")
+}
+
+model Supplier {
+  supplierId String    @id @default(dbgenerated("gen_random_uuid()")) @map("supplier_id") @db.Uuid
+  name       String
+  phone      String
+  email      String
+  address    String
+  products   Product[]
+
+  @@map("supplier")
+  @@schema("public")
+}
+
+model Product {
+  productId   String    @id @default(dbgenerated("gen_random_uuid()")) @map("product_id") @db.Uuid
+  categoryId  String?   @map("category_id") @db.Uuid
+  supplierId  String?   @map("supplier_id") @db.Uuid
+  name        String
+  description String?
+  basePrice   Decimal   @map("base_price") @db.Decimal
+  status      String?   @default("active")
+
+  category    Category?        @relation(fields: [categoryId], references: [categoryId], onDelete: NoAction, onUpdate: NoAction)
+  supplier    Supplier?         @relation(fields: [supplierId], references: [supplierId], onDelete: NoAction, onUpdate: NoAction)
+  variants    ProductVariant[]
+
+  @@map("product")
+  @@schema("public")
+}
+
+model ProductVariant {
+  variantId       String    @id @default(dbgenerated("gen_random_uuid()")) @map("variant_id") @db.Uuid
+  productId       String?   @map("product_id") @db.Uuid
+  sku             String    @unique
+  size            String
+  color           String
+  priceAdjustment Decimal?  @default(0.00) @map("price_adjustment") @db.Decimal
+
+  product   Product?    @relation(fields: [productId], references: [productId], onDelete: NoAction, onUpdate: NoAction)
+  inventory Inventory[]
+  images    Images[]
+
+  @@map("product_variant")
+  @@schema("public")
+}
+
+model Inventory {
+  inventoryId      String    @id @default(dbgenerated("gen_random_uuid()")) @map("inventory_id") @db.Uuid
+  variantId        String?   @map("variant_id") @db.Uuid
+  branchId         String?   @map("branch_id") @db.Uuid
+  quantity         Int?      @default(0)
+  reorderLevel     Int?      @default(10) @map("reorder_level")
+  lastUpdated      DateTime? @default(now()) @map("last_updated") @db.Timestamptz(6)
+  reservedQuantity Int?      @default(0) @map("reserved_quantity")
+
+  variant ProductVariant? @relation(fields: [variantId], references: [variantId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("inventory")
+  @@schema("public")
+}
+
+model Images {
+  id        BigInt    @id @default(autoincrement())
+  imageUrl  String    @map("image_url")
+  title     String?
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  variantId String?   @map("variant_id") @db.Uuid
+
+  variant ProductVariant? @relation(fields: [variantId], references: [variantId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("images")
+  @@schema("public")
+}
+
