@@ -1,7 +1,8 @@
-import { Body, Controller, Post, HttpCode, HttpStatus } from '@nestjs/common';
+import { Body, Controller, Post, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CustomerSignupDto } from './dto/customer-signup.dto';
 import { SigninDto } from './dto/signin.dto';
+import { GoogleCompleteProfileDto } from './dto/google-complete-profile.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -40,5 +41,31 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async adminSignin(@Body() dto: SigninDto) {
     return this.authService.signin(dto, 'Admin');
+  }
+
+  /**
+   * Called after the client-side Google OAuth flow completes.
+   *
+   * Returns one of two responses:
+   * - { needsOnboarding: false, user, profile } — existing customer, login complete.
+   * - { needsOnboarding: true, user }            — new user, redirect to complete-profile page.
+   */
+  @Post('customer/google-signin')
+  @HttpCode(HttpStatus.OK)
+  async customerGoogleSignin(@Body('accessToken') accessToken: string) {
+    if (!accessToken) {
+      throw new UnauthorizedException('accessToken is required.');
+    }
+    return this.authService.googleSignin(accessToken);
+  }
+
+  /**
+   * Completes onboarding for a new Google OAuth customer.
+   * Creates the profile and customer records using the verified Google identity.
+   * Must be called after /customer/google-signin returns { needsOnboarding: true }.
+   */
+  @Post('customer/google-complete-profile')
+  async customerGoogleCompleteProfile(@Body() dto: GoogleCompleteProfileDto) {
+    return this.authService.googleCompleteProfile(dto);
   }
 }

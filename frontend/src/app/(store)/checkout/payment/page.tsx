@@ -13,14 +13,19 @@ export default function PaymentPage() {
   // Local storage details
   const [contactInfo, setContactInfo] = useState<any>(null);
   const [shippingInfo, setShippingInfo] = useState<any>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Form state
-  const [paymentMethod, setPaymentMethod] = useState("bank_transfer");
+  const [paymentMethod, setPaymentMethod] = useState("cod");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOrderCompletedModal, setShowOrderCompletedModal] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
+      setIsLoggedIn(loggedIn);
+      setPaymentMethod(loggedIn ? "bank_transfer" : "cod");
+
       const storedContact = localStorage.getItem("vergo_checkout_contact");
       const storedShipping = localStorage.getItem("vergo_checkout_shipping");
 
@@ -188,30 +193,54 @@ export default function PaymentPage() {
                 border: paymentMethod === "bank_transfer" ? "1.5px solid #00FF9D" : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
                 backgroundColor: "#0d0d0e",
-                cursor: "pointer",
+                cursor: isLoggedIn ? "pointer" : "not-allowed",
+                opacity: isLoggedIn ? 1 : 0.5,
                 transition: "all 0.2s ease",
               }}
-              onClick={() => setPaymentMethod("bank_transfer")}
+              onClick={() => {
+                if (isLoggedIn) {
+                  setPaymentMethod("bank_transfer");
+                }
+              }}
             >
               <input
                 type="radio"
                 name="payment_method"
                 checked={paymentMethod === "bank_transfer"}
+                disabled={!isLoggedIn}
                 onChange={() => {}}
                 style={{
                   accentColor: "#00FF9D",
                   width: "18px",
                   height: "18px",
-                  cursor: "pointer",
+                  cursor: isLoggedIn ? "pointer" : "not-allowed",
                 }}
               />
-              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                <span style={{ fontSize: "13px", fontWeight: "700", color: "#ffffff" }}>
-                  Direct Bank Transfer
-                </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
+                <div style={{ display: "flex", justifyContent: "between", alignItems: "center" }}>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#ffffff" }}>
+                    Direct Bank Transfer
+                  </span>
+                </div>
                 <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>
                   Transfer funds directly. Processing takes up to 24 hours.
                 </span>
+                {!isLoggedIn && (
+                  <span style={{ fontSize: "11px", color: "#EA4335", fontWeight: "600", marginTop: "4px" }}>
+                    🔒 Only available for logged-in customers.{" "}
+                    <a
+                      href="/auth/login"
+                      onClick={(e) => {
+                        e.stopPropagation(); // prevent clicking label
+                        // Save login redirect prefill
+                        localStorage.setItem("vergo_login_prefill", "checkout");
+                      }}
+                      style={{ color: "#00FF9D", textDecoration: "underline" }}
+                    >
+                      Log in here
+                    </a>
+                  </span>
+                )}
               </div>
             </label>
 

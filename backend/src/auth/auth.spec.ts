@@ -20,10 +20,12 @@ describe('Auth Module (Controller & Service)', () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         create: jest.fn(),
+        upsert: jest.fn(),
       },
       profiles: {
         findUnique: jest.fn(),
         create: jest.fn(),
+        upsert: jest.fn(),
       },
       role: {
         findFirst: jest.fn(),
@@ -101,13 +103,13 @@ describe('Auth Module (Controller & Service)', () => {
         error: null,
       });
 
-      prismaMock.profiles.create.mockResolvedValue({
+      prismaMock.profiles.upsert.mockResolvedValue({
         id: 'supabase-user-id',
         username: 'johndoe',
         status: 'active',
       });
 
-      prismaMock.customer.create.mockResolvedValue({
+      prismaMock.customer.upsert.mockResolvedValue({
         customerId: 'customer-id-123',
         profileId: 'supabase-user-id',
         firstName: 'John',
@@ -138,7 +140,7 @@ describe('Auth Module (Controller & Service)', () => {
         error: null,
       });
 
-      prismaMock.profiles.create.mockRejectedValue(new Error('DB write failed'));
+      prismaMock.profiles.upsert.mockRejectedValue(new Error('DB write failed'));
 
       await expect(service.customerSignup(signupDto)).rejects.toThrow('DB write failed');
       expect(supabaseMock.adminClient.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-user-id');
