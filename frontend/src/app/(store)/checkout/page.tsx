@@ -108,24 +108,50 @@ export default function CheckoutPage() {
     }, 1000);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validation
     const newErrors: Record<string, string> = {};
-    if (!firstName.trim()) newErrors.firstName = "First name is required";
-    if (!lastName.trim()) newErrors.lastName = "Last name is required";
+    const nameRegex = /^[a-zA-Z\s\-'\.]+$/;
+
+    // First Name validation
+    if (!firstName.trim()) {
+      newErrors.firstName = "First name is required";
+    } else if (firstName.trim().length < 2) {
+      newErrors.firstName = "First name must be at least 2 characters";
+    } else if (firstName.trim().length > 50) {
+      newErrors.firstName = "First name cannot exceed 50 characters";
+    } else if (!nameRegex.test(firstName.trim())) {
+      newErrors.firstName = "First name must contain only letters and standard name characters";
+    }
+
+    // Last Name validation
+    if (!lastName.trim()) {
+      newErrors.lastName = "Last name is required";
+    } else if (lastName.trim().length < 2) {
+      newErrors.lastName = "Last name must be at least 2 characters";
+    } else if (lastName.trim().length > 50) {
+      newErrors.lastName = "Last name cannot exceed 50 characters";
+    } else if (!nameRegex.test(lastName.trim())) {
+      newErrors.lastName = "Last name must contain only letters and standard name characters";
+    }
     
+    // Email validation
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!email.trim()) {
       newErrors.email = "Email address is required";
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
+    } else if (!emailRegex.test(email.trim())) {
       newErrors.email = "Please enter a valid email address";
     }
 
+    // Phone validation
+    const phoneRegex = /^\+?[0-9\s\-()]+$/;
+    const cleanPhoneDigits = phone.replace(/\D/g, "");
     if (!phone.trim()) {
       newErrors.phone = "Phone number is required";
-    } else if (!/^\+?[0-9\s\-()]{7,}$/.test(phone)) {
-      newErrors.phone = "Please enter a valid phone number";
+    } else if (!phoneRegex.test(phone.trim()) || cleanPhoneDigits.length < 9 || cleanPhoneDigits.length > 15) {
+      newErrors.phone = "Please enter a valid phone number (9 to 15 digits)";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -134,35 +160,68 @@ export default function CheckoutPage() {
     }
 
     setErrors({});
+    setIsSubmitting(true);
 
-    // Normalize inputs for existing customer check
-    const emailMatch = email.trim().toLowerCase();
-    const cleanEnteredPhone = phone.trim().replace(/[^0-9+]/g, "");
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      const response = await fetch(`${apiUrl}/checkout/check-contact`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, phone }),
+      });
 
-    // Mock existing customers database
-    const EXISTING_CUSTOMERS = [
-      { email: "julian@verso.com", phone: "+1 (555) 000-0000" },
-      { email: "jane.doe@example.com", phone: "+1 (555) 111-1111" }
-    ];
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
 
-    const emailExists = EXISTING_CUSTOMERS.some(c => c.email.toLowerCase() === emailMatch);
-    const phoneExists = EXISTING_CUSTOMERS.some(c => {
-      const cleanCustomerPhone = c.phone.trim().replace(/[^0-9+]/g, "");
-      return cleanCustomerPhone === cleanEnteredPhone;
-    });
+      const { emailExists, phoneExists } = await response.json();
+      setIsSubmitting(false);
 
-    if (emailExists && phoneExists) {
-      setPopupReason("both");
-      setShowPopup(true);
-    } else if (emailExists) {
-      setPopupReason("email");
-      setShowPopup(true);
-    } else if (phoneExists) {
-      setPopupReason("phone");
-      setShowPopup(true);
-    } else {
-      // Both are new -> continues as guest
-      proceedWithSubmission();
+      if (emailExists && phoneExists) {
+        setPopupReason("both");
+        setShowPopup(true);
+      } else if (emailExists) {
+        setPopupReason("email");
+        setShowPopup(true);
+      } else if (phoneExists) {
+        setPopupReason("phone");
+        setShowPopup(true);
+      } else {
+        proceedWithSubmission();
+      }
+    } catch (apiError) {
+      console.warn("Failed to check existing contact via backend API, falling back to local simulation:", apiError);
+      
+      // Resilient Fallback to local simulation if backend is down or unconfigured
+      const emailMatch = email.trim().toLowerCase();
+      const cleanEnteredPhone = phone.trim().replace(/[^0-9+]/g, "");
+      const EXISTING_CUSTOMERS = [
+        { email: "julian@verso.com", phone: "+1 (555) 000-0000" },
+        { email: "jane.doe@example.com", phone: "+1 (555) 111-1111" }
+      ];
+
+      const emailExists = EXISTING_CUSTOMERS.some(c => c.email.toLowerCase() === emailMatch);
+      const phoneExists = EXISTING_CUSTOMERS.some(c => {
+        const cleanCustomerPhone = c.phone.trim().replace(/[^0-9+]/g, "");
+        return cleanCustomerPhone === cleanEnteredPhone;
+      });
+
+      setIsSubmitting(false);
+
+      if (emailExists && phoneExists) {
+        setPopupReason("both");
+        setShowPopup(true);
+      } else if (emailExists) {
+        setPopupReason("email");
+        setShowPopup(true);
+      } else if (phoneExists) {
+        setPopupReason("phone");
+        setShowPopup(true);
+      } else {
+        proceedWithSubmission();
+      }
     }
   };
 

@@ -1,4 +1,4 @@
-import { Controller, Get, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, InternalServerErrorException, Logger } from '@nestjs/common';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -40,5 +40,65 @@ export class AppController {
         message: 'Failed to connect to the database',
       });
     }
+  }
+
+  @Post('/checkout/check-contact')
+  async checkContact(@Body() body: { email?: string; phone?: string }) {
+    const email = body.email?.trim().toLowerCase();
+    const phone = body.phone?.trim();
+
+    let emailExists = false;
+    let phoneExists = false;
+
+    // database check with query raw
+    try {
+      if (email) {
+        const emailResults = await this.prisma.$queryRawUnsafe<any[]>(
+          `SELECT id FROM "profiles" WHERE LOWER("email") = $1 LIMIT 1`,
+          email
+        );
+        emailExists = emailResults && emailResults.length > 0;
+      }
+
+      if (phone) {
+        const cleanEnteredPhone = phone.replace(/[^0-9+]/g, '');
+        const phoneResults = await this.prisma.$queryRawUnsafe<any[]>(
+          `SELECT id FROM "profiles" WHERE regexp_replace("phone", '[^0-9+]', '', 'g') = $1 LIMIT 1`,
+          cleanEnteredPhone
+        );
+        phoneExists = phoneResults && phoneResults.length > 0;
+      }
+      
+      this.logger.log(`Checked contact in DB. emailExists=${emailExists}, phoneExists=${phoneExists}`);
+    } catch (dbError) {
+      this.logger.warn(
+        `Database query failed or profiles table not found. Falling back to mock checks. Error: ${dbError.message}`
+      );
+
+      // Fallback: mock dataset of existing customers
+      const EXISTING_CUSTOMERS = [
+        { email: 'julian@verso.com', phone: '+1 (555) 000-0000' },
+        { email: 'jane.doe@example.com', phone: '+1 (555) 111-1111' },
+      ];
+
+      if (email) {
+        emailExists = EXISTING_CUSTOMERS.some(
+          (c) => c.email.toLowerCase() === email
+        );
+      }
+
+      if (phone) {
+        const cleanEnteredPhone = phone.replace(/[^0-9+]/g, '');
+        phoneExists = EXISTING_CUSTOMERS.some((c) => {
+          const cleanCustomerPhone = c.phone.replace(/[^0-9+]/g, '');
+          return cleanCustomerPhone === cleanEnteredPhone;
+        });
+      }
+    }
+
+    return {
+      emailExists,
+      phoneExists,
+    };
   }
 }
