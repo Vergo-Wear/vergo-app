@@ -51,7 +51,7 @@ export default function CheckoutPage() {
   };
 
   const hasItems = cart.length > 0;
-  
+
   const defaultItems = [
     {
       product: {
@@ -88,6 +88,7 @@ export default function CheckoutPage() {
 
   const handleContinueAsGuest = () => {
     setShowPopup(false);
+    localStorage.setItem("vergo_is_logged_in", "false");
     proceedWithSubmission();
   };
 
@@ -140,7 +141,7 @@ export default function CheckoutPage() {
     } else if (!nameRegex.test(lastName.trim())) {
       newErrors.lastName = "Last name must contain only letters and standard name characters";
     }
-    
+
     // Email validation
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!email.trim()) {
@@ -164,6 +165,13 @@ export default function CheckoutPage() {
     }
 
     setErrors({});
+
+    // If the customer is already logged in, do not check email/phone existence or show popup.
+    if (localStorage.getItem("vergo_is_logged_in") === "true") {
+      proceedWithSubmission();
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -197,7 +205,7 @@ export default function CheckoutPage() {
       }
     } catch (apiError) {
       console.warn("Failed to check existing contact via backend API, falling back to local simulation:", apiError);
-      
+
       // Resilient Fallback to local simulation if backend is down or unconfigured
       const emailMatch = email.trim().toLowerCase();
       const cleanEnteredPhone = phone.trim().replace(/[^0-9+]/g, "");
@@ -389,7 +397,7 @@ export default function CheckoutPage() {
             {itemsToDisplay.map((item, index) => {
               const itemLkrPrice = parseLkrPrice(item.product.lkrPrice);
               const totalItemLkrPrice = itemLkrPrice * item.quantity;
-              
+
               return (
                 <div key={`${item.product.id}-${index}`} className="summary-item">
                   <div className="summary-item-image-wrapper">
@@ -529,56 +537,70 @@ export default function CheckoutPage() {
       {/* Existing Customer Popup Modal */}
       {showPopup && (
         <div className="modal-overlay" onClick={() => setShowPopup(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-icon-container">
+          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "440px", padding: "32px", textAlign: "center" }}>
+            <div className="modal-icon-container" style={{ margin: "0 auto 20px auto", display: "flex", backgroundColor: "rgba(255, 69, 58, 0.1)", color: "#ff453a", width: "48px", height: "48px", borderRadius: "50%", alignItems: "center", justifyContent: "center" }}>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="modal-icon"
-                width={24}
-                height={24}
+                width={20}
+                height={20}
               >
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                 <line x1="12" y1="9" x2="12" y2="13" />
                 <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
             </div>
-            <h3 className="modal-title">Account Already Exists</h3>
-            <p className="modal-message">
-              {popupReason === "both" && "An account with this email and phone number is already registered."}
-              {popupReason === "email" && "An account with this email address is already registered."}
-              {popupReason === "phone" && "An account with this phone number is already registered."}
-              {" Please log in to complete your checkout faster, or edit your contact details to continue."}
+            
+            <h3 className="modal-title" style={{ fontSize: "16px", letterSpacing: "0.05em", color: "#ffffff", marginBottom: "12px", textTransform: "uppercase", fontWeight: "800" }}>
+              Account Already Exists
+            </h3>
+            
+            <p className="modal-message" style={{ fontSize: "13px", lineHeight: "1.6", color: "rgba(255, 255, 255, 0.6)", marginBottom: "20px" }}>
+              An account with your email or phone number already exists in our system.
             </p>
-            <div className="modal-buttons-container">
+
+            {/* Highlighted Payment Warning Banner */}
+            <div style={{ 
+              backgroundColor: "rgba(255, 69, 58, 0.05)", 
+              border: "1px solid rgba(255, 69, 58, 0.20)", 
+              borderRadius: "8px", 
+              padding: "16px", 
+              marginBottom: "28px", 
+              display: "flex", 
+              alignItems: "flex-start", 
+              gap: "12px",
+              textAlign: "left"
+            }}>
+              <span style={{ color: "#ff453a", fontSize: "16px", lineHeight: "1.2" }}>⚠️</span>
+              <p style={{ fontSize: "13px", lineHeight: "1.5", color: "rgba(255, 255, 255, 0.85)", margin: 0 }}>
+                Continuing as a guest restricts you to <strong>Cash on Delivery (COD) only</strong> and disables <strong>Direct Bank Transfer</strong>.
+              </p>
+            </div>
+
+            <div className="modal-buttons-container" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               <button
                 type="button"
                 className="modal-primary-btn"
+                style={{ backgroundColor: "#00FF9D", color: "#000000", fontWeight: "800", fontSize: "11px", letterSpacing: "0.1em", height: "48px", border: "none", borderRadius: "6px", cursor: "pointer", textTransform: "uppercase", width: "100%" }}
                 onClick={() => {
                   localStorage.setItem("vergo_login_prefill", email);
                   router.push("/auth/login");
                 }}
               >
-                Log In to Account
+                Yes, log in
               </button>
               <button
                 type="button"
                 className="modal-secondary-btn"
-                onClick={() => setShowPopup(false)}
-              >
-                Edit Contact Details
-              </button>
-              <button
-                type="button"
-                className="modal-tertiary-btn"
+                style={{ backgroundColor: "transparent", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#ffffff", fontWeight: "800", fontSize: "11px", letterSpacing: "0.1em", height: "48px", borderRadius: "6px", cursor: "pointer", textTransform: "uppercase", width: "100%" }}
                 onClick={handleContinueAsGuest}
               >
-                Continue as Guest
+                No, continue as guest
               </button>
             </div>
           </div>

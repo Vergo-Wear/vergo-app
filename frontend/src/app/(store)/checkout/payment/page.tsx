@@ -48,6 +48,49 @@ export default function PaymentPage() {
 
   const handlePlaceOrder = () => {
     setIsSubmitting(true);
+
+    // Construct new order details
+    const randomId = `VRG-${Math.floor(1000 + Math.random() * 9000)}`;
+    const dateOptions: Intl.DateTimeFormatOptions = { month: "short", day: "2-digit", year: "numeric" };
+    const formattedDate = new Date().toLocaleDateString("en-US", dateOptions);
+    const paymentMethodLabel = paymentMethod === "bank_transfer" ? "Bank Transfer" : "Cash on Delivery";
+
+    const newOrder = {
+      id: randomId,
+      date: formattedDate,
+      status: "Processing" as const,
+      paymentMethod: paymentMethodLabel as "Bank Transfer" | "Cash on Delivery",
+      paymentStatus: "Pending" as const,
+      total: grandTotalLkr,
+      items: itemsToDisplay.map(item => ({
+        productId: item.product.id,
+        name: item.product.name,
+        subTitle: item.product.name.includes("SHELL") ? "Tech Outerwear" : "Core Collection V1",
+        image: item.product.image,
+        size: item.size,
+        color: item.color || "Default",
+        qty: item.quantity,
+        price: item.product.lkrPrice ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim()) : 0
+      })),
+      shippingAddress: `${shippingInfo?.addressLine1 || ""}${shippingInfo?.addressLine2 ? ", " + shippingInfo?.addressLine2 : ""}, ${shippingInfo?.city || ""}, ${shippingInfo?.district || ""}`,
+      phone: contactInfo?.phone,
+      email: contactInfo?.email,
+      isGuest: !isLoggedIn // Flagged as guest checkout if not logged in
+    };
+
+    // Save to local storage
+    const storedOrdersStr = localStorage.getItem("vergo_customer_orders");
+    let ordersList = [];
+    if (storedOrdersStr) {
+      try {
+        ordersList = JSON.parse(storedOrdersStr);
+      } catch (e) {
+        console.error("Error reading stored orders", e);
+      }
+    }
+    ordersList.unshift(newOrder); // Add new order to the beginning
+    localStorage.setItem("vergo_customer_orders", JSON.stringify(ordersList));
+
     setTimeout(() => {
       setIsSubmitting(false);
       setShowOrderCompletedModal(true);

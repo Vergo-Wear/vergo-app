@@ -59,6 +59,15 @@ export default function LoginPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const prefill = localStorage.getItem("vergo_login_prefill");
+      if (prefill && prefill !== "checkout") {
+        setFormData((prev) => ({ ...prev, emailOrMobile: prefill }));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (message) {
       const timer = setTimeout(() => {
         setMessage(null);
@@ -154,8 +163,11 @@ export default function LoginPage() {
 
           setMessage({ text: "Signed in successfully with Google! Redirecting...", type: "success" });
 
+          const redirectPath = localStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
+          localStorage.removeItem("vergo_login_prefill");
+
           setTimeout(() => {
-            router.push("/");
+            router.push(redirectPath);
           }, 1000);
         }
       } catch (err: any) {
@@ -257,8 +269,11 @@ export default function LoginPage() {
 
       setMessage({ text: "Profile completed successfully! Redirecting...", type: "success" });
 
+      const redirectPath = localStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
+      localStorage.removeItem("vergo_login_prefill");
+
       setTimeout(() => {
-        router.push("/");
+        router.push(redirectPath);
       }, 1000);
     } catch (err: any) {
       console.error("Profile completion failed:", err);
@@ -466,7 +481,9 @@ export default function LoginPage() {
       // Step 6: Redirect to the role-specific page
       setTimeout(() => {
         if (userRole === "Customer") {
-          router.push("/");
+          const redirectPath = localStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
+          localStorage.removeItem("vergo_login_prefill");
+          router.push(redirectPath);
         } else if (userRole === "Employee") {
           router.push("/employee");
         } else if (userRole === "Admin") {

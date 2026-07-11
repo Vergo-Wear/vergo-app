@@ -60,7 +60,7 @@ export class AppController {
     try {
       if (email) {
         const emailResults = await this.prisma.$queryRawUnsafe<any[]>(
-          `SELECT id FROM "profiles" WHERE LOWER("email") = $1 LIMIT 1`,
+          `SELECT customer_id FROM "customer" WHERE LOWER("email") = $1 LIMIT 1`,
           email
         );
         emailExists = emailResults && emailResults.length > 0;
@@ -69,7 +69,7 @@ export class AppController {
       if (phone) {
         const cleanEnteredPhone = phone.replace(/[^0-9+]/g, '');
         const phoneResults = await this.prisma.$queryRawUnsafe<any[]>(
-          `SELECT id FROM "profiles" WHERE regexp_replace("phone", '[^0-9+]', '', 'g') = $1 LIMIT 1`,
+          `SELECT customer_id FROM "customer" WHERE regexp_replace("phone", '[^0-9+]', '', 'g') = $1 LIMIT 1`,
           cleanEnteredPhone
         );
         phoneExists = phoneResults && phoneResults.length > 0;
