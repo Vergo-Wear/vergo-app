@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { createSupabaseClient } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,18 +16,298 @@ export default function LoginPage() {
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [pendingProfileCompletion, setPendingProfileCompletion] = useState(false);
+  const [oauthSession, setOauthSession] = useState<any>(null);
+  const [profileCompletionForm, setProfileCompletionForm] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+  });
+
+  const [errors, setErrors] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+  });
+
+  const validateField = (name: string, value: string) => {
+    let errMsg = "";
+    if (name === "firstName") {
+      if (!value.trim()) {
+        errMsg = "First Name is required.";
+      } else if (value.trim().length < 2) {
+        errMsg = "First Name must be at least 2 characters.";
+      } else if (!/^[A-Za-z\s]+$/.test(value.trim())) {
+        errMsg = "First Name can only contain letters and spaces.";
+      }
+    } else if (name === "lastName") {
+      if (!value.trim()) {
+        errMsg = "Last Name is required.";
+      } else if (!/^[A-Za-z\s]*$/.test(value.trim())) {
+        errMsg = "Last Name can only contain letters and spaces.";
+      }
+    } else if (name === "phone") {
+      const cleanVal = value.replace(/[\s-()]/g, '');
+      if (!value.trim()) {
+        errMsg = "WhatsApp Number is required.";
+      } else if (cleanVal.length > 0 && !/^(?:\+94|0)?7[0-9]{8}$/.test(cleanVal)) {
+        errMsg = "Invalid Sri Lankan WhatsApp number (e.g. 0771234567).";
+      }
+    }
+    setErrors((prev) => ({ ...prev, [name]: errMsg }));
+    return errMsg;
+  };
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  useEffect(() => {
+    const client = createSupabaseClient();
+    if (!client) return;
+
+    const handleAuthSession = async () => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      try {
+        const { data: { session } } = await client.auth.getSession();
+        if (session) {
+          setIsSubmitting(true);
+
+          // Strip the OAuth hash/query from the URL immediately so it can't be replayed
+          if (typeof window !== "undefined" && window.location.hash) {
+            window.history.replaceState(null, "", window.location.pathname);
+          }
+
+          // Call backend to check if this Google user has a registered account
+          const signinRes = await fetch(`${apiUrl}/auth/customer/google-signin`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken: session.access_token }),
+          });
+
+          const signinData = await signinRes.json();
+
+          if (!signinRes.ok) {
+            throw new Error(signinData.message || "Access denied. Failed to verify Google account.");
+          }
+
+          // New user — show the complete-profile screen
+          if (signinData.needsOnboarding) {
+            const googleFullName = session.user.user_metadata?.full_name || "";
+            const googleFirstName = session.user.user_metadata?.given_name || googleFullName.split(" ")[0] || "";
+            const googleLastName = session.user.user_metadata?.family_name || googleFullName.split(" ").slice(1).join(" ") || "";
+
+            setProfileCompletionForm({
+              firstName: googleFirstName,
+              lastName: googleLastName,
+              phone: "",
+            });
+            setOauthSession(session);
+            setPendingProfileCompletion(true);
+            setIsSubmitting(false);
+            return;
+          }
+
+          // Returning customer — profile already exists
+          const profileData = signinData.profile;
+          if (!profileData || profileData.status !== "active") {
+            throw new Error(`Account is "${profileData?.status || "inactive"}". Access is only permitted for active accounts.`);
+          }
+
+          // Fetch display name from customer record
+          let displayName = "";
+          try {
+            const res = await fetch(`${apiUrl}/customers/profile/${session.user.id}`);
+            if (res.ok) {
+              const customerData = await res.json();
+              displayName = `${customerData.firstName} ${customerData.lastName}`;
+            }
+          } catch (e) {
+            console.warn(e);
+          }
+
+          if (!displayName) {
+            displayName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0].toUpperCase() || "Vergo User";
+          }
+
+          // Save auth info to local storage
+          localStorage.setItem("vergo_is_logged_in", "true");
+          localStorage.setItem("vergo_access_token", session.access_token);
+          localStorage.setItem("vergo_refresh_token", session.refresh_token || "");
+          localStorage.setItem(
+            "vergo_user",
+            JSON.stringify({
+              id: session.user.id,
+              name: displayName,
+              email: session.user.email,
+              avatarUrl: session.user.user_metadata?.avatar_url || "/images/default-avatar.png",
+              role: "Customer",
+            })
+          );
+
+          window.dispatchEvent(new Event("vergo-auth-change"));
+
+          setMessage({ text: "Signed in successfully with Google! Redirecting...", type: "success" });
+
+          setTimeout(() => {
+            router.push("/");
+          }, 1000);
+        }
+      } catch (err: any) {
+        console.error("OAuth callback processing failed:", err);
+        setIsSubmitting(false);
+
+        // Clear Supabase session on failure so we can try again
+        await client.auth.signOut();
+
+        setMessage({ text: err.message || "Failed to process Google sign in.", type: "error" });
+      }
+    };
+
+    handleAuthSession();
+
+    // Also listen for the SIGNED_IN event fired by onAuthStateChange — this fires
+    // with the fresh session from the OAuth redirect and avoids the stale URL warning
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        handleAuthSession();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
+  const handleProfileCompletionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate all fields on submit
+    const firstNameErr = validateField("firstName", profileCompletionForm.firstName);
+    const lastNameErr = validateField("lastName", profileCompletionForm.lastName);
+    const phoneErr = validateField("phone", profileCompletionForm.phone);
+
+    if (firstNameErr || lastNameErr || phoneErr) {
+      setMessage({ text: "Please correct the errors in the form before submitting.", type: "error" });
+      return;
+    }
+
+    const cleanPhone = profileCompletionForm.phone.replace(/[\s-()]/g, '');
+    const resolvedPhone = cleanPhone.startsWith('+94') ? cleanPhone : cleanPhone.startsWith('0') ? '+94' + cleanPhone.substring(1) : '+94' + cleanPhone;
+
+    setIsSubmitting(true);
+    setMessage(null);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+    try {
+      const capitalize = (str: string) => str.trim().replace(/\b\w/g, c => c.toUpperCase());
+      const capitalizedFirstName = capitalize(profileCompletionForm.firstName);
+      const capitalizedLastName = capitalize(profileCompletionForm.lastName);
+      const displayName = `${capitalizedFirstName} ${capitalizedLastName}`;
+
+      // Generate a unique username from first + last name
+      const cleanFirstName = capitalizedFirstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanLastName = capitalizedLastName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      let baseUsername = `${cleanFirstName}_${cleanLastName}`;
+      if (!cleanFirstName && !cleanLastName) {
+        baseUsername = oauthSession.user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+      }
+      const uniqueUsername = `${baseUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+
+      // Single backend call — creates profile (role=Customer) + customer record atomically
+      const completeRes = await fetch(`${apiUrl}/auth/customer/google-complete-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessToken: oauthSession.access_token,
+          firstName: capitalizedFirstName,
+          lastName: capitalizedLastName,
+          phone: resolvedPhone,
+          username: uniqueUsername,
+        }),
+      });
+
+      if (!completeRes.ok) {
+        const errData = await completeRes.json();
+        throw new Error(errData.message || "Failed to complete profile.");
+      }
+
+      // Save auth info to local storage
+      localStorage.setItem("vergo_is_logged_in", "true");
+      localStorage.setItem("vergo_access_token", oauthSession.access_token);
+      localStorage.setItem("vergo_refresh_token", oauthSession.refresh_token || "");
+      localStorage.setItem(
+        "vergo_user",
+        JSON.stringify({
+          id: oauthSession.user.id,
+          name: displayName,
+          email: oauthSession.user.email,
+          avatarUrl: oauthSession.user.user_metadata?.avatar_url || "/images/default-avatar.png",
+          role: "Customer",
+        })
+      );
+
+      window.dispatchEvent(new Event("vergo-auth-change"));
+
+      setMessage({ text: "Profile completed successfully! Redirecting...", type: "success" });
+
+      setTimeout(() => {
+        router.push("/");
+      }, 1000);
+    } catch (err: any) {
+      console.error("Profile completion failed:", err);
+      setMessage({ text: err.message || "An error occurred while saving your profile.", type: "error" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (message) setMessage(null);
   };
 
-  const handleGoogleSignIn = (e: React.MouseEvent) => {
+  const handleGoogleSignIn = async (e: React.MouseEvent) => {
     e.preventDefault();
-    setMessage({ text: "Google Sign In is not configured yet. This is a demo.", type: "error" });
+    setMessage(null);
+    setIsSubmitting(true);
+
+    const client = createSupabaseClient();
+    if (!client) {
+      setMessage({ text: "Supabase client is not configured.", type: "error" });
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/login`,
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ text: err.message || "Failed to initiate Google sign in.", type: "error" });
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.emailOrMobile.trim()) {
@@ -42,25 +323,138 @@ export default function LoginPage() {
     setIsSubmitting(true);
     setMessage(null);
 
-    // Simulate successful sign-in
-    setTimeout(() => {
-      setIsSubmitting(false);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-      // Determine user details based on input
-      const isEmail = formData.emailOrMobile.includes("@");
-      const displayName = isEmail 
-        ? formData.emailOrMobile.split("@")[0].toUpperCase() 
-        : "Vergo Customer";
-      const email = isEmail ? formData.emailOrMobile : "customer@vergowear.com";
+    try {
+      let signinData: any = null;
+      let loginError: string | null = null;
+      
+      // Step 1: Try Customer Signin
+      try {
+        const res = await fetch(`${apiUrl}/auth/customer/signin`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            emailOrPhone: formData.emailOrMobile,
+            password: formData.password,
+          }),
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          signinData = data;
+        } else {
+          // If status is 403 (Forbidden) and message suggests role mismatch, we'll try employee
+          // Otherwise, if profile is blocked or details are wrong, we stop
+          if (res.status === 403 && data.message && data.message.includes("role")) {
+            // role mismatch, continue to employee signin
+          } else {
+            loginError = data.message || "Sign in failed.";
+          }
+        }
+      } catch (err: any) {
+        loginError = err.message || "Failed to contact auth service.";
+      }
 
-      // Store user information in localStorage
+      // Step 2: Try Employee Signin (if not authenticated and no other block errors)
+      if (!signinData && !loginError) {
+        try {
+          const res = await fetch(`${apiUrl}/auth/employee/signin`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              emailOrPhone: formData.emailOrMobile,
+              password: formData.password,
+            }),
+          });
+          
+          const data = await res.json();
+          if (res.ok) {
+            signinData = data;
+          } else {
+            if (res.status === 403 && data.message && data.message.includes("role")) {
+              // role mismatch, continue to admin signin
+            } else {
+              loginError = data.message || "Sign in failed.";
+            }
+          }
+        } catch (err: any) {
+          loginError = err.message || "Failed to contact auth service.";
+        }
+      }
+
+      // Step 3: Try Admin Signin (if not authenticated and no other block errors)
+      if (!signinData && !loginError) {
+        try {
+          const res = await fetch(`${apiUrl}/auth/admin/signin`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              emailOrPhone: formData.emailOrMobile,
+              password: formData.password,
+            }),
+          });
+          
+          const data = await res.json();
+          if (res.ok) {
+            signinData = data;
+          } else {
+            loginError = data.message || "Sign in failed.";
+          }
+        } catch (err: any) {
+          loginError = err.message || "Failed to contact auth service.";
+        }
+      }
+
+      // If we still don't have signinData, throw the error
+      if (!signinData) {
+        throw new Error(loginError || "Invalid credentials.");
+      }
+
+      // Step 4: Login succeeded! Now resolve the user's display name
+      const userId = signinData.user.id;
+      const userRole = signinData.user.role;
+      let displayName = "";
+
+      if (userRole === "Customer") {
+        try {
+          const profileRes = await fetch(`${apiUrl}/customers/profile/${userId}`);
+          if (profileRes.ok) {
+            const profileData = await profileRes.json();
+            displayName = `${profileData.firstName} ${profileData.lastName}`;
+          }
+        } catch (e) {
+          console.warn("Failed to fetch customer profile name:", e);
+        }
+      } else if (userRole === "Employee") {
+        try {
+          const profileRes = await fetch(`${apiUrl}/employees/profile/${userId}`);
+          if (profileRes.ok) {
+            const profileData = await profileRes.json();
+            displayName = `${profileData.firstName} ${profileData.lastName}`;
+          }
+        } catch (e) {
+          console.warn("Failed to fetch employee profile name:", e);
+        }
+      }
+
+      // Fallback display name
+      if (!displayName) {
+        displayName = userRole === "Admin" ? "Vergo Admin" : (signinData.user.email.split("@")[0].toUpperCase());
+      }
+
+      // Step 5: Store authentication details in localStorage
       localStorage.setItem("vergo_is_logged_in", "true");
+      localStorage.setItem("vergo_access_token", signinData.accessToken);
+      localStorage.setItem("vergo_refresh_token", signinData.refreshToken);
       localStorage.setItem(
         "vergo_user",
         JSON.stringify({
+          id: userId,
           name: displayName,
-          email: email,
+          email: signinData.user.email,
           avatarUrl: "/images/default-avatar.png",
+          role: userRole,
         })
       );
 
@@ -69,15 +463,199 @@ export default function LoginPage() {
 
       setMessage({ text: "Sign in successful! Redirecting...", type: "success" });
       
-      // Redirect to home/store page
+      // Step 6: Redirect to the role-specific page
       setTimeout(() => {
-        router.push("/");
+        if (userRole === "Customer") {
+          router.push("/");
+        } else if (userRole === "Employee") {
+          router.push("/employee");
+        } else if (userRole === "Admin") {
+          router.push("/admin");
+        } else {
+          router.push("/");
+        }
       }, 1000);
-    }, 1200);
+    } catch (err: any) {
+      console.error(err);
+      setMessage({
+        text: err.message || "An unexpected error occurred. Please check your credentials and try again.",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (pendingProfileCompletion) {
+    return (
+      <div className="auth-page-wrapper">
+        {/* Toast Notification Container */}
+        {message && (
+          <div className="auth-toast-container">
+            <div className={`auth-toast ${message.type}`}>
+              <span className="auth-toast-icon">
+                {message.type === "success" ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                )}
+              </span>
+              <span>{message.text}</span>
+            </div>
+          </div>
+        )}
+
+        <main className="auth-container">
+          <div className="register-card">
+            <div className="register-card-logo">
+              <Image
+                src="/images/wlogo.png"
+                alt="VERGO"
+                width={130}
+                height={40}
+                priority
+                style={{ objectFit: "contain", width: "auto", height: "auto" }}
+              />
+            </div>
+
+            <h1 className="register-title">COMPLETE PROFILE</h1>
+            <p className="auth-subtitle" style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "20px", textAlign: "center" }}>
+              Please provide your details and a contact phone number to complete registration.
+            </p>
+
+            <form className="register-form" onSubmit={handleProfileCompletionSubmit}>
+              {/* First Name Input */}
+              <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                  FIRST NAME *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter First Name"
+                  value={profileCompletionForm.firstName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setProfileCompletionForm(prev => ({ ...prev, firstName: val }));
+                    if (val.length > 0) {
+                      validateField("firstName", val);
+                    } else {
+                      setErrors(prev => ({ ...prev, firstName: "" }));
+                    }
+                  }}
+                  className={`custom-input ${errors.firstName ? "input-error" : ""}`}
+                />
+                {errors.firstName && (
+                  <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                    {errors.firstName}
+                  </span>
+                )}
+              </div>
+
+              {/* Last Name Input */}
+              <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                  LAST NAME *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Last Name"
+                  value={profileCompletionForm.lastName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setProfileCompletionForm(prev => ({ ...prev, lastName: val }));
+                    if (val.length > 0) {
+                      validateField("lastName", val);
+                    } else {
+                      setErrors(prev => ({ ...prev, lastName: "" }));
+                    }
+                  }}
+                  className={`custom-input ${errors.lastName ? "input-error" : ""}`}
+                />
+                {errors.lastName && (
+                  <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                    {errors.lastName}
+                  </span>
+                )}
+              </div>
+
+              {/* Phone Input */}
+              <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                  WHATSAPP NUMBER *
+                </label>
+                <input
+                  type="tel"
+                  placeholder="Enter WhatsApp Number (e.g. 0771234567)"
+                  value={profileCompletionForm.phone}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setProfileCompletionForm(prev => ({ ...prev, phone: val }));
+                    if (val.length > 0) {
+                      validateField("phone", val);
+                    } else {
+                      setErrors(prev => ({ ...prev, phone: "" }));
+                    }
+                  }}
+                  className={`custom-input ${errors.phone ? "input-error" : ""}`}
+                />
+                {errors.phone && (
+                  <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                    {errors.phone}
+                  </span>
+                )}
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isSubmitting || Boolean(errors.firstName || errors.lastName || errors.phone) || !profileCompletionForm.firstName || !profileCompletionForm.phone}
+                className="register-submit-btn"
+                style={{
+                  opacity: (isSubmitting || Boolean(errors.firstName || errors.lastName || errors.phone) || !profileCompletionForm.firstName || !profileCompletionForm.phone) ? 0.6 : 1,
+                  cursor: (isSubmitting || Boolean(errors.firstName || errors.lastName || errors.phone) || !profileCompletionForm.firstName || !profileCompletionForm.phone) ? "not-allowed" : "pointer"
+                }}
+              >
+                {isSubmitting ? "SAVING..." : "COMPLETE REGISTRATION"}
+              </button>
+            </form>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-page-wrapper">
+      {/* Toast Notification Container */}
+      {message && (
+        <div className="auth-toast-container">
+          <div className={`auth-toast ${message.type}`}>
+            <span className="auth-toast-icon">
+              {message.type === "success" ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+            </span>
+            <span>{message.text}</span>
+          </div>
+        </div>
+      )}
+
       <main className="auth-container">
         <div className="register-card">
           {/* Brand Logo at top of card */}
@@ -97,10 +675,13 @@ export default function LoginPage() {
           <form className="register-form" onSubmit={handleSubmit}>
             {/* Email or Mobile Input */}
             <div className="input-group">
+              <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                EMAIL OR MOBILE NUMBER
+              </label>
               <input
                 type="text"
                 name="emailOrMobile"
-                placeholder="EMAIL OR MOBILE NUMBER"
+                placeholder="Enter Email or Mobile Number"
                 value={formData.emailOrMobile}
                 onChange={handleChange}
                 className="custom-input"
@@ -110,11 +691,14 @@ export default function LoginPage() {
 
             {/* Password Input with show/hide toggle */}
             <div className="input-group">
+              <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                PASSWORD
+              </label>
               <div className="password-input-wrapper">
                 <input
                   type={showPassword ? "text" : "password"}
                   name="password"
-                  placeholder="PASSWORD"
+                  placeholder="Enter Password"
                   value={formData.password}
                   onChange={handleChange}
                   className="custom-input"
@@ -128,12 +712,12 @@ export default function LoginPage() {
                 >
                   {showPassword ? (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
                     </svg>
                   )}
                 </button>
@@ -164,8 +748,12 @@ export default function LoginPage() {
             {/* Submit Login Button */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !formData.emailOrMobile.trim() || !formData.password.trim()}
               className="register-submit-btn"
+              style={{
+                opacity: (isSubmitting || !formData.emailOrMobile.trim() || !formData.password.trim()) ? 0.6 : 1,
+                cursor: (isSubmitting || !formData.emailOrMobile.trim() || !formData.password.trim()) ? "not-allowed" : "pointer"
+              }}
             >
               {isSubmitting ? "LOGGING IN..." : "LOG IN"}
             </button>

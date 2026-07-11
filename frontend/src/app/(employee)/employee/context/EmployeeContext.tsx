@@ -813,6 +813,12 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Logout mockup
   const logoutEmployee = () => {
     addNotification("Logging Out", "Signing out of your active terminal session...", "info");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("vergo_user");
+      localStorage.removeItem("vergo_is_logged_in");
+      localStorage.removeItem("vergo_access_token");
+      localStorage.removeItem("vergo_refresh_token");
+    }
     setTimeout(() => {
       window.location.href = "/auth/login";
     }, 1000);
