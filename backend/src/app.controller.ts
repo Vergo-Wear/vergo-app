@@ -1,4 +1,11 @@
-import { Controller, Get, Post, Body, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  InternalServerErrorException,
+  Logger,
+  Post,
+} from '@nestjs/common';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -41,7 +48,6 @@ export class AppController {
       });
     }
   }
-
   @Post('/checkout/check-contact')
   async checkContact(@Body() body: { email?: string; phone?: string }) {
     const email = body.email?.trim().toLowerCase();
