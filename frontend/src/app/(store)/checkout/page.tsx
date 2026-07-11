@@ -98,12 +98,16 @@ export default function CheckoutPage() {
       JSON.stringify({ firstName, lastName, email, phone })
     );
 
+    if (localStorage.getItem("vergo_is_logged_in") !== "true") {
+      localStorage.setItem("vergo_is_logged_in", "false");
+    }
+
     setTimeout(() => {
       setIsSubmitting(false);
       setShowSuccessToast(true);
       setTimeout(() => {
         setShowSuccessToast(false);
-        alert("Success! Details captured. Continuing to Shipping step...");
+        router.push("/checkout/shipping");
       }, 1500);
     }, 1000);
   };
