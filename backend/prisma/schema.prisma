@@ -8,6 +8,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
   schemas   = ["public", "auth"]
 }
 
@@ -59,6 +61,7 @@ model Customer {
   createdAt              DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 
   profile                Profiles? @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  orders                 Orders[]
 
   @@map("customer")
   @@schema("public")
@@ -79,6 +82,129 @@ model Employee {
   profile    Profiles? @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("employee")
+  @@schema("public")
+}
+
+model Category {
+  categoryId  String    @id @default(dbgenerated("gen_random_uuid()")) @map("category_id") @db.Uuid
+  name        String    @unique
+  description String?
+  products    Product[]
+
+  @@map("category")
+  @@schema("public")
+}
+
+model Supplier {
+  supplierId String    @id @default(dbgenerated("gen_random_uuid()")) @map("supplier_id") @db.Uuid
+  name       String
+  phone      String
+  email      String
+  address    String
+  products   Product[]
+
+  @@map("supplier")
+  @@schema("public")
+}
+
+model Product {
+  productId   String           @id @default(dbgenerated("gen_random_uuid()")) @map("product_id") @db.Uuid
+  categoryId  String?          @map("category_id") @db.Uuid
+  supplierId  String?          @map("supplier_id") @db.Uuid
+  name        String
+  description String?
+  basePrice   Decimal          @map("base_price") @db.Decimal
+  status      String?          @default("active")
+  category    Category?        @relation(fields: [categoryId], references: [categoryId])
+  supplier    Supplier?        @relation(fields: [supplierId], references: [supplierId])
+  variants    ProductVariant[]
+
+  @@map("product")
+  @@schema("public")
+}
+
+model ProductVariant {
+  variantId       String      @id @default(dbgenerated("gen_random_uuid()")) @map("variant_id") @db.Uuid
+  productId       String?     @map("product_id") @db.Uuid
+  sku             String      @unique
+  size            String
+  color           String
+  priceAdjustment Decimal     @default(0.00) @map("price_adjustment") @db.Decimal
+  product         Product?    @relation(fields: [productId], references: [productId])
+  orderItems      OrderItem[]
+
+  @@map("product_variant")
+  @@schema("public")
+}
+
+model Orders {
+  orderId         String                @id @default(dbgenerated("gen_random_uuid()")) @map("order_id") @db.Uuid
+  customerId      String?               @map("customer_id") @db.Uuid
+  employeeId      String?               @map("employee_id") @db.Uuid
+  branchId        String?               @map("branch_id") @db.Uuid
+  orderDate       DateTime?             @default(now()) @map("order_date") @db.Timestamptz(6)
+  totalAmount     Decimal               @map("total_amount") @db.Decimal
+  paymentMethod   String                @map("payment_method")
+  shippingAddress String                @map("shipping_address")
+  orderStatus     String?               @default("Pending Payment") @map("order_status")
+  productTotal    Decimal               @default(0.00) @map("product_total") @db.Decimal
+  deliveryFee     Decimal               @default(0.00) @map("delivery_fee") @db.Decimal
+  codAmount       Decimal?              @default(0.00) @map("cod_amount") @db.Decimal
+  
+  customer        Customer?             @relation(fields: [customerId], references: [customerId])
+  orderItems      OrderItem[]
+  customerDetails OrderCustomerDetails?
+  shippingDetails OrderShippingDetails?
+
+  @@map("orders")
+  @@schema("public")
+}
+
+model OrderItem {
+  orderItemId String         @id @default(dbgenerated("gen_random_uuid()")) @map("order_item_id") @db.Uuid
+  orderId     String?        @map("order_id") @db.Uuid
+  variantId   String?        @map("variant_id") @db.Uuid
+  quantity    Int
+  unitPrice   Decimal        @map("unit_price") @db.Decimal
+  subtotal    Decimal        @db.Decimal
+  
+  order       Orders?        @relation(fields: [orderId], references: [orderId])
+  variant     ProductVariant? @relation(fields: [variantId], references: [variantId])
+
+  @@map("order_item")
+  @@schema("public")
+}
+
+model OrderCustomerDetails {
+  detailId     String   @id @default(dbgenerated("gen_random_uuid()")) @map("detail_id") @db.Uuid
+  orderId      String   @unique @map("order_id") @db.Uuid
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  email        String
+  phone        String
+  customerType String   @map("customer_type")
+  
+  order        Orders   @relation(fields: [orderId], references: [orderId])
+
+  @@map("order_customer_details")
+  @@schema("public")
+}
+
+model OrderShippingDetails {
+  shippingId   String  @id @default(dbgenerated("gen_random_uuid()")) @map("shipping_id") @db.Uuid
+  orderId      String  @unique @map("order_id") @db.Uuid
+  receiverName String  @map("receiver_name")
+  phone        String
+  addressLine1 String  @map("address_line_1")
+  addressLine2 String? @map("address_line_2")
+  city         String
+  district     String
+  postalCode   String? @map("postal_code")
+  deliveryNote String? @map("delivery_note")
+  
+  order        Orders  @relation(fields: [orderId], references: [orderId])
+
+  @@map("order_shipping_details")
   @@schema("public")
 }
 

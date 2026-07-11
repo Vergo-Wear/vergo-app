@@ -8,6 +8,7 @@ import { ProfilesModule } from './profiles/profiles.module';
 import { CustomersModule } from './customers/customers.module';
 import { EmployeesModule } from './employees/employees.module';
 import { AuthModule } from './auth/auth.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AuthModule } from './auth/auth.module';
     CustomersModule,
     EmployeesModule,
     AuthModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
