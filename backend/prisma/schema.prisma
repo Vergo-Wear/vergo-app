@@ -155,6 +155,7 @@ model Orders {
   orderItems      OrderItem[]
   customerDetails OrderCustomerDetails?
   shippingDetails OrderShippingDetails?
+  paymentProofs   PaymentProofs[]
 
   @@map("orders")
   @@schema("public")
@@ -205,6 +206,21 @@ model OrderShippingDetails {
   order        Orders  @relation(fields: [orderId], references: [orderId])
 
   @@map("order_shipping_details")
+  @@schema("public")
+}
+
+model PaymentProofs {
+  proofId     String    @id @default(dbgenerated("gen_random_uuid()")) @map("proof_id") @db.Uuid
+  orderId     String    @map("order_id") @db.Uuid
+  receiptUrl  String?   @map("receipt_url")
+  uploadedAt  DateTime? @map("uploaded_at") @db.Timestamptz(6)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  status      String    @default("Pending Upload")
+  adminNotes  String?   @map("admin_notes")
+  
+  order       Orders    @relation(fields: [orderId], references: [orderId])
+
+  @@map("payment_proofs")
   @@schema("public")
 }
 

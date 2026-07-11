@@ -19,6 +19,9 @@ export default function PaymentPage() {
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOrderCompletedModal, setShowOrderCompletedModal] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -28,6 +31,13 @@ export default function PaymentPage() {
 
       const storedContact = localStorage.getItem("vergo_checkout_contact");
       const storedShipping = localStorage.getItem("vergo_checkout_shipping");
+      const storedUser = localStorage.getItem("vergo_user");
+
+      if (storedUser) {
+        try {
+          setUserProfile(JSON.parse(storedUser));
+        } catch (e) {}
+      }
 
       if (storedContact) {
         try {
@@ -46,12 +56,96 @@ export default function PaymentPage() {
     }
   }, []);
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
+    setSubmitError(null);
     setIsSubmitting(true);
-    setTimeout(() => {
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    
+    // A helper to format UUID for mock items to satisfy backend validator
+    const getMockVariantId = (id: number) => {
+      return "30a91f5a-3eb6-444a-a7ee-000000000" + String(id).padStart(3, "0");
+    };
+
+    const payload = {
+      customerId: isLoggedIn ? (userProfile?.customerId || userProfile?.id || null) : null,
+      paymentMethod: paymentMethod === "cod" ? "cod" : "bank_transfer",
+      deliveryFee: deliveryFee,
+      contactDetails: {
+        firstName: contactInfo?.firstName || "",
+        lastName: contactInfo?.lastName || "",
+        email: contactInfo?.email || "",
+        phone: contactInfo?.phone || "",
+      },
+      shippingDetails: {
+        receiverName: shippingInfo?.receiverName || "",
+        phone: shippingInfo?.receiverPhone || "",
+        addressLine1: shippingInfo?.addressLine1 || "",
+        addressLine2: shippingInfo?.addressLine2 || "",
+        city: shippingInfo?.city || "",
+        district: shippingInfo?.district || "",
+        postalCode: shippingInfo?.postalCode || "",
+        deliveryNote: shippingInfo?.deliveryNote || "",
+      },
+      items: itemsToDisplay.map((item: any) => ({
+        variantId: item.product.variantId || getMockVariantId(item.product.id),
+        quantity: item.quantity || 1,
+      })),
+    };
+
+    try {
+      const response = await fetch(`${apiUrl}/orders`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
       setIsSubmitting(false);
+
+      if (!response.ok) {
+        const errMsg = Array.isArray(data.message) 
+          ? data.message.join(" ") 
+          : (data.message || "Failed to place order.");
+        setSubmitError(errMsg);
+        return;
+      }
+
+      const newOrderId = data.order?.orderId || data.order?.id;
+      setOrderId(newOrderId);
+
+      // Save order details to local storage history
+      const storedOrders = localStorage.getItem("vergo_customer_orders");
+      const parsedOrders = storedOrders ? JSON.parse(storedOrders) : [];
+      
+      const newOrderForStorage = {
+        id: newOrderId,
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        status: "Processing",
+        paymentMethod: paymentMethod === "cod" ? "Cash on Delivery" : "Bank Transfer",
+        paymentStatus: paymentMethod === "cod" ? "Approved" : "Pending",
+        total: grandTotalLkr,
+        items: itemsToDisplay.map((item: any) => ({
+          productId: item.product.id,
+          name: item.product.name,
+          image: item.product.image,
+          size: item.size,
+          color: item.color || item.product.colors?.[0] || "Default",
+          qty: item.quantity || 1,
+          price: item.product.lkrPrice ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim()) : 1200,
+        })),
+      };
+      
+      parsedOrders.unshift(newOrderForStorage);
+      localStorage.setItem("vergo_customer_orders", JSON.stringify(parsedOrders));
+
       setShowOrderCompletedModal(true);
-    }, 1500);
+    } catch (err) {
+      setIsSubmitting(false);
+      setSubmitError("Network error: Could not reach the order creation service.");
+    }
   };
 
   const handleFinishCheckout = () => {
@@ -352,6 +446,23 @@ export default function PaymentPage() {
               <span className="summary-total-value">{formatLkr(grandTotalLkr)}</span>
             </div>
 
+            {submitError && (
+              <div 
+                style={{ 
+                  color: "#EA4335", 
+                  backgroundColor: "rgba(234, 67, 53, 0.1)", 
+                  border: "1px solid rgba(234, 67, 53, 0.2)",
+                  padding: "12px", 
+                  borderRadius: "8px", 
+                  fontSize: "12px", 
+                  marginTop: "16px",
+                  lineHeight: "1.4"
+                }}
+              >
+                <strong>Order Failed:</strong> {submitError}
+              </div>
+            )}
+
             {/* Place Order Button */}
             <div className="submit-btn-container" style={{ marginTop: "24px" }}>
               <button
@@ -392,6 +503,10 @@ export default function PaymentPage() {
             <h3 className="modal-title">Order Placed Successfully</h3>
             <p className="modal-message">
               Thank you for shopping with VERGO! Your order has been placed successfully and will be processed immediately.
+              <br />
+              <span style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)", display: "block", marginTop: "8px" }}>
+                Order Reference: <strong>#{orderId}</strong>
+              </span>
             </p>
             <div className="modal-buttons-container">
               <button

@@ -219,12 +219,13 @@ export default function ShippingPage() {
       newErrors.receiverName = "Receiver name contains invalid characters";
     }
 
-    const phoneRegex = /^\+?[0-9\s\-()]+$/;
-    const cleanPhoneDigits = receiverPhone.replace(/\D/g, "");
-    if (!receiverPhone.trim()) {
-      newErrors.receiverPhone = "Phone number is required";
-    } else if (!phoneRegex.test(receiverPhone.trim()) || cleanPhoneDigits.length < 9 || cleanPhoneDigits.length > 15) {
-      newErrors.receiverPhone = "Please enter a valid phone number (9 to 15 digits)";
+    // Sri Lankan phone format validation: optional +94 or 0, followed by 9 digits
+    const cleanPhone = receiverPhone.trim();
+    const lkPhoneRegex = /^(?:\+94|0)?[1-9][0-9]{8}$/;
+    if (!cleanPhone) {
+      newErrors.receiverPhone = "Receiver phone number is required";
+    } else if (!lkPhoneRegex.test(cleanPhone)) {
+      newErrors.receiverPhone = "Please enter a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567)";
     }
 
     if (!addressLine1.trim()) {
@@ -241,6 +242,8 @@ export default function ShippingPage() {
 
     if (!district) {
       newErrors.district = "Please select a district for shipping calculation";
+    } else if (!DISTRICTS.includes(district)) {
+      newErrors.district = "Please select a valid Sri Lankan district";
     }
 
     if (Object.keys(newErrors).length > 0) {
