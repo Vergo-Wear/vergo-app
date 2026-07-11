@@ -33,7 +33,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const storedCart = localStorage.getItem("vergo_cart");
       if (storedCart) {
         try {
-          setCart(JSON.parse(storedCart));
+          const parsed = JSON.parse(storedCart);
+          if (Array.isArray(parsed)) {
+            const validCart = parsed.filter(
+              (item) => item && item.product && (item.product.lkrPrice || item.product.price)
+            );
+            setCart(validCart);
+          } else {
+            setCart([]);
+          }
         } catch (e) {
           console.error("Failed to parse cart from localStorage:", e);
         }
@@ -184,6 +192,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const cartSubtotal = cart.reduce((total, item) => {
+    if (!item || !item.product || !item.product.lkrPrice) return total;
     const priceNum = parseLkrPrice(item.product.lkrPrice);
     return total + priceNum * item.quantity;
   }, 0);
