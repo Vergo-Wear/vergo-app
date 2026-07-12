@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateOrderDto, SRI_LANKAN_DISTRICTS } from "./dto/create-order.dto";
 import { Prisma } from "@prisma/client";
@@ -143,45 +143,10 @@ export class OrdersService {
         return order;
       });
     } catch (dbError) {
-      const errMsg = dbError.message || "";
-      const isConnectionError = 
-        errMsg.includes("Can't reach database") ||
-        dbError.code === "P1001" ||
-        dbError.code === "P2021" ||
-        errMsg.includes("PrismaClientInitializationError") ||
-        errMsg.includes("connect");
-
-      if (isConnectionError) {
-        // Fallback: mock order processing for sandboxed offline run
-        const productTotal = createOrderDto.items.reduce((sum, item) => sum + (1200 * item.quantity), 0);
-        const deliveryFee = Number(createOrderDto.deliveryFee);
-        const totalAmount = productTotal + deliveryFee;
-        
-        const isCod = createOrderDto.paymentMethod.toLowerCase() === "cod" || 
-                      createOrderDto.paymentMethod.toLowerCase() === "cash on delivery";
-        const codAmount = isCod ? totalAmount : 0.00;
-
-        const sd = createOrderDto.shippingDetails;
-        const shippingAddress = `${sd.addressLine1}${sd.addressLine2 ? ", " + sd.addressLine2 : ""}, ${sd.city}, ${sd.district}${sd.postalCode ? " (" + sd.postalCode + ")" : ""}`;
-        const orderStatus = isCod ? "Pending Verification" : "Pending Payment";
-        
-        const mockOrderId = "mock-uuid-" + Math.random().toString(36).substr(2, 9);
-        
-        return {
-          orderId: mockOrderId,
-          customerId: createOrderDto.customerId || null,
-          totalAmount: new Prisma.Decimal(totalAmount),
-          productTotal: new Prisma.Decimal(productTotal),
-          deliveryFee: new Prisma.Decimal(deliveryFee),
-          codAmount: new Prisma.Decimal(codAmount),
-          paymentMethod: createOrderDto.paymentMethod,
-          shippingAddress: shippingAddress,
-          orderStatus: orderStatus,
-          orderDate: new Date(),
-        };
+      if (dbError instanceof BadRequestException) {
+        throw dbError;
       }
-
-      throw dbError;
+      throw new InternalServerErrorException("Failed to create order.");
     }
   }
 
