@@ -94,7 +94,12 @@ export default function PaymentPage() {
 
     setIsSubmitting(true);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!apiUrl) {
+      setSubmitError("Order service is not configured. Please contact support.");
+      setIsSubmitting(false);
+      return;
+    }
     const getMockVariantId = (id: number) =>
       "30a91f5a-3eb6-444a-a7ee-000000000" + String(id).padStart(3, "0");
     const payload = {

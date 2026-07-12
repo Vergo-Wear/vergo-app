@@ -42,12 +42,9 @@ export class SupabaseAuthGuard implements CanActivate {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    const supabaseUrl = this.configService.get<string>('SUPABASE_URL') || 'https://placeholder-url.supabase.co';
-    const supabaseKey = this.configService.get<string>('SUPABASE_ANON_KEY') || 'placeholder-anon-key';
-
-    if (!this.configService.get<string>('SUPABASE_URL') || !this.configService.get<string>('SUPABASE_ANON_KEY')) {
-      // Avoid crash on startup when variables are missing
-    }
+    const supabaseUrl = this.configService.getOrThrow<string>('SUPABASE_URL');
+    const supabaseKey =
+      this.configService.getOrThrow<string>('SUPABASE_ANON_KEY');
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     this.supabase = createClient(supabaseUrl, supabaseKey);
