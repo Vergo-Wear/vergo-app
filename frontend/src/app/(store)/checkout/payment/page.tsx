@@ -45,7 +45,7 @@ export default function PaymentPage() {
   const [showOrderCompletedModal, setShowOrderCompletedModal] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -61,9 +61,7 @@ export default function PaymentPage() {
       if (storedUser) {
         try {
           setUserProfile(JSON.parse(storedUser));
-        } catch (e) {
-          console.error("Error reading user profile", e);
-        }
+        } catch (e) {}
       }
 
       if (storedContact) {
@@ -85,28 +83,19 @@ export default function PaymentPage() {
 
   const handlePlaceOrder = async () => {
     setSubmitError(null);
-
-    if (!isLoggedIn && paymentMethod !== "cod") {
-      setPaymentMethod("cod");
-      setSubmitError("Guest checkout supports Cash on Delivery only. Log in to use Bank Transfer.");
-      return;
-    }
-
     setIsSubmitting(true);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (!apiUrl) {
-      setSubmitError("Order service is not configured. Please contact support.");
-      setIsSubmitting(false);
-      return;
-    }
-    const getMockVariantId = (id: number) =>
-      "30a91f5a-3eb6-444a-a7ee-000000000" + String(id).padStart(3, "0");
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    
+    // A helper to format UUID for mock items to satisfy backend validator
+    const getMockVariantId = (id: number) => {
+      return "30a91f5a-3eb6-444a-a7ee-000000000" + String(id).padStart(3, "0");
+    };
+
     const payload = {
-      // Deliberately null for guests, even when their contact matches an account.
       customerId: isLoggedIn ? (userProfile?.customerId || userProfile?.id || null) : null,
-      paymentMethod: isLoggedIn && paymentMethod === "bank_transfer" ? "bank_transfer" : "cod",
-      deliveryFee,
+      paymentMethod: paymentMethod === "cod" ? "cod" : "bank_transfer",
+      deliveryFee: deliveryFee,
       contactDetails: {
         firstName: contactInfo?.firstName || "",
         lastName: contactInfo?.lastName || "",
@@ -123,8 +112,8 @@ export default function PaymentPage() {
         postalCode: shippingInfo?.postalCode || "",
         deliveryNote: shippingInfo?.deliveryNote || "",
       },
-      items: itemsToDisplay.map((item) => ({
-        variantId: ("variantId" in item.product && item.product.variantId) || getMockVariantId(item.product.id),
+      items: itemsToDisplay.map((item: any) => ({
+        variantId: item.product.variantId || getMockVariantId(item.product.id),
         quantity: item.quantity || 1,
       })),
     };
@@ -132,45 +121,55 @@ export default function PaymentPage() {
     try {
       const response = await fetch(`${apiUrl}/orders`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(payload),
       });
+
       const data = await response.json();
+      setIsSubmitting(false);
 
       if (!response.ok) {
-        const message = Array.isArray(data.message) ? data.message.join(" ") : data.message;
-        setSubmitError(message || "Failed to place order.");
+        const errMsg = Array.isArray(data.message) 
+          ? data.message.join(" ") 
+          : (data.message || "Failed to place order.");
+        setSubmitError(errMsg);
         return;
       }
 
       const newOrderId = data.order?.orderId || data.order?.id;
       setOrderId(newOrderId);
+
+      // Save order details to local storage history
       const storedOrders = localStorage.getItem("vergo_customer_orders");
-      const ordersList = storedOrders ? JSON.parse(storedOrders) : [];
-      ordersList.unshift({
+      const parsedOrders = storedOrders ? JSON.parse(storedOrders) : [];
+      
+      const newOrderForStorage = {
         id: newOrderId,
         date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         status: "Processing",
-        paymentMethod: payload.paymentMethod === "cod" ? "Cash on Delivery" : "Bank Transfer",
-        paymentStatus: "Pending",
+        paymentMethod: paymentMethod === "cod" ? "Cash on Delivery" : "Bank Transfer",
+        paymentStatus: paymentMethod === "cod" ? "Approved" : "Pending",
         total: grandTotalLkr,
-        isGuest: !isLoggedIn,
-        items: itemsToDisplay.map((item) => ({
+        items: itemsToDisplay.map((item: any) => ({
           productId: item.product.id,
           name: item.product.name,
           image: item.product.image,
           size: item.size,
           color: item.color || item.product.colors?.[0] || "Default",
-          qty: item.quantity,
-          price: item.product.lkrPrice ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim()) : 0,
+          qty: item.quantity || 1,
+          price: item.product.lkrPrice ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim()) : 1200,
         })),
-      });
-      localStorage.setItem("vergo_customer_orders", JSON.stringify(ordersList));
+      };
+      
+      parsedOrders.unshift(newOrderForStorage);
+      localStorage.setItem("vergo_customer_orders", JSON.stringify(parsedOrders));
+
       setShowOrderCompletedModal(true);
-    } catch {
-      setSubmitError("Network error: Could not reach the order creation service.");
-    } finally {
+    } catch (err) {
       setIsSubmitting(false);
+      setSubmitError("Network error: Could not reach the order creation service.");
     }
   };
 
@@ -474,7 +473,18 @@ export default function PaymentPage() {
             </div>
 
             {submitError && (
-              <div style={{ color: "#EA4335", backgroundColor: "rgba(234, 67, 53, 0.1)", border: "1px solid rgba(234, 67, 53, 0.2)", padding: "12px", borderRadius: "8px", fontSize: "12px", marginTop: "16px", lineHeight: "1.4" }}>
+              <div 
+                style={{ 
+                  color: "#EA4335", 
+                  backgroundColor: "rgba(234, 67, 53, 0.1)", 
+                  border: "1px solid rgba(234, 67, 53, 0.2)",
+                  padding: "12px", 
+                  borderRadius: "8px", 
+                  fontSize: "12px", 
+                  marginTop: "16px",
+                  lineHeight: "1.4"
+                }}
+              >
                 <strong>Order Failed:</strong> {submitError}
               </div>
             )}
@@ -519,7 +529,10 @@ export default function PaymentPage() {
             <h3 className="modal-title">Order Placed Successfully</h3>
             <p className="modal-message">
               Thank you for shopping with VERGO! Your order has been placed successfully and will be processed immediately.
-              {orderId && <><br /><span style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)", display: "block", marginTop: "8px" }}>Order Reference: <strong>#{orderId}</strong></span></>}
+              <br />
+              <span style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)", display: "block", marginTop: "8px" }}>
+                Order Reference: <strong>#{orderId}</strong>
+              </span>
             </p>
             <div className="modal-buttons-container">
               <button
