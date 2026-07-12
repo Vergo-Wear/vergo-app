@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UserRoleModule } from './user-role/user-role.module';
+import { ProductCatalogueModule } from './product-catalogue/product-catalogue.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { CustomersModule } from './customers/customers.module';
 import { EmployeesModule } from './employees/employees.module';
@@ -17,6 +18,7 @@ import { OrdersModule } from './orders/orders.module';
     }),
     PrismaModule,
     UserRoleModule,
+    ProductCatalogueModule,
     ProfilesModule,
     CustomersModule,
     EmployeesModule,
