@@ -6,28 +6,65 @@ import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import "@/styles/checkout.css";
 
+interface ContactInfo {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+}
+
+interface ShippingInfo {
+  receiverName?: string;
+  receiverPhone?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  district?: string;
+  postalCode?: string;
+  deliveryNote?: string;
+  deliveryFee?: number;
+}
+
+interface UserProfile {
+  customerId?: string;
+  id?: string;
+}
+
 export default function PaymentPage() {
   const router = useRouter();
   const { cart, cartSubtotal, clearCart, formatLkr } = useCart();
 
   // Local storage details
-  const [contactInfo, setContactInfo] = useState<any>(null);
-  const [shippingInfo, setShippingInfo] = useState<any>(null);
+  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
+  const [shippingInfo, setShippingInfo] = useState<ShippingInfo | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Form state
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOrderCompletedModal, setShowOrderCompletedModal] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
+      const forcedGuest = localStorage.getItem("vergo_checkout_as_guest") === "true";
+      const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true" && !forcedGuest;
       setIsLoggedIn(loggedIn);
       setPaymentMethod(loggedIn ? "bank_transfer" : "cod");
 
       const storedContact = localStorage.getItem("vergo_checkout_contact");
       const storedShipping = localStorage.getItem("vergo_checkout_shipping");
+      const storedUser = localStorage.getItem("vergo_user");
+
+      if (storedUser) {
+        try {
+          setUserProfile(JSON.parse(storedUser));
+        } catch (e) {
+          console.error("Error reading user profile", e);
+        }
+      }
 
       if (storedContact) {
         try {
@@ -46,55 +83,90 @@ export default function PaymentPage() {
     }
   }, []);
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
+    setSubmitError(null);
+
+    if (!isLoggedIn && paymentMethod !== "cod") {
+      setPaymentMethod("cod");
+      setSubmitError("Guest checkout supports Cash on Delivery only. Log in to use Bank Transfer.");
+      return;
+    }
+
     setIsSubmitting(true);
 
-    // Construct new order details
-    const randomId = `VRG-${Math.floor(1000 + Math.random() * 9000)}`;
-    const dateOptions: Intl.DateTimeFormatOptions = { month: "short", day: "2-digit", year: "numeric" };
-    const formattedDate = new Date().toLocaleDateString("en-US", dateOptions);
-    const paymentMethodLabel = paymentMethod === "bank_transfer" ? "Bank Transfer" : "Cash on Delivery";
-
-    const newOrder = {
-      id: randomId,
-      date: formattedDate,
-      status: "Processing" as const,
-      paymentMethod: paymentMethodLabel as "Bank Transfer" | "Cash on Delivery",
-      paymentStatus: "Pending" as const,
-      total: grandTotalLkr,
-      items: itemsToDisplay.map(item => ({
-        productId: item.product.id,
-        name: item.product.name,
-        subTitle: item.product.name.includes("SHELL") ? "Tech Outerwear" : "Core Collection V1",
-        image: item.product.image,
-        size: item.size,
-        color: item.color || "Default",
-        qty: item.quantity,
-        price: item.product.lkrPrice ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim()) : 0
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const getMockVariantId = (id: number) =>
+      "30a91f5a-3eb6-444a-a7ee-000000000" + String(id).padStart(3, "0");
+    const payload = {
+      // Deliberately null for guests, even when their contact matches an account.
+      customerId: isLoggedIn ? (userProfile?.customerId || userProfile?.id || null) : null,
+      paymentMethod: isLoggedIn && paymentMethod === "bank_transfer" ? "bank_transfer" : "cod",
+      deliveryFee,
+      contactDetails: {
+        firstName: contactInfo?.firstName || "",
+        lastName: contactInfo?.lastName || "",
+        email: contactInfo?.email || "",
+        phone: contactInfo?.phone || "",
+      },
+      shippingDetails: {
+        receiverName: shippingInfo?.receiverName || "",
+        phone: shippingInfo?.receiverPhone || "",
+        addressLine1: shippingInfo?.addressLine1 || "",
+        addressLine2: shippingInfo?.addressLine2 || "",
+        city: shippingInfo?.city || "",
+        district: shippingInfo?.district || "",
+        postalCode: shippingInfo?.postalCode || "",
+        deliveryNote: shippingInfo?.deliveryNote || "",
+      },
+      items: itemsToDisplay.map((item) => ({
+        variantId: ("variantId" in item.product && item.product.variantId) || getMockVariantId(item.product.id),
+        quantity: item.quantity || 1,
       })),
-      shippingAddress: `${shippingInfo?.addressLine1 || ""}${shippingInfo?.addressLine2 ? ", " + shippingInfo?.addressLine2 : ""}, ${shippingInfo?.city || ""}, ${shippingInfo?.district || ""}`,
-      phone: contactInfo?.phone,
-      email: contactInfo?.email,
-      isGuest: !isLoggedIn // Flagged as guest checkout if not logged in
     };
 
-    // Save to local storage
-    const storedOrdersStr = localStorage.getItem("vergo_customer_orders");
-    let ordersList = [];
-    if (storedOrdersStr) {
-      try {
-        ordersList = JSON.parse(storedOrdersStr);
-      } catch (e) {
-        console.error("Error reading stored orders", e);
-      }
-    }
-    ordersList.unshift(newOrder); // Add new order to the beginning
-    localStorage.setItem("vergo_customer_orders", JSON.stringify(ordersList));
+    try {
+      const response = await fetch(`${apiUrl}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
 
-    setTimeout(() => {
-      setIsSubmitting(false);
+      if (!response.ok) {
+        const message = Array.isArray(data.message) ? data.message.join(" ") : data.message;
+        setSubmitError(message || "Failed to place order.");
+        return;
+      }
+
+      const newOrderId = data.order?.orderId || data.order?.id;
+      setOrderId(newOrderId);
+      const storedOrders = localStorage.getItem("vergo_customer_orders");
+      const ordersList = storedOrders ? JSON.parse(storedOrders) : [];
+      ordersList.unshift({
+        id: newOrderId,
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        status: "Processing",
+        paymentMethod: payload.paymentMethod === "cod" ? "Cash on Delivery" : "Bank Transfer",
+        paymentStatus: "Pending",
+        total: grandTotalLkr,
+        isGuest: !isLoggedIn,
+        items: itemsToDisplay.map((item) => ({
+          productId: item.product.id,
+          name: item.product.name,
+          image: item.product.image,
+          size: item.size,
+          color: item.color || item.product.colors?.[0] || "Default",
+          qty: item.quantity,
+          price: item.product.lkrPrice ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim()) : 0,
+        })),
+      });
+      localStorage.setItem("vergo_customer_orders", JSON.stringify(ordersList));
       setShowOrderCompletedModal(true);
-    }, 1500);
+    } catch {
+      setSubmitError("Network error: Could not reach the order creation service.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleFinishCheckout = () => {
@@ -102,6 +174,7 @@ export default function PaymentPage() {
     // Clean up temporary checkout states
     localStorage.removeItem("vergo_checkout_contact");
     localStorage.removeItem("vergo_checkout_shipping");
+    localStorage.removeItem("vergo_checkout_as_guest");
     setShowOrderCompletedModal(false);
     router.push("/");
   };
@@ -395,6 +468,12 @@ export default function PaymentPage() {
               <span className="summary-total-value">{formatLkr(grandTotalLkr)}</span>
             </div>
 
+            {submitError && (
+              <div style={{ color: "#EA4335", backgroundColor: "rgba(234, 67, 53, 0.1)", border: "1px solid rgba(234, 67, 53, 0.2)", padding: "12px", borderRadius: "8px", fontSize: "12px", marginTop: "16px", lineHeight: "1.4" }}>
+                <strong>Order Failed:</strong> {submitError}
+              </div>
+            )}
+
             {/* Place Order Button */}
             <div className="submit-btn-container" style={{ marginTop: "24px" }}>
               <button
@@ -435,6 +514,7 @@ export default function PaymentPage() {
             <h3 className="modal-title">Order Placed Successfully</h3>
             <p className="modal-message">
               Thank you for shopping with VERGO! Your order has been placed successfully and will be processed immediately.
+              {orderId && <><br /><span style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)", display: "block", marginTop: "8px" }}>Order Reference: <strong>#{orderId}</strong></span></>}
             </p>
             <div className="modal-buttons-container">
               <button

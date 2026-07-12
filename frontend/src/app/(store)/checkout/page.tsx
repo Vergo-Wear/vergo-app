@@ -19,7 +19,6 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
-  const [popupReason, setPopupReason] = useState<"email" | "phone" | "both" | null>(null);
 
   // Pre-fill user information if logged in
   useEffect(() => {
@@ -89,6 +88,7 @@ export default function CheckoutPage() {
   const handleContinueAsGuest = () => {
     setShowPopup(false);
     localStorage.setItem("vergo_is_logged_in", "false");
+    localStorage.setItem("vergo_checkout_as_guest", "true");
     proceedWithSubmission();
   };
 
@@ -101,6 +101,8 @@ export default function CheckoutPage() {
 
     if (localStorage.getItem("vergo_is_logged_in") !== "true") {
       localStorage.setItem("vergo_is_logged_in", "false");
+    } else {
+      localStorage.removeItem("vergo_checkout_as_guest");
     }
 
     setTimeout(() => {
@@ -192,13 +194,10 @@ export default function CheckoutPage() {
       setIsSubmitting(false);
 
       if (emailExists && phoneExists) {
-        setPopupReason("both");
         setShowPopup(true);
       } else if (emailExists) {
-        setPopupReason("email");
         setShowPopup(true);
       } else if (phoneExists) {
-        setPopupReason("phone");
         setShowPopup(true);
       } else {
         proceedWithSubmission();
@@ -223,13 +222,10 @@ export default function CheckoutPage() {
       setIsSubmitting(false);
 
       if (emailExists && phoneExists) {
-        setPopupReason("both");
         setShowPopup(true);
       } else if (emailExists) {
-        setPopupReason("email");
         setShowPopup(true);
       } else if (phoneExists) {
-        setPopupReason("phone");
         setShowPopup(true);
       } else {
         proceedWithSubmission();
@@ -537,8 +533,8 @@ export default function CheckoutPage() {
       {/* Existing Customer Popup Modal */}
       {showPopup && (
         <div className="modal-overlay" onClick={() => setShowPopup(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "440px", padding: "32px", textAlign: "center" }}>
-            <div className="modal-icon-container" style={{ margin: "0 auto 20px auto", display: "flex", backgroundColor: "rgba(255, 69, 58, 0.1)", color: "#ff453a", width: "48px", height: "48px", borderRadius: "50%", alignItems: "center", justifyContent: "center" }}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()} style={{ width: "calc(100% - 32px)", maxWidth: "480px", padding: "36px", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "12px", backgroundColor: "#101010", textAlign: "center" }}>
+            <div className="modal-icon-container" style={{ margin: "0 auto 24px", display: "flex", backgroundColor: "rgba(255, 59, 48, 0.13)", color: "#ff453a", width: "52px", height: "52px", borderRadius: "50%", alignItems: "center", justifyContent: "center" }}>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
@@ -547,8 +543,8 @@ export default function CheckoutPage() {
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                width={20}
-                height={20}
+                width={22}
+                height={22}
               >
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                 <line x1="12" y1="9" x2="12" y2="13" />
@@ -556,39 +552,40 @@ export default function CheckoutPage() {
               </svg>
             </div>
             
-            <h3 className="modal-title" style={{ fontSize: "16px", letterSpacing: "0.05em", color: "#ffffff", marginBottom: "12px", textTransform: "uppercase", fontWeight: "800" }}>
+            <h3 className="modal-title" style={{ fontSize: "18px", lineHeight: "1.3", letterSpacing: "0.02em", color: "#ffffff", marginBottom: "14px", textTransform: "uppercase", fontWeight: "800" }}>
               Account Already Exists
             </h3>
             
-            <p className="modal-message" style={{ fontSize: "13px", lineHeight: "1.6", color: "rgba(255, 255, 255, 0.6)", marginBottom: "20px" }}>
+            <p className="modal-message" style={{ fontSize: "14px", lineHeight: "1.6", color: "rgba(255, 255, 255, 0.58)", margin: "0 auto 24px", maxWidth: "360px" }}>
               An account with your email or phone number already exists in our system.
             </p>
 
             {/* Highlighted Payment Warning Banner */}
             <div style={{ 
-              backgroundColor: "rgba(255, 69, 58, 0.05)", 
-              border: "1px solid rgba(255, 69, 58, 0.20)", 
-              borderRadius: "8px", 
-              padding: "16px", 
-              marginBottom: "28px", 
-              display: "flex", 
-              alignItems: "flex-start", 
+              backgroundColor: "rgba(255, 59, 48, 0.055)",
+              border: "1px solid rgba(255, 59, 48, 0.35)",
+              borderRadius: "8px",
+              padding: "19px 20px",
+              marginBottom: "30px",
+              display: "flex",
+              alignItems: "flex-start",
               gap: "12px",
               textAlign: "left"
             }}>
-              <span style={{ color: "#ff453a", fontSize: "16px", lineHeight: "1.2" }}>⚠️</span>
-              <p style={{ fontSize: "13px", lineHeight: "1.5", color: "rgba(255, 255, 255, 0.85)", margin: 0 }}>
+              <span aria-hidden="true" style={{ color: "#ffc24b", fontSize: "16px", lineHeight: "1.35" }}>▲</span>
+              <p style={{ fontSize: "14px", lineHeight: "1.5", color: "rgba(255, 255, 255, 0.82)", margin: 0 }}>
                 Continuing as a guest restricts you to <strong>Cash on Delivery (COD) only</strong> and disables <strong>Direct Bank Transfer</strong>.
               </p>
             </div>
 
-            <div className="modal-buttons-container" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div className="modal-buttons-container" style={{ display: "flex", flexDirection: "column", gap: "13px" }}>
               <button
                 type="button"
                 className="modal-primary-btn"
-                style={{ backgroundColor: "#00FF9D", color: "#000000", fontWeight: "800", fontSize: "11px", letterSpacing: "0.1em", height: "48px", border: "none", borderRadius: "6px", cursor: "pointer", textTransform: "uppercase", width: "100%" }}
+                style={{ backgroundColor: "#00F5A0", color: "#000000", fontWeight: "800", fontSize: "12px", letterSpacing: "0.1em", height: "54px", border: "none", borderRadius: "7px", cursor: "pointer", textTransform: "uppercase", width: "100%" }}
                 onClick={() => {
                   localStorage.setItem("vergo_login_prefill", email);
+                  localStorage.removeItem("vergo_checkout_as_guest");
                   router.push("/auth/login");
                 }}
               >
@@ -597,7 +594,7 @@ export default function CheckoutPage() {
               <button
                 type="button"
                 className="modal-secondary-btn"
-                style={{ backgroundColor: "transparent", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#ffffff", fontWeight: "800", fontSize: "11px", letterSpacing: "0.1em", height: "48px", borderRadius: "6px", cursor: "pointer", textTransform: "uppercase", width: "100%" }}
+                style={{ backgroundColor: "transparent", border: "1px solid rgba(255, 255, 255, 0.18)", color: "#ffffff", fontWeight: "800", fontSize: "12px", letterSpacing: "0.08em", height: "52px", borderRadius: "7px", cursor: "pointer", textTransform: "uppercase", width: "100%" }}
                 onClick={handleContinueAsGuest}
               >
                 No, continue as guest
