@@ -1,6 +1,7 @@
 export interface CategorySummary {
   category_id: string;
   name: string;
+  description: string | null;
 }
 
 export interface SupplierSummary {
@@ -25,6 +26,7 @@ export interface ProductVariantSummary {
   colour: string;
   price: number;
   inventory: VariantInventory;
+  images: ProductImage[];
 }
 
 export interface ProductCatalogueItem {

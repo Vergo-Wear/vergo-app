@@ -36,6 +36,12 @@ function mapVariant(
     0,
   );
   const price = basePrice.plus(variant.priceAdjustment ?? 0).toNumber();
+  const images = variant.images
+    .filter((image) => isValidImageUrl(image.imageUrl))
+    .map((image) => ({
+      image_id: image.id.toString(),
+      url: image.imageUrl.trim(),
+    }));
 
   return {
     variant_id: variant.variantId,
@@ -47,6 +53,7 @@ function mapVariant(
       quantity,
       reserved_quantity: reservedQuantity,
     },
+    images,
   };
 }
 
@@ -57,9 +64,10 @@ function mapImages(product: ProductWithRelations): ProductImage[] {
   for (const variant of product.variants) {
     for (const image of variant.images) {
       if (!isValidImageUrl(image.imageUrl)) continue;
-      if (seen.has(image.imageUrl)) continue;
-      seen.add(image.imageUrl);
-      images.push({ image_id: image.id.toString(), url: image.imageUrl });
+      const url = image.imageUrl.trim();
+      if (seen.has(url)) continue;
+      seen.add(url);
+      images.push({ image_id: image.id.toString(), url });
     }
   }
 
@@ -74,7 +82,11 @@ export function toProductCatalogueItem(
     name: product.name,
     description: product.description,
     category: product.category
-      ? { category_id: product.category.categoryId, name: product.category.name }
+      ? {
+          category_id: product.category.categoryId,
+          name: product.category.name,
+          description: product.category.description,
+        }
       : null,
     supplier: product.supplier
       ? { supplier_id: product.supplier.supplierId, name: product.supplier.name }

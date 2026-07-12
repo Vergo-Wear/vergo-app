@@ -11,15 +11,16 @@ export class PrismaService
   private pool: Pool;
 
   constructor() {
-    const connectionString =
-      process.env.DATABASE_URL ||
-      'postgresql://postgres:postgres@localhost:5432/postgres';
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL is required');
+    }
     const pool = new Pool({
       connectionString,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
-      ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+      ssl: { rejectUnauthorized: false },
     });
     const adapter = new PrismaPg(pool);
     super({ adapter });
