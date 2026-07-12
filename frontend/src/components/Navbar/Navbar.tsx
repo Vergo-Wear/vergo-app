@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
+import { createSupabaseClient } from "@/lib/supabase";
 import "./navbar.css";
 
 export interface NavbarProps {
@@ -163,13 +164,19 @@ export default function Navbar({
                 <hr className="dropdown-divider" />
                 <Link href="/profile" className="dropdown-item" onClick={() => setShowDropdown(false)}>My Account</Link>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setShowDropdown(false);
+                    const client = createSupabaseClient();
+                    if (client) {
+                      await client.auth.signOut().catch(console.error);
+                    }
                     if (onLogoutClick) {
                       onLogoutClick();
                     } else {
                       localStorage.removeItem("vergo_user");
                       localStorage.removeItem("vergo_is_logged_in");
+                      localStorage.removeItem("vergo_access_token");
+                      localStorage.removeItem("vergo_refresh_token");
                       window.dispatchEvent(new Event("vergo-auth-change"));
                       router.push("/");
                     }
@@ -231,13 +238,19 @@ export default function Navbar({
               <li>
                 <button
                   className="mobile-logout-btn"
-                  onClick={() => {
+                  onClick={async () => {
                     setIsOpen(false);
+                    const client = createSupabaseClient();
+                    if (client) {
+                      await client.auth.signOut().catch(console.error);
+                    }
                     if (onLogoutClick) {
                       onLogoutClick();
                     } else {
                       localStorage.removeItem("vergo_user");
                       localStorage.removeItem("vergo_is_logged_in");
+                      localStorage.removeItem("vergo_access_token");
+                      localStorage.removeItem("vergo_refresh_token");
                       window.dispatchEvent(new Event("vergo-auth-change"));
                       router.push("/");
                     }

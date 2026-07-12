@@ -8,6 +8,19 @@ import {
 } from '@nestjs/common';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
+import { IsEmail, IsOptional, Matches } from 'class-validator';
+
+export class CheckContactDto {
+  @IsOptional()
+  @IsEmail({}, { message: 'Invalid email address format.' })
+  email?: string;
+
+  @IsOptional()
+  @Matches(/^(?:\+94|0)?[1-9][0-9]{8}$/, {
+    message: 'Phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).'
+  })
+  phone?: string;
+}
 
 @Controller()
 export class AppController {
@@ -49,7 +62,7 @@ export class AppController {
     }
   }
   @Post('/checkout/check-contact')
-  async checkContact(@Body() body: { email?: string; phone?: string }) {
+  async checkContact(@Body() body: CheckContactDto) {
     const email = body.email?.trim().toLowerCase();
     const phone = body.phone?.trim();
 
@@ -60,7 +73,7 @@ export class AppController {
     try {
       if (email) {
         const emailResults = await this.prisma.$queryRawUnsafe<any[]>(
-          `SELECT id FROM "profiles" WHERE LOWER("email") = $1 LIMIT 1`,
+          `SELECT customer_id FROM "customer" WHERE LOWER("email") = $1 LIMIT 1`,
           email
         );
         emailExists = emailResults && emailResults.length > 0;
@@ -69,7 +82,7 @@ export class AppController {
       if (phone) {
         const cleanEnteredPhone = phone.replace(/[^0-9+]/g, '');
         const phoneResults = await this.prisma.$queryRawUnsafe<any[]>(
-          `SELECT id FROM "profiles" WHERE regexp_replace("phone", '[^0-9+]', '', 'g') = $1 LIMIT 1`,
+          `SELECT customer_id FROM "customer" WHERE regexp_replace("phone", '[^0-9+]', '', 'g') = $1 LIMIT 1`,
           cleanEnteredPhone
         );
         phoneExists = phoneResults && phoneResults.length > 0;

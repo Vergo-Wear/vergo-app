@@ -44,172 +44,187 @@ export default function OrderHistoryPage() {
     // 1. Check logged-in status
     const storedLoggedIn = localStorage.getItem("vergo_is_logged_in");
     const storedUser = localStorage.getItem("vergo_user");
+    let currentUserEmail = "";
     
     if (storedLoggedIn === "true" && storedUser) {
       setIsLoggedIn(true);
-    }
-
-    // 2. Fetch or seed orders
-    const storedOrders = localStorage.getItem("vergo_customer_orders");
-    let needsSeeding = !storedOrders;
-    if (storedOrders) {
       try {
-        const parsed = JSON.parse(storedOrders);
-        if (!parsed.some((o: any) => o.id === "VRG-8651")) {
-          needsSeeding = true;
-        } else {
-          setOrders(parsed);
-        }
+        const parsedUser = JSON.parse(storedUser);
+        currentUserEmail = parsedUser.email || "";
       } catch (e) {
-        console.error("Error parsing orders:", e);
-        needsSeeding = true;
+        console.error("Error parsing user profile details:", e);
       }
     }
 
-    if (needsSeeding) {
-      // Seed default orders to match screenshot + requirements
-      const defaultOrders: Order[] = [
-        {
-          id: "VRG-8924",
-          date: "Oct 24, 2023",
-          status: "Delivered",
-          paymentMethod: "Bank Transfer",
-          paymentStatus: "Approved",
-          total: 1200.00,
-          items: [
-            {
-              productId: 1,
-              name: "VERGO OVERSIZED HOODIE",
-              subTitle: "Core Collection V1",
-              image: "/images/hoodie.png",
-              size: "L",
-              color: "Obsidian Black",
-              qty: 1,
-              price: 1200.00
-            }
-          ]
-        },
-        {
-          id: "VRG-9021",
-          date: "Feb 27, 2026",
-          status: "Processing",
-          paymentMethod: "Cash on Delivery",
-          paymentStatus: "Pending",
-          total: 950.00,
-          items: [
-            {
-              productId: 2,
-              name: "GRAPHIC OVERSIZED TEE",
-              subTitle: "Essentials Drop 02",
-              image: "/images/tee.png",
-              size: "M",
-              color: "Cloud White",
-              qty: 2,
-              price: 475.00
-            }
-          ]
-        },
-        {
-          id: "VRG-8812",
-          date: "Dec 15, 2024",
-          status: "In Transit",
-          paymentMethod: "Bank Transfer",
-          paymentStatus: "Approved",
-          total: 2455.00,
-          items: [
-            {
-              productId: 3,
-              name: "TECHNICAL CARGO PANTS",
-              subTitle: "Tactical Gear Set",
-              image: "/images/pants.png",
-              size: "32",
-              color: "Olive",
-              qty: 1,
-              price: 1255.00
-            },
-            {
-              productId: 10,
-              name: "Minimalist Beanie - White",
-              subTitle: "ESSENTIALS V1",
-              image: "/images/minimalist_beanie.png",
-              size: "OS",
-              color: "White",
-              qty: 1,
-              price: 600.00
-            },
-            {
-              productId: 11,
-              name: "Vergo Tote - Black",
-              subTitle: "ESSENTIALS V1",
-              image: "/images/vergo_tote.png",
-              size: "OS",
-              color: "Black",
-              qty: 1,
-              price: 600.00
-            }
-          ]
-        },
-        {
-          id: "VRG-8651",
-          date: "Jun 18, 2026",
-          status: "In Transit",
-          paymentMethod: "Bank Transfer",
-          paymentStatus: "Approved",
-          total: 1500.00,
-          items: [
-            {
-              productId: 5,
-              name: "Boxy Tee - Jet Black",
-              subTitle: "ESSENTIALS V1",
-              image: "/images/boxy_tee.png",
-              size: "S",
-              color: "Jet Black",
-              qty: 1,
-              price: 1500.00
-            }
-          ]
-        },
-        {
-          id: "VRG-8711",
-          date: "Jan 10, 2026",
-          status: "Cancelled",
-          paymentMethod: "Bank Transfer",
-          paymentStatus: "Rejected",
-          total: 1800.00,
-          items: [
-            {
-              productId: 8,
-              name: "Heavyweight LS - Jet Black",
-              subTitle: "ESSENTIALS V1",
-              image: "/images/heavyweight_ls.png",
-              size: "XL",
-              color: "Jet Black",
-              qty: 1,
-              price: 1800.00
-            }
-          ]
-        },
-        {
-          id: "VRG-8541",
-          date: "May 05, 2026",
-          status: "Cancelled",
-          paymentMethod: "Bank Transfer",
-          paymentStatus: "Expired",
-          total: 1500.00,
-          items: [
-            {
-              productId: 5,
-              name: "Boxy Tee - Jet Black",
-              subTitle: "ESSENTIALS V1",
-              image: "/images/boxy_tee.png",
-              size: "S",
-              color: "Jet Black",
-              qty: 1,
-              price: 1500.00
-            }
-          ]
+    // Seed default orders to match screenshot + requirements
+    const defaultOrders: Order[] = [
+      {
+        id: "VRG-8924",
+        date: "Oct 24, 2023",
+        status: "Delivered",
+        paymentMethod: "Bank Transfer",
+        paymentStatus: "Approved",
+        total: 1200.00,
+        items: [
+          {
+            productId: 1,
+            name: "VERGO OVERSIZED HOODIE",
+            subTitle: "Core Collection V1",
+            image: "/images/hoodie.png",
+            size: "L",
+            color: "Obsidian Black",
+            qty: 1,
+            price: 1200.00
+          }
+        ]
+      },
+      {
+        id: "VRG-9021",
+        date: "Feb 27, 2026",
+        status: "Processing",
+        paymentMethod: "Cash on Delivery",
+        paymentStatus: "Pending",
+        total: 950.00,
+        items: [
+          {
+            productId: 2,
+            name: "GRAPHIC OVERSIZED TEE",
+            subTitle: "Essentials Drop 02",
+            image: "/images/tee.png",
+            size: "M",
+            color: "Cloud White",
+            qty: 2,
+            price: 475.00
+          }
+        ]
+      },
+      {
+        id: "VRG-8812",
+        date: "Dec 15, 2024",
+        status: "In Transit",
+        paymentMethod: "Bank Transfer",
+        paymentStatus: "Approved",
+        total: 2455.00,
+        items: [
+          {
+            productId: 3,
+            name: "TECHNICAL CARGO PANTS",
+            subTitle: "Tactical Gear Set",
+            image: "/images/pants.png",
+            size: "32",
+            color: "Olive",
+            qty: 1,
+            price: 1255.00
+          },
+          {
+            productId: 10,
+            name: "Minimalist Beanie - White",
+            subTitle: "ESSENTIALS V1",
+            image: "/images/minimalist_beanie.png",
+            size: "OS",
+            color: "White",
+            qty: 1,
+            price: 600.00
+          },
+          {
+            productId: 11,
+            name: "Vergo Tote - Black",
+            subTitle: "ESSENTIALS V1",
+            image: "/images/vergo_tote.png",
+            size: "OS",
+            color: "Black",
+            qty: 1,
+            price: 600.00
+          }
+        ]
+      },
+      {
+        id: "VRG-8651",
+        date: "Jun 18, 2026",
+        status: "In Transit",
+        paymentMethod: "Bank Transfer",
+        paymentStatus: "Approved",
+        total: 1500.00,
+        items: [
+          {
+            productId: 5,
+            name: "Boxy Tee - Jet Black",
+            subTitle: "ESSENTIALS V1",
+            image: "/images/boxy_tee.png",
+            size: "S",
+            color: "Jet Black",
+            qty: 1,
+            price: 1500.00
+          }
+        ]
+      },
+      {
+        id: "VRG-8711",
+        date: "Jan 10, 2026",
+        status: "Cancelled",
+        paymentMethod: "Bank Transfer",
+        paymentStatus: "Rejected",
+        total: 1800.00,
+        items: [
+          {
+            productId: 8,
+            name: "Heavyweight LS - Jet Black",
+            subTitle: "ESSENTIALS V1",
+            image: "/images/heavyweight_ls.png",
+            size: "XL",
+            color: "Jet Black",
+            qty: 1,
+            price: 1800.00
+          }
+        ]
+      },
+      {
+        id: "VRG-8541",
+        date: "May 05, 2026",
+        status: "Cancelled",
+        paymentMethod: "Bank Transfer",
+        paymentStatus: "Expired",
+        total: 1500.00,
+        items: [
+          {
+            productId: 5,
+            name: "Boxy Tee - Jet Black",
+            subTitle: "ESSENTIALS V1",
+            image: "/images/boxy_tee.png",
+            size: "S",
+            color: "Jet Black",
+            qty: 1,
+            price: 1500.00
+          }
+        ]
+      }
+    ];
+
+    // 2. Fetch or seed orders
+    const storedOrders = localStorage.getItem("vergo_customer_orders");
+    if (storedOrders) {
+      try {
+        const parsed = JSON.parse(storedOrders);
+        const hasSeeded = parsed.some((o: any) => o.id === "VRG-8651");
+        let allOrders = parsed;
+        if (!hasSeeded) {
+          allOrders = [...parsed, ...defaultOrders];
+          localStorage.setItem("vergo_customer_orders", JSON.stringify(allOrders));
         }
-      ];
+
+        // Filter out guest orders and other users' orders
+        const filteredOrders = allOrders.filter((o: any) => {
+          if (o.isGuest) return false;
+          if (o.email && currentUserEmail && o.email.toLowerCase() !== currentUserEmail.toLowerCase()) return false;
+          return true;
+        });
+        setOrders(filteredOrders);
+      } catch (e) {
+        console.error("Error parsing orders:", e);
+        setOrders(defaultOrders);
+        localStorage.setItem("vergo_customer_orders", JSON.stringify(defaultOrders));
+      }
+    } else {
       setOrders(defaultOrders);
       localStorage.setItem("vergo_customer_orders", JSON.stringify(defaultOrders));
     }

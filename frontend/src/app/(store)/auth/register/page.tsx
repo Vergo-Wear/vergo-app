@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { createSupabaseClient } from "@/lib/supabase";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -20,89 +21,496 @@ export default function RegisterPage() {
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Google OAuth onboarding state
+  const [pendingProfileCompletion, setPendingProfileCompletion] = useState(false);
+  const [oauthSession, setOauthSession] = useState<any>(null);
+  const [profileCompletionForm, setProfileCompletionForm] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+  });
+  const [profileErrors, setProfileErrors] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+  });
+
+  const [errors, setErrors] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    mobileNumber: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  const validateField = (name: string, value: string) => {
+    let errMsg = "";
+    if (name === "firstName") {
+      if (!value.trim()) {
+        errMsg = "First Name is required.";
+      } else if (value.trim().length < 2) {
+        errMsg = "First Name must be at least 2 characters.";
+      } else if (!/^[A-Za-z\s]+$/.test(value.trim())) {
+        errMsg = "First Name can only contain letters and spaces.";
+      }
+    } else if (name === "lastName") {
+      if (!value.trim()) {
+        errMsg = "Last Name is required.";
+      } else if (!/^[A-Za-z\s]*$/.test(value.trim())) {
+        errMsg = "Last Name can only contain letters and spaces.";
+      }
+    } else if (name === "email") {
+      if (!value.trim()) {
+        errMsg = "Email is required.";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
+        errMsg = "Invalid email address.";
+      }
+    } else if (name === "mobileNumber") {
+      const cleanVal = value.replace(/[\s-()]/g, '');
+      if (!value.trim()) {
+        errMsg = "WhatsApp Number is required.";
+      } else if (cleanVal.length > 0 && !/^(?:\+94|0)?7[0-9]{8}$/.test(cleanVal)) {
+        errMsg = "Invalid Sri Lankan WhatsApp number (e.g. 0771234567).";
+      }
+    } else if (name === "password") {
+      if (!value) {
+        errMsg = "Password is required.";
+      } else if (value.length < 6) {
+        errMsg = "Password must be at least 6 characters.";
+      }
+      if (formData.confirmPassword && value !== formData.confirmPassword) {
+        setErrors(prev => ({ ...prev, confirmPassword: "Passwords do not match." }));
+      } else if (formData.confirmPassword) {
+        setErrors(prev => ({ ...prev, confirmPassword: "" }));
+      }
+    } else if (name === "confirmPassword") {
+      if (!value) {
+        errMsg = "Please confirm your password.";
+      } else if (value !== formData.password) {
+        errMsg = "Passwords do not match.";
+      }
+    }
+    setErrors((prev) => ({ ...prev, [name]: errMsg }));
+    return errMsg;
+  };
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  // Handle Google OAuth callback when redirected back to this page
+  useEffect(() => {
+    const client = createSupabaseClient();
+    if (!client) return;
+
+    const handleAuthSession = async () => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      try {
+        const { data: { session } } = await client.auth.getSession();
+        if (!session) return;
+
+        setIsSubmitting(true);
+
+        // Strip the OAuth hash from the URL so it can't be replayed
+        if (typeof window !== "undefined" && window.location.hash) {
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+
+        const signinRes = await fetch(`${apiUrl}/auth/customer/google-signin`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: session.access_token }),
+        });
+
+        const signinData = await signinRes.json();
+
+        if (!signinRes.ok) {
+          throw new Error(signinData.message || "Failed to verify Google account.");
+        }
+
+        if (signinData.needsOnboarding) {
+          // New user — show complete-profile form on this same page
+          const googleFullName = session.user.user_metadata?.full_name || "";
+          const googleFirstName = session.user.user_metadata?.given_name || googleFullName.split(" ")[0] || "";
+          const googleLastName = session.user.user_metadata?.family_name || googleFullName.split(" ").slice(1).join(" ") || "";
+          setProfileCompletionForm({ firstName: googleFirstName, lastName: googleLastName, phone: "" });
+          setOauthSession(session);
+          setPendingProfileCompletion(true);
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Existing customer — log them in directly
+        const profileData = signinData.profile;
+        if (!profileData || profileData.status !== "active") {
+          throw new Error(`Account is "${profileData?.status || "inactive"}". Access is only permitted for active accounts.`);
+        }
+
+        let displayName = "";
+        try {
+          const res = await fetch(`${apiUrl}/customers/profile/${session.user.id}`);
+          if (res.ok) {
+            const customerData = await res.json();
+            displayName = `${customerData.firstName} ${customerData.lastName}`;
+          }
+        } catch (e) { console.warn(e); }
+
+        if (!displayName) {
+          displayName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0].toUpperCase() || "Vergo User";
+        }
+
+        localStorage.setItem("vergo_is_logged_in", "true");
+        localStorage.setItem("vergo_access_token", session.access_token);
+        localStorage.setItem("vergo_refresh_token", session.refresh_token || "");
+        localStorage.setItem("vergo_user", JSON.stringify({
+          id: session.user.id,
+          name: displayName,
+          email: session.user.email,
+          avatarUrl: session.user.user_metadata?.avatar_url || "/images/default-avatar.png",
+          role: "Customer",
+        }));
+        window.dispatchEvent(new Event("vergo-auth-change"));
+        setMessage({ text: "Signed in successfully! Redirecting...", type: "success" });
+        setTimeout(() => router.push("/"), 1000);
+      } catch (err: any) {
+        console.error("Google OAuth callback failed:", err);
+        setIsSubmitting(false);
+        await createSupabaseClient()?.auth.signOut();
+        setMessage({ text: err.message || "Failed to process Google sign in.", type: "error" });
+      }
+    };
+
+    handleAuthSession();
+
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        handleAuthSession();
+      }
+    });
+
+    return () => { subscription.unsubscribe(); };
+  }, [router]);
+
+  const validateProfileField = (name: string, value: string) => {
+    let errMsg = "";
+    if (name === "firstName") {
+      if (!value.trim()) errMsg = "First Name is required.";
+      else if (value.trim().length < 2) errMsg = "First Name must be at least 2 characters.";
+      else if (!/^[A-Za-z\s]+$/.test(value.trim())) errMsg = "First Name can only contain letters and spaces.";
+    } else if (name === "lastName") {
+      if (!value.trim()) errMsg = "Last Name is required.";
+      else if (!/^[A-Za-z\s]*$/.test(value.trim())) errMsg = "Last Name can only contain letters and spaces.";
+    } else if (name === "phone") {
+      const cleanVal = value.replace(/[\s-()]/g, "");
+      if (!value.trim()) errMsg = "WhatsApp Number is required.";
+      else if (cleanVal.length > 0 && !/^(?:\+94|0)?7[0-9]{8}$/.test(cleanVal)) errMsg = "Invalid Sri Lankan WhatsApp number (e.g. 0771234567).";
+    }
+    setProfileErrors(prev => ({ ...prev, [name]: errMsg }));
+    return errMsg;
+  };
+
+  const handleProfileCompletionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const firstNameErr = validateProfileField("firstName", profileCompletionForm.firstName);
+    const lastNameErr = validateProfileField("lastName", profileCompletionForm.lastName);
+    const phoneErr = validateProfileField("phone", profileCompletionForm.phone);
+    if (firstNameErr || lastNameErr || phoneErr) {
+      setMessage({ text: "Please correct the errors before submitting.", type: "error" });
+      return;
+    }
+
+    const cleanPhone = profileCompletionForm.phone.replace(/[\s-()]/g, "");
+    const resolvedPhone = cleanPhone.startsWith("+94") ? cleanPhone : cleanPhone.startsWith("0") ? "+94" + cleanPhone.substring(1) : "+94" + cleanPhone;
+
+    setIsSubmitting(true);
+    setMessage(null);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+    try {
+      const capitalize = (str: string) => str.trim().replace(/\b\w/g, c => c.toUpperCase());
+      const capitalizedFirstName = capitalize(profileCompletionForm.firstName);
+      const capitalizedLastName = capitalize(profileCompletionForm.lastName);
+      const displayName = `${capitalizedFirstName} ${capitalizedLastName}`;
+
+      const cleanFirstName = capitalizedFirstName.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const cleanLastName = capitalizedLastName.toLowerCase().replace(/[^a-z0-9]/g, "");
+      let baseUsername = `${cleanFirstName}_${cleanLastName}`;
+      if (!cleanFirstName && !cleanLastName) {
+        baseUsername = oauthSession.user.email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
+      }
+      const uniqueUsername = `${baseUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const completeRes = await fetch(`${apiUrl}/auth/customer/google-complete-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessToken: oauthSession.access_token,
+          firstName: capitalizedFirstName,
+          lastName: capitalizedLastName,
+          phone: resolvedPhone,
+          username: uniqueUsername,
+        }),
+      });
+
+      if (!completeRes.ok) {
+        const errData = await completeRes.json();
+        throw new Error(errData.message || "Failed to complete profile.");
+      }
+
+      localStorage.setItem("vergo_is_logged_in", "true");
+      localStorage.setItem("vergo_access_token", oauthSession.access_token);
+      localStorage.setItem("vergo_refresh_token", oauthSession.refresh_token || "");
+      localStorage.setItem("vergo_user", JSON.stringify({
+        id: oauthSession.user.id,
+        name: displayName,
+        email: oauthSession.user.email,
+        avatarUrl: oauthSession.user.user_metadata?.avatar_url || "/images/default-avatar.png",
+        role: "Customer",
+      }));
+      window.dispatchEvent(new Event("vergo-auth-change"));
+      setMessage({ text: "Profile completed! Redirecting...", type: "success" });
+      setTimeout(() => router.push("/"), 1000);
+    } catch (err: any) {
+      console.error("Profile completion failed:", err);
+      setMessage({ text: err.message || "An error occurred while saving your profile.", type: "error" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (message) setMessage(null);
+
+    if (value.length > 0) {
+      validateField(name, value);
+    } else {
+      setErrors(prev => ({ ...prev, [name]: "" }));
+    }
   };
 
-  const handleGoogleSignUp = (e: React.MouseEvent) => {
+  const handleGoogleSignUp = async (e: React.MouseEvent) => {
     e.preventDefault();
-    setMessage({ text: "Google Sign Up is not configured yet. This is a demo.", type: "error" });
+    setMessage(null);
+    setIsSubmitting(true);
+
+    const client = createSupabaseClient();
+    if (!client) {
+      setMessage({ text: "Supabase client is not configured.", type: "error" });
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/register`,
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ text: err.message || "Failed to initiate Google sign up.", type: "error" });
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation checks
-    if (!formData.firstName.trim()) {
-      setMessage({ text: "Please enter your first name.", type: "error" });
-      return;
-    }
+    // Run all validations on submit
+    const firstNameErr = validateField("firstName", formData.firstName);
+    const lastNameErr = validateField("lastName", formData.lastName);
+    const emailErr = validateField("email", formData.email);
+    const phoneErr = validateField("mobileNumber", formData.mobileNumber);
+    const passwordErr = validateField("password", formData.password);
+    const confirmPasswordErr = validateField("confirmPassword", formData.confirmPassword);
 
-    if (!formData.lastName.trim()) {
-      setMessage({ text: "Please enter your last name.", type: "error" });
-      return;
-    }
-
-    if (!formData.email.trim() || !formData.email.includes("@")) {
-      setMessage({ text: "Please enter a valid email address.", type: "error" });
-      return;
-    }
-
-    const cleanedMobile = formData.mobileNumber.replace(/\D/g, "");
-    if (cleanedMobile.length !== 10) {
-      setMessage({ text: "Please enter a valid 10-digit mobile number.", type: "error" });
-      return;
-    }
-
-    if (!formData.password) {
-      setMessage({ text: "Please enter a password.", type: "error" });
-      return;
-    }
-
-    if (!formData.confirmPassword) {
-      setMessage({ text: "Please confirm your password.", type: "error" });
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setMessage({ text: "Passwords do not match.", type: "error" });
+    if (firstNameErr || lastNameErr || emailErr || phoneErr || passwordErr || confirmPasswordErr) {
+      setMessage({ text: "Please correct the errors in the form before submitting.", type: "error" });
       return;
     }
 
     setIsSubmitting(true);
     setMessage(null);
 
-    // Simulate successful registration
-    setTimeout(() => {
-      setIsSubmitting(false);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-      // Store user information in localStorage
+    try {
+      const capitalize = (str: string) => {
+        return str.trim().replace(/\b\w/g, c => c.toUpperCase());
+      };
+      const capitalizedFirstName = capitalize(formData.firstName);
+      const capitalizedLastName = capitalize(formData.lastName);
+
+      // 1. Call Backend Customer Signup API
+      const signupRes = await fetch(`${apiUrl}/auth/customer/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          firstName: capitalizedFirstName,
+          lastName: capitalizedLastName,
+          phone: formData.mobileNumber,
+          mobileNumber: formData.mobileNumber,
+        }),
+      });
+
+      const signupData = await signupRes.json();
+
+      if (!signupRes.ok) {
+        throw new Error(signupData.message || "Registration failed.");
+      }
+
+      // 2. Automatically sign in after successful signup
+      const signinRes = await fetch(`${apiUrl}/auth/customer/signin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          emailOrPhone: formData.email,
+          password: formData.password,
+        }),
+      });
+
+      const signinData = await signinRes.json();
+
+      if (!signinRes.ok) {
+        throw new Error(signinData.message || "Automatic sign in failed.");
+      }
+
+      // 3. Store tokens and profile information in localStorage
       localStorage.setItem("vergo_is_logged_in", "true");
+      localStorage.setItem("vergo_access_token", signinData.accessToken);
+      localStorage.setItem("vergo_refresh_token", signinData.refreshToken);
       localStorage.setItem(
         "vergo_user",
         JSON.stringify({
-          name: `${formData.firstName} ${formData.lastName}`,
-          email: formData.email,
+          id: signinData.user.id,
+          name: `${capitalizedFirstName} ${capitalizedLastName}`,
+          email: signinData.user.email,
           avatarUrl: "/images/default-avatar.png",
+          role: signinData.user.role,
         })
       );
 
       // Dispatch authentication change event to trigger Navbar update
       window.dispatchEvent(new Event("vergo-auth-change"));
 
-      setMessage({ text: "Registration successful! Welcome to VERGO. Redirecting...", type: "success" });
+      setMessage({ text: "Registration successful! Redirecting...", type: "success" });
 
-      // Redirect to home/store page
+      // Redirect to customer side
       setTimeout(() => {
         router.push("/");
       }, 1000);
-    }, 1200);
+    } catch (err: any) {
+      console.error(err);
+      setMessage({
+        text: err.message || "An unexpected error occurred during registration. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="auth-page-wrapper">
+      {/* Toast */}
+      {message && (
+        <div className="auth-toast-container">
+          <div className={`auth-toast ${message.type}`}>
+            <span className="auth-toast-icon">
+              {message.type === "success" ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+            </span>
+            <span>{message.text}</span>
+          </div>
+        </div>
+      )}
+
+      {pendingProfileCompletion ? (
+        /* ── Complete Profile Form (Google new user) ── */
+        <main className="auth-container">
+          <div className="register-card">
+            <div className="register-card-logo">
+              <Image src="/images/wlogo.png" alt="VERGO" width={130} height={40} priority style={{ objectFit: "contain", width: "auto", height: "auto" }} />
+            </div>
+            <h1 className="register-title">COMPLETE PROFILE</h1>
+            <p style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "20px", textAlign: "center" }}>
+              Please provide your details to finish creating your account.
+            </p>
+            <form className="register-form" onSubmit={handleProfileCompletionSubmit}>
+              <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>FIRST NAME *</label>
+                <input
+                  type="text"
+                  placeholder="Enter First Name"
+                  value={profileCompletionForm.firstName}
+                  onChange={e => { const v = e.target.value; setProfileCompletionForm(p => ({ ...p, firstName: v })); if (v.length > 0) validateProfileField("firstName", v); else setProfileErrors(p => ({ ...p, firstName: "" })); }}
+                  className={`custom-input ${profileErrors.firstName ? "input-error" : ""}`}
+                />
+                {profileErrors.firstName && <span style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>{profileErrors.firstName}</span>}
+              </div>
+              <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>LAST NAME *</label>
+                <input
+                  type="text"
+                  placeholder="Enter Last Name"
+                  value={profileCompletionForm.lastName}
+                  onChange={e => { const v = e.target.value; setProfileCompletionForm(p => ({ ...p, lastName: v })); if (v.length > 0) validateProfileField("lastName", v); else setProfileErrors(p => ({ ...p, lastName: "" })); }}
+                  className={`custom-input ${profileErrors.lastName ? "input-error" : ""}`}
+                />
+                {profileErrors.lastName && <span style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>{profileErrors.lastName}</span>}
+              </div>
+              <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>WHATSAPP NUMBER *</label>
+                <input
+                  type="tel"
+                  placeholder="Enter WhatsApp Number (e.g. 0771234567)"
+                  value={profileCompletionForm.phone}
+                  onChange={e => { const v = e.target.value; setProfileCompletionForm(p => ({ ...p, phone: v })); if (v.length > 0) validateProfileField("phone", v); else setProfileErrors(p => ({ ...p, phone: "" })); }}
+                  className={`custom-input ${profileErrors.phone ? "input-error" : ""}`}
+                />
+                {profileErrors.phone && <span style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>{profileErrors.phone}</span>}
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting || Boolean(profileErrors.firstName || profileErrors.lastName || profileErrors.phone) || !profileCompletionForm.firstName || !profileCompletionForm.phone}
+                className="register-submit-btn"
+                style={{ opacity: (isSubmitting || Boolean(profileErrors.firstName || profileErrors.lastName || profileErrors.phone) || !profileCompletionForm.firstName || !profileCompletionForm.phone) ? 0.6 : 1, cursor: (isSubmitting || Boolean(profileErrors.firstName || profileErrors.lastName || profileErrors.phone) || !profileCompletionForm.firstName || !profileCompletionForm.phone) ? "not-allowed" : "pointer" }}
+              >
+                {isSubmitting ? "SAVING..." : "COMPLETE REGISTRATION"}
+              </button>
+            </form>
+          </div>
+        </main>
+      ) : (
+      /* ── Normal Sign Up Form ── */
       <main className="auth-container">
         <div className="register-card">
           {/* Brand Logo at top of card */}
@@ -123,66 +531,101 @@ export default function RegisterPage() {
             {/* First Name & Last Name (Side by side on desktop) */}
             <div className="input-row">
               <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                  FIRST NAME *
+                </label>
                 <input
                   type="text"
                   name="firstName"
-                  placeholder="FIRST NAME"
+                  placeholder="Enter First Name"
                   value={formData.firstName}
                   onChange={handleChange}
-                  className="custom-input"
+                  className={`custom-input ${errors.firstName ? "input-error" : ""}`}
                   autoComplete="given-name"
                 />
+                {errors.firstName && (
+                  <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                    {errors.firstName}
+                  </span>
+                )}
               </div>
 
               <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                  LAST NAME *
+                </label>
                 <input
                   type="text"
                   name="lastName"
-                  placeholder="LAST NAME"
+                  placeholder="Enter Last Name"
                   value={formData.lastName}
                   onChange={handleChange}
-                  className="custom-input"
+                  className={`custom-input ${errors.lastName ? "input-error" : ""}`}
                   autoComplete="family-name"
                 />
+                {errors.lastName && (
+                  <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                    {errors.lastName}
+                  </span>
+                )}
               </div>
             </div>
 
             {/* Email Input */}
             <div className="input-group">
+              <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                EMAIL *
+              </label>
               <input
                 type="email"
                 name="email"
-                placeholder="EMAIL"
+                placeholder="Enter Email Address"
                 value={formData.email}
                 onChange={handleChange}
-                className="custom-input"
+                className={`custom-input ${errors.email ? "input-error" : ""}`}
                 autoComplete="email"
               />
+              {errors.email && (
+                <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                  {errors.email}
+                </span>
+              )}
             </div>
 
             {/* Mobile Number Input */}
             <div className="input-group">
+              <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                WHATSAPP NUMBER *
+              </label>
               <input
                 type="tel"
                 name="mobileNumber"
-                placeholder="MOBILE NUMBER"
+                placeholder="Enter WhatsApp Number (e.g. 0771234567)"
                 value={formData.mobileNumber}
                 onChange={handleChange}
-                className="custom-input"
+                className={`custom-input ${errors.mobileNumber ? "input-error" : ""}`}
                 autoComplete="tel"
               />
+              {errors.mobileNumber && (
+                <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                  {errors.mobileNumber}
+                </span>
+              )}
             </div>
 
             {/* Password Input with show/hide toggle */}
             <div className="input-group">
+              <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                PASSWORD *
+              </label>
               <div className="password-input-wrapper">
                 <input
                   type={showPassword ? "text" : "password"}
                   name="password"
-                  placeholder="PASSWORD"
+                  placeholder="Enter Password"
                   value={formData.password}
                   onChange={handleChange}
-                  className="custom-input"
+                  className={`custom-input ${errors.password ? "input-error" : ""}`}
                   autoComplete="new-password"
                 />
                 <button
@@ -193,28 +636,36 @@ export default function RegisterPage() {
                 >
                   {showPassword ? (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
                     </svg>
                   )}
                 </button>
               </div>
+              {errors.password && (
+                <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                  {errors.password}
+                </span>
+              )}
             </div>
 
             {/* Confirm Password Input with show/hide toggle */}
             <div className="input-group">
+              <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                CONFIRM PASSWORD *
+              </label>
               <div className="password-input-wrapper">
                 <input
                   type={showConfirmPassword ? "text" : "password"}
                   name="confirmPassword"
-                  placeholder="CONFIRM PASSWORD"
+                  placeholder="Re-enter Password"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="custom-input"
+                  className={`custom-input ${errors.confirmPassword ? "input-error" : ""}`}
                   autoComplete="new-password"
                 />
                 <button
@@ -225,16 +676,21 @@ export default function RegisterPage() {
                 >
                   {showConfirmPassword ? (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
                     </svg>
                   )}
                 </button>
               </div>
+              {errors.confirmPassword && (
+                <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                  {errors.confirmPassword}
+                </span>
+              )}
             </div>
 
             {/* Feedback Message */}
@@ -247,8 +703,12 @@ export default function RegisterPage() {
             {/* Submit Register Button */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber || errors.password || errors.confirmPassword) || !formData.firstName || !formData.lastName || !formData.email || !formData.mobileNumber || !formData.password || !formData.confirmPassword}
               className="register-submit-btn"
+              style={{
+                opacity: (isSubmitting || Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber || errors.password || errors.confirmPassword) || !formData.firstName || !formData.lastName || !formData.email || !formData.mobileNumber || !formData.password || !formData.confirmPassword) ? 0.6 : 1,
+                cursor: (isSubmitting || Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber || errors.password || errors.confirmPassword) || !formData.firstName || !formData.lastName || !formData.email || !formData.mobileNumber || !formData.password || !formData.confirmPassword) ? "not-allowed" : "pointer"
+              }}
             >
               {isSubmitting ? "REGISTERING..." : "REGISTER"}
             </button>
@@ -290,6 +750,7 @@ export default function RegisterPage() {
           </form>
         </div>
       </main>
+      )}
     </div>
   );
 }
