@@ -6,13 +6,37 @@ import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import "@/styles/checkout.css";
 
+interface ContactInfo {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+}
+
+interface ShippingInfo {
+  receiverName?: string;
+  receiverPhone?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  district?: string;
+  postalCode?: string;
+  deliveryNote?: string;
+  deliveryFee?: number;
+}
+
+interface UserProfile {
+  customerId?: string;
+  id?: string;
+}
+
 export default function PaymentPage() {
   const router = useRouter();
   const { cart, cartSubtotal, clearCart, formatLkr } = useCart();
 
   // Local storage details
-  const [contactInfo, setContactInfo] = useState<any>(null);
-  const [shippingInfo, setShippingInfo] = useState<any>(null);
+  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
+  const [shippingInfo, setShippingInfo] = useState<ShippingInfo | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Form state
@@ -25,7 +49,8 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
+      const forcedGuest = localStorage.getItem("vergo_checkout_as_guest") === "true";
+      const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true" && !forcedGuest;
       setIsLoggedIn(loggedIn);
       setPaymentMethod(loggedIn ? "bank_transfer" : "cod");
 
@@ -153,6 +178,7 @@ export default function PaymentPage() {
     // Clean up temporary checkout states
     localStorage.removeItem("vergo_checkout_contact");
     localStorage.removeItem("vergo_checkout_shipping");
+    localStorage.removeItem("vergo_checkout_as_guest");
     setShowOrderCompletedModal(false);
     router.push("/");
   };

@@ -12,6 +12,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 
+if (typeof global !== 'undefined' && !(global as any).WebSocket) {
+  (global as any).WebSocket = class {};
+}
+
 /** Authenticated identity attached to the request by SupabaseAuthGuard */
 export interface RequestUser {
   id: string;
@@ -38,14 +42,9 @@ export class SupabaseAuthGuard implements CanActivate {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
-    const supabaseKey = this.configService.get<string>('SUPABASE_ANON_KEY');
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error(
-        'SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables',
-      );
-    }
+    const supabaseUrl = this.configService.getOrThrow<string>('SUPABASE_URL');
+    const supabaseKey =
+      this.configService.getOrThrow<string>('SUPABASE_ANON_KEY');
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     this.supabase = createClient(supabaseUrl, supabaseKey);
