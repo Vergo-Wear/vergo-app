@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, getSupabaseRedirectSession } from "@/lib/supabase";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -110,7 +110,7 @@ export default function RegisterPage() {
     const handleAuthSession = async () => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       try {
-        const { data: { session } } = await client.auth.getSession();
+        const session = await getSupabaseRedirectSession(client);
         if (!session) return;
 
         setIsSubmitting(true);
@@ -186,13 +186,6 @@ export default function RegisterPage() {
 
     handleAuthSession();
 
-    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
-        handleAuthSession();
-      }
-    });
-
-    return () => { subscription.unsubscribe(); };
   }, [router]);
 
   const validateProfileField = (name: string, value: string) => {
@@ -400,6 +393,8 @@ export default function RegisterPage() {
       localStorage.setItem("vergo_is_logged_in", "true");
       localStorage.setItem("vergo_access_token", signinData.accessToken);
       localStorage.setItem("vergo_refresh_token", signinData.refreshToken);
+      const profileRes = await fetch(`${apiUrl}/customers/profile/${signinData.user.id}`);
+      const databaseProfile = profileRes.ok ? await profileRes.json() : {};
       localStorage.setItem(
         "vergo_user",
         JSON.stringify({
@@ -408,6 +403,7 @@ export default function RegisterPage() {
           email: signinData.user.email,
           avatarUrl: "/images/default-avatar.png",
           role: signinData.user.role,
+          ...databaseProfile,
         })
       );
 

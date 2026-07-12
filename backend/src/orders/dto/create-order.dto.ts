@@ -12,22 +12,43 @@ import {
   Matches,
   ValidateNested,
   ArrayMinSize,
-} from "class-validator";
-import { Type } from "class-transformer";
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export const SRI_LANKAN_DISTRICTS = [
-  "Ampara", "Anuradhapura", "Badulla", "Batticaloa", "Colombo", "Galle",
-  "Gampaha", "Hambantota", "Jaffna", "Kalutara", "Kandy", "Kegalle",
-  "Kilinochchi", "Kurunegala", "Mannar", "Matale", "Matara", "Moneragala",
-  "Mullaitivu", "Nuwara Eliya", "Polonnaruwa", "Puttalam", "Ratnapura",
-  "Tech District", "Trincomalee", "Vavuniya"
+  'Ampara',
+  'Anuradhapura',
+  'Badulla',
+  'Batticaloa',
+  'Colombo',
+  'Galle',
+  'Gampaha',
+  'Hambantota',
+  'Jaffna',
+  'Kalutara',
+  'Kandy',
+  'Kegalle',
+  'Kilinochchi',
+  'Kurunegala',
+  'Mannar',
+  'Matale',
+  'Matara',
+  'Moneragala',
+  'Mullaitivu',
+  'Nuwara Eliya',
+  'Polonnaruwa',
+  'Puttalam',
+  'Ratnapura',
+  'Tech District',
+  'Trincomalee',
+  'Vavuniya',
 ];
 
 export const VALID_PAYMENT_METHODS = [
-  "cod",
-  "cash on delivery",
-  "bank_transfer",
-  "direct bank transfer"
+  'cod',
+  'cash on delivery',
+  'bank_transfer',
+  'direct bank transfer',
 ];
 
 export class ContactDetailsDto {
@@ -46,7 +67,8 @@ export class ContactDetailsDto {
   @IsString()
   @IsNotEmpty({ message: 'Contact phone number is required.' })
   @Matches(/^(?:\+94|0)?[1-9][0-9]{8}$/, {
-    message: 'Phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).'
+    message:
+      'Phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).',
   })
   phone: string;
 }
@@ -59,7 +81,8 @@ export class ShippingDetailsDto {
   @IsString()
   @IsNotEmpty({ message: 'Receiver phone number is required.' })
   @Matches(/^(?:\+94|0)?[1-9][0-9]{8}$/, {
-    message: 'Receiver phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).'
+    message:
+      'Receiver phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).',
   })
   phone: string;
 
@@ -78,7 +101,7 @@ export class ShippingDetailsDto {
   @IsString()
   @IsNotEmpty({ message: 'District is required.' })
   @Matches(new RegExp(`^(${SRI_LANKAN_DISTRICTS.join('|')})$`, 'i'), {
-    message: 'District must be a valid Sri Lankan district.'
+    message: 'District must be a valid Sri Lankan district.',
   })
   district: string;
 
@@ -102,14 +125,10 @@ export class OrderItemDto {
 }
 
 export class CreateOrderDto {
-  @IsUUID(4, { message: 'Invalid customer ID format.' })
-  @IsOptional()
-  customerId?: string;
-
   @IsString()
   @IsNotEmpty({ message: 'Payment method is required.' })
   @IsIn(VALID_PAYMENT_METHODS, {
-    message: 'Payment method must be either "cod" or "bank_transfer".'
+    message: 'Payment method must be either "cod" or "bank_transfer".',
   })
   paymentMethod: string;
 

@@ -5,7 +5,7 @@ import Image from "next/image";
 
 export interface Review {
   id: string;
-  productId: number;
+  productId: string;
   rating: number;
   reviewerName: string;
   comment: string;
@@ -13,82 +13,6 @@ export interface Review {
   images?: string[];
   isVerified?: boolean;
 }
-
-// Category-based high quality reviews for fallback
-const CATEGORY_MOCK_REVIEWS: Record<string, Omit<Review, "productId">[]> = {
-  "Hoodies & Sweatshirts": [
-    {
-      id: "mock-hs-1",
-      rating: 5,
-      reviewerName: "Achinthya K.",
-      comment: "The cotton weave on this is incredibly dense and heavy. Standard fit is perfectly relaxed, exactly what I was hoping for. Warm, durable, and clean details.",
-      date: "2026-06-25",
-      isVerified: true,
-    },
-    {
-      id: "mock-hs-2",
-      rating: 4,
-      reviewerName: "Dinuka P.",
-      comment: "Excellent streetwear cut. Heavy weight is very comfortable. Feels like luxury tier wear. Hand washes well without shrinking.",
-      date: "2026-06-12",
-      isVerified: true,
-    }
-  ],
-  "T-Shirts": [
-    {
-      id: "mock-ts-1",
-      rating: 5,
-      reviewerName: "Sahan R.",
-      comment: "Perfect boxy fit. Heavyweight neck collar doesn't sag or stretch out. Vergo keeps hitting it out of the park with these minimalist designs.",
-      date: "2026-06-28",
-      isVerified: true,
-    },
-    {
-      id: "mock-ts-2",
-      rating: 4,
-      reviewerName: "Amila D.",
-      comment: "Thick cotton feel. Feels like a proper luxury tee rather than a cheap blank. Fit is oversized, so order normal size for boxy fit or size down for clean fit.",
-      date: "2026-06-05",
-      isVerified: true,
-    }
-  ],
-  "Pants & Denim": [
-    {
-      id: "mock-pd-1",
-      rating: 5,
-      reviewerName: "Menaka P.",
-      comment: "Stitching is top notch. The fabric has an amazing texture and holds its shape beautifully. Pocket placement is highly functional.",
-      date: "2026-06-22",
-      isVerified: true,
-    },
-    {
-      id: "mock-pd-2",
-      rating: 4,
-      reviewerName: "Kasun T.",
-      comment: "Great drape and cut. Heavy fabric, perfect for cooler weather or evenings out. True to size and adjustable features are high quality.",
-      date: "2026-05-18",
-      isVerified: true,
-    }
-  ],
-  "Accessories": [
-    {
-      id: "mock-ac-1",
-      rating: 5,
-      reviewerName: "Tharindu M.",
-      comment: "Simple, high-quality accessory. Detailings are sharp and subtle, matching all my other outfits perfectly. Durable build.",
-      date: "2026-06-26",
-      isVerified: true,
-    },
-    {
-      id: "mock-ac-2",
-      rating: 4,
-      reviewerName: "Ruwan K.",
-      comment: "Really clean aesthetics. The materials feel solid. Vergo branding is nicely understated.",
-      date: "2026-06-02",
-      isVerified: true,
-    }
-  ]
-};
 
 // Premium Star Rating Display Component
 const StarRating = ({ rating, size = 16 }: { rating: number; size?: number }) => {
@@ -201,13 +125,13 @@ const StarRatingSelector = ({ rating, onChange, hoverRating, onHoverChange }: St
 };
 
 interface ProductFeedbackProps {
-  productId: number;
+  productId: string;
   productCategory: string;
   autoOpenForm?: boolean;
 }
 
-export default function ProductFeedback({ productId, productCategory, autoOpenForm }: ProductFeedbackProps) {
-  // Reviews state (both static mock and user-submitted local reviews)
+export default function ProductFeedback({ productId, autoOpenForm }: ProductFeedbackProps) {
+  // Reviews are loaded from and saved to the backend.
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -235,31 +159,19 @@ export default function ProductFeedback({ productId, productCategory, autoOpenFo
   const [formSuccess, setFormSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Generate Mock reviews for the current product
-  const initialMockReviews = useMemo(() => {
-    const categoryReviews = CATEGORY_MOCK_REVIEWS[productCategory] || CATEGORY_MOCK_REVIEWS["T-Shirts"];
-    return categoryReviews.map((r, index) => ({
-      ...r,
-      id: `mock-${productId}-${index}`,
-      productId: productId,
-    }));
-  }, [productId, productCategory]);
-
-  // Load reviews from local storage + combine with mocks
   useEffect(() => {
-    const localKey = `vergo_product_reviews_${productId}`;
-    const stored = localStorage.getItem(localKey);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as Review[];
-        setReviews([...parsed, ...initialMockReviews]);
-      } catch (e) {
-        setReviews(initialMockReviews);
-      }
-    } else {
-      setReviews(initialMockReviews);
-    }
-  }, [productId, initialMockReviews]);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    fetch(`${apiUrl}/products/${productId}/reviews`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to load reviews.");
+        return response.json() as Promise<Review[]>;
+      })
+      .then(setReviews)
+      .catch((error) => {
+        console.error(error);
+        setReviews([]);
+      });
+  }, [productId]);
 
   // Computed metrics
   const stats = useMemo(() => {
@@ -344,7 +256,7 @@ export default function ProductFeedback({ productId, productCategory, autoOpenFo
   };
 
   // Handle Form Submission
-  const handleSubmitReview = (e: React.FormEvent) => {
+  const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -353,40 +265,28 @@ export default function ProductFeedback({ productId, productCategory, autoOpenFo
       setFormError("Please select a star rating.");
       return;
     }
-    if (!reviewerName.trim()) {
-      setFormError("Please enter your name.");
-      return;
-    }
     if (!comment.trim() || comment.length < 8) {
       setFormError("Please enter a review comment of at least 8 characters.");
       return;
     }
 
-    const newReview: Review = {
-      id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      productId,
-      rating,
-      reviewerName: reviewerName.trim(),
-      comment: comment.trim(),
-      date: new Date().toISOString().split("T")[0],
-      images: uploadedPhotos,
-      isVerified: true
-    };
-
-    // Save to LocalStorage
-    const localKey = `vergo_product_reviews_${productId}`;
-    const stored = localStorage.getItem(localKey);
-    let userReviews: Review[] = [];
-    if (stored) {
-      try {
-        userReviews = JSON.parse(stored) as Review[];
-      } catch (err) {}
+    const token = localStorage.getItem("vergo_access_token");
+    if (!token) {
+      setFormError("Please sign in as a customer to submit a review.");
+      return;
     }
-    const updatedUserReviews = [newReview, ...userReviews];
-    localStorage.setItem(localKey, JSON.stringify(updatedUserReviews));
-
-    // Update state to prepend review
-    setReviews([newReview, ...reviews]);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const response = await fetch(`${apiUrl}/products/${productId}/reviews/mine`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ rating, comment: comment.trim(), images: uploadedPhotos }),
+    });
+    if (!response.ok) {
+      setFormError("Unable to save your review.");
+      return;
+    }
+    const refreshed = await fetch(`${apiUrl}/products/${productId}/reviews`);
+    setReviews(refreshed.ok ? ((await refreshed.json()) as Review[]) : reviews);
 
     // Show success message and clear form
     setFormSuccess(true);

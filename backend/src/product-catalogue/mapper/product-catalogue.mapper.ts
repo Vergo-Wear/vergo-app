@@ -6,18 +6,19 @@ import {
   ProductVariantSummary,
 } from '../interfaces/product-catalogue.interface';
 
-const productWithRelations = Prisma.validator<Prisma.ProductDefaultArgs>()({
-  include: {
-    category: true,
-    supplier: true,
-    variants: {
-      include: {
-        inventory: true,
-        images: true,
+export const productWithRelations =
+  Prisma.validator<Prisma.ProductDefaultArgs>()({
+    include: {
+      category: true,
+      supplier: true,
+      variants: {
+        include: {
+          inventory: true,
+          images: true,
+        },
       },
     },
-  },
-});
+  });
 
 export type ProductWithRelations = Prisma.ProductGetPayload<
   typeof productWithRelations
@@ -89,7 +90,10 @@ export function toProductCatalogueItem(
         }
       : null,
     supplier: product.supplier
-      ? { supplier_id: product.supplier.supplierId, name: product.supplier.name }
+      ? {
+          supplier_id: product.supplier.supplierId,
+          name: product.supplier.name,
+        }
       : null,
     images: mapImages(product),
     variants: product.variants.map((variant) =>

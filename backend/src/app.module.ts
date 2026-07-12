@@ -10,6 +10,9 @@ import { CustomersModule } from './customers/customers.module';
 import { EmployeesModule } from './employees/employees.module';
 import { AuthModule } from './auth/auth.module';
 import { OrdersModule } from './orders/orders.module';
+import { CartModule } from './cart/cart.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -24,6 +27,9 @@ import { OrdersModule } from './orders/orders.module';
     EmployeesModule,
     AuthModule,
     OrdersModule,
+    CartModule,
+    ReviewsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

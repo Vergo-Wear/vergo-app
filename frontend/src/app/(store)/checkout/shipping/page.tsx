@@ -69,23 +69,6 @@ export default function ShippingPage() {
   // Load auth status and contact details from checkout step 1
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Direct access fallback: if there is no logged in status in local storage,
-      // default it to "true" and mock a logged-in user so that the "Use Primary Address"
-      // card and checkbox are visible for high fidelity display and interaction!
-      if (localStorage.getItem("vergo_is_logged_in") === null) {
-        localStorage.setItem("vergo_is_logged_in", "true");
-        localStorage.setItem(
-          "vergo_user",
-          JSON.stringify({
-            id: "d3b07384-d113-4c9f-b3a6-8e5cd8cc3bbd",
-            name: "Julian Verso",
-            email: "julian@verso.com",
-            phone: "+1 (555) 000-0000",
-            defaultShippingAddress: "124 Industrial Way, Tech District, SF"
-          })
-        );
-      }
-
       const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
       setIsLoggedIn(loggedIn);
 
@@ -160,15 +143,14 @@ export default function ShippingPage() {
   const handlePrimaryAddressToggle = (checked: boolean) => {
     setUsePrimary(checked);
     if (checked) {
-      // Pre-fill with the mock primary address as shown in Figma
-      setReceiverName(userProfile?.name || "Julian Verso");
-      setReceiverPhone(userProfile?.phone || "+1 (555) 000-0000");
-      setAddressLine1("124 Industrial Way");
-      setAddressLine2("Suite 100");
-      setCity("SF");
-      setDistrict("Tech District");
-      setPostalCode("94107");
-      setDeliveryNote("Leave at front desk");
+      setReceiverName(userProfile?.name || "");
+      setReceiverPhone(userProfile?.phone || "");
+      setAddressLine1(userProfile?.defaultShippingAddress || "");
+      setAddressLine2("");
+      setCity("");
+      setDistrict("");
+      setPostalCode("");
+      setDeliveryNote("");
       setSetAsPrimary(false); // No need to check "Set as primary" since we're using it
       
       // Clear errors
@@ -297,25 +279,8 @@ export default function ShippingPage() {
     }, 1000);
   };
 
-  const hasItems = cart.length > 0;
-  const defaultItems = [
-    {
-      product: {
-        id: 999,
-        name: "VERGO OBSIDIAN SHELL-P1",
-        price: "$450.00",
-        lkrPrice: "LKR 135,000.00",
-        image: "/images/hoodie.png", // fallback placeholder
-        colors: ["Noir"]
-      },
-      size: "XL",
-      color: "Noir",
-      quantity: 1
-    }
-  ];
-
-  const itemsToDisplay = hasItems ? cart : defaultItems;
-  const subtotalLkr = hasItems ? cartSubtotal : 135000;
+  const itemsToDisplay = cart;
+  const subtotalLkr = cartSubtotal;
   const displayTotalLkr = subtotalLkr + (totalDeliveryFee || 0);
 
   return (
@@ -487,7 +452,7 @@ export default function ShippingPage() {
                 <select
                   id="district"
                   disabled={usePrimary}
-                  className={`form-select ${errors.district ? "input-error" : ""} ${!district ? "placeholder-color" : ""}`}
+                  className={`form-select district-select ${errors.district ? "input-error" : ""} ${!district ? "placeholder-color" : ""}`}
                   value={district}
                   onChange={(e) => handleInputChange("district", e.target.value)}
                 >

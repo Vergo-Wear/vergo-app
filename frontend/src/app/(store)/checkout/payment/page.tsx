@@ -87,13 +87,7 @@ export default function PaymentPage() {
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
     
-    // A helper to format UUID for mock items to satisfy backend validator
-    const getMockVariantId = (id: number) => {
-      return "30a91f5a-3eb6-444a-a7ee-000000000" + String(id).padStart(3, "0");
-    };
-
     const payload = {
-      customerId: isLoggedIn ? (userProfile?.customerId || userProfile?.id || null) : null,
       paymentMethod: paymentMethod === "cod" ? "cod" : "bank_transfer",
       deliveryFee: deliveryFee,
       contactDetails: {
@@ -112,17 +106,28 @@ export default function PaymentPage() {
         postalCode: shippingInfo?.postalCode || "",
         deliveryNote: shippingInfo?.deliveryNote || "",
       },
-      items: itemsToDisplay.map((item: any) => ({
-        variantId: item.product.variantId || getMockVariantId(item.product.id),
+      items: itemsToDisplay.map((item) => ({
+        variantId: item.product.variants.find(
+          (variant) =>
+            variant.size === item.size &&
+            (!item.color || variant.color === item.color),
+        )?.variantId,
         quantity: item.quantity || 1,
       })),
     };
 
     try {
+      if (payload.items.some((item) => !item.variantId)) {
+        setIsSubmitting(false);
+        setSubmitError("A selected product option is no longer available. Please update your cart.");
+        return;
+      }
+      const token = isLoggedIn ? localStorage.getItem("vergo_access_token") : null;
       const response = await fetch(`${apiUrl}/orders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
       });
@@ -141,31 +146,6 @@ export default function PaymentPage() {
       const newOrderId = data.order?.orderId || data.order?.id;
       setOrderId(newOrderId);
 
-      // Save order details to local storage history
-      const storedOrders = localStorage.getItem("vergo_customer_orders");
-      const parsedOrders = storedOrders ? JSON.parse(storedOrders) : [];
-      
-      const newOrderForStorage = {
-        id: newOrderId,
-        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        status: "Processing",
-        paymentMethod: paymentMethod === "cod" ? "Cash on Delivery" : "Bank Transfer",
-        paymentStatus: paymentMethod === "cod" ? "Approved" : "Pending",
-        total: grandTotalLkr,
-        items: itemsToDisplay.map((item: any) => ({
-          productId: item.product.id,
-          name: item.product.name,
-          image: item.product.image,
-          size: item.size,
-          color: item.color || item.product.colors?.[0] || "Default",
-          qty: item.quantity || 1,
-          price: item.product.lkrPrice ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim()) : 1200,
-        })),
-      };
-      
-      parsedOrders.unshift(newOrderForStorage);
-      localStorage.setItem("vergo_customer_orders", JSON.stringify(parsedOrders));
-
       setShowOrderCompletedModal(true);
     } catch (err) {
       setIsSubmitting(false);
@@ -183,25 +163,8 @@ export default function PaymentPage() {
     router.push("/");
   };
 
-  const hasItems = cart.length > 0;
-  const defaultItems = [
-    {
-      product: {
-        id: 999,
-        name: "VERGO OBSIDIAN SHELL-P1",
-        price: "$450.00",
-        lkrPrice: "LKR 135,000.00",
-        image: "/images/hoodie.png",
-        colors: ["Noir"]
-      },
-      size: "XL",
-      color: "Noir",
-      quantity: 1
-    }
-  ];
-
-  const itemsToDisplay = hasItems ? cart : defaultItems;
-  const subtotalLkr = hasItems ? cartSubtotal : 135000;
+  const itemsToDisplay = cart;
+  const subtotalLkr = cartSubtotal;
   const deliveryFee = shippingInfo?.deliveryFee || 0;
   const grandTotalLkr = subtotalLkr + deliveryFee;
 

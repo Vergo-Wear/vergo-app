@@ -40,7 +40,7 @@ export default function ProductPrep() {
   // Stats calculation
   const pendingCount = filteredQueue.filter(p => p.status === "NOT STARTED").length;
   const inProgressCount = filteredQueue.filter(p => p.status === "PREPARING").length;
-  const readyTodayCount = filteredQueue.filter(p => p.status === "READY").length + 42; // mock offset
+  const readyTodayCount = filteredQueue.filter(p => p.status === "READY").length;
 
   return (
     <div>

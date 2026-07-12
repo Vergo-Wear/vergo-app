@@ -202,7 +202,7 @@ export default function StockManagement() {
                 </div>
                 
                 <p style={{ fontSize: "11.5px", color: "var(--emp-text-muted)", lineHeight: "1.4", marginTop: "4px" }}>
-                  * This request will be sent to Admin. Mock auto-approval simulation will trigger and add stock within 4 seconds.
+                  This request requires the stock-request database workflow to be enabled.
                 </p>
               </div>
               <div className="emp-modal-footer">

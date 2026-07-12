@@ -3,7 +3,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from './supabase.service';
-import { ConflictException, UnauthorizedException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 
 describe('Auth Module (Controller & Service)', () => {
   let service: AuthService;
@@ -50,6 +50,7 @@ describe('Auth Module (Controller & Service)', () => {
       adminClient: {
         auth: {
           admin: {
+            createUser: jest.fn(),
             deleteUser: jest.fn(),
           },
         },
@@ -80,25 +81,34 @@ describe('Auth Module (Controller & Service)', () => {
     };
 
     it('should throw ConflictException if email is already taken', async () => {
-      prismaMock.customer.findUnique.mockResolvedValue({ email: 'new@test.com' });
+      prismaMock.customer.findUnique.mockResolvedValue({
+        email: 'new@test.com',
+      });
 
-      await expect(service.customerSignup(signupDto)).rejects.toThrow(ConflictException);
+      await expect(service.customerSignup(signupDto)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('should throw ConflictException if username is already taken', async () => {
       prismaMock.customer.findUnique.mockResolvedValue(null);
       prismaMock.profiles.findUnique.mockResolvedValue({ username: 'johndoe' });
 
-      await expect(service.customerSignup(signupDto)).rejects.toThrow(ConflictException);
+      await expect(service.customerSignup(signupDto)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('should sign up user in Supabase and create profile & customer in DB', async () => {
       prismaMock.customer.findUnique.mockResolvedValue(null);
       prismaMock.profiles.findUnique.mockResolvedValue(null);
       prismaMock.customer.findFirst.mockResolvedValue(null);
-      prismaMock.role.findFirst.mockResolvedValue({ roleId: 'role-id-123', roleName: 'Customer' });
+      prismaMock.role.findFirst.mockResolvedValue({
+        roleId: 'role-id-123',
+        roleName: 'Customer',
+      });
 
-      supabaseMock.client.auth.signUp.mockResolvedValue({
+      supabaseMock.adminClient.auth.admin.createUser.mockResolvedValue({
         data: { user: { id: 'supabase-user-id', email: 'new@test.com' } },
         error: null,
       });
@@ -123,9 +133,12 @@ describe('Auth Module (Controller & Service)', () => {
       expect(response.message).toBe('Signup successful');
       expect(response.user.id).toBe('supabase-user-id');
       expect(response.customer.customerId).toBe('customer-id-123');
-      expect(supabaseMock.client.auth.signUp).toHaveBeenCalledWith({
+      expect(
+        supabaseMock.adminClient.auth.admin.createUser,
+      ).toHaveBeenCalledWith({
         email: 'new@test.com',
         password: 'password123',
+        email_confirm: true,
       });
     });
 
@@ -133,17 +146,26 @@ describe('Auth Module (Controller & Service)', () => {
       prismaMock.customer.findUnique.mockResolvedValue(null);
       prismaMock.profiles.findUnique.mockResolvedValue(null);
       prismaMock.customer.findFirst.mockResolvedValue(null);
-      prismaMock.role.findFirst.mockResolvedValue({ roleId: 'role-id-123', roleName: 'Customer' });
+      prismaMock.role.findFirst.mockResolvedValue({
+        roleId: 'role-id-123',
+        roleName: 'Customer',
+      });
 
-      supabaseMock.client.auth.signUp.mockResolvedValue({
+      supabaseMock.adminClient.auth.admin.createUser.mockResolvedValue({
         data: { user: { id: 'supabase-user-id', email: 'new@test.com' } },
         error: null,
       });
 
-      prismaMock.profiles.upsert.mockRejectedValue(new Error('DB write failed'));
+      prismaMock.profiles.upsert.mockRejectedValue(
+        new Error('DB write failed'),
+      );
 
-      await expect(service.customerSignup(signupDto)).rejects.toThrow('DB write failed');
-      expect(supabaseMock.adminClient.auth.admin.deleteUser).toHaveBeenCalledWith('supabase-user-id');
+      await expect(service.customerSignup(signupDto)).rejects.toThrow(
+        'DB write failed',
+      );
+      expect(
+        supabaseMock.adminClient.auth.admin.deleteUser,
+      ).toHaveBeenCalledWith('supabase-user-id');
     });
   });
 
@@ -157,7 +179,11 @@ describe('Auth Module (Controller & Service)', () => {
       supabaseMock.client.auth.signInWithPassword.mockResolvedValue({
         data: {
           user: { id: 'user-id', email: 'user@test.com' },
-          session: { access_token: 'token', refresh_token: 'refresh', expires_in: 3600 },
+          session: {
+            access_token: 'token',
+            refresh_token: 'refresh',
+            expires_in: 3600,
+          },
         },
         error: null,
       });
@@ -168,14 +194,20 @@ describe('Auth Module (Controller & Service)', () => {
         role: { roleName: 'Customer' },
       });
 
-      await expect(service.signin(signinDto, 'Employee')).rejects.toThrow(ForbiddenException);
+      await expect(service.signin(signinDto, 'Employee')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw ForbiddenException if account status is inactive', async () => {
       supabaseMock.client.auth.signInWithPassword.mockResolvedValue({
         data: {
           user: { id: 'user-id', email: 'user@test.com' },
-          session: { access_token: 'token', refresh_token: 'refresh', expires_in: 3600 },
+          session: {
+            access_token: 'token',
+            refresh_token: 'refresh',
+            expires_in: 3600,
+          },
         },
         error: null,
       });
@@ -186,18 +218,30 @@ describe('Auth Module (Controller & Service)', () => {
         role: { roleName: 'Customer' },
       });
 
-      await expect(service.signin(signinDto, 'Customer')).rejects.toThrow(ForbiddenException);
+      await expect(service.signin(signinDto, 'Customer')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should successfully authenticate customer and resolve phone to email', async () => {
-      const phoneSignin = { emailOrPhone: '1234567890', password: 'password123' };
+      const phoneSignin = {
+        emailOrPhone: '1234567890',
+        password: 'password123',
+      };
 
-      prismaMock.customer.findFirst.mockResolvedValue({ email: 'user@test.com', phone: '1234567890' });
+      prismaMock.customer.findFirst.mockResolvedValue({
+        email: 'user@test.com',
+        phone: '1234567890',
+      });
 
       supabaseMock.client.auth.signInWithPassword.mockResolvedValue({
         data: {
           user: { id: 'user-id', email: 'user@test.com' },
-          session: { access_token: 'token', refresh_token: 'refresh', expires_in: 3600 },
+          session: {
+            access_token: 'token',
+            refresh_token: 'refresh',
+            expires_in: 3600,
+          },
         },
         error: null,
       });
@@ -212,7 +256,9 @@ describe('Auth Module (Controller & Service)', () => {
 
       expect(response.accessToken).toBe('token');
       expect(response.user.role).toBe('Customer');
-      expect(prismaMock.customer.findFirst).toHaveBeenCalledWith({ where: { phone: '1234567890' } });
+      expect(prismaMock.customer.findFirst).toHaveBeenCalledWith({
+        where: { phone: '1234567890' },
+      });
     });
   });
 
@@ -224,7 +270,9 @@ describe('Auth Module (Controller & Service)', () => {
         firstName: 'John',
         lastName: 'Doe',
       };
-      jest.spyOn(service, 'customerSignup').mockResolvedValue({ message: 'Success' } as any);
+      jest
+        .spyOn(service, 'customerSignup')
+        .mockResolvedValue({ message: 'Success' } as any);
 
       const res = await controller.customerSignup(signupDto);
       expect(res).toEqual({ message: 'Success' });
@@ -232,8 +280,13 @@ describe('Auth Module (Controller & Service)', () => {
     });
 
     it('should route customer/signin', async () => {
-      const signinDto = { emailOrPhone: 'user@test.com', password: 'password123' };
-      jest.spyOn(service, 'signin').mockResolvedValue({ accessToken: 'token' } as any);
+      const signinDto = {
+        emailOrPhone: 'user@test.com',
+        password: 'password123',
+      };
+      jest
+        .spyOn(service, 'signin')
+        .mockResolvedValue({ accessToken: 'token' } as any);
 
       const res = await controller.customerSignin(signinDto);
       expect(res).toEqual({ accessToken: 'token' });
@@ -241,8 +294,13 @@ describe('Auth Module (Controller & Service)', () => {
     });
 
     it('should route employee/signin', async () => {
-      const signinDto = { emailOrPhone: 'user@test.com', password: 'password123' };
-      jest.spyOn(service, 'signin').mockResolvedValue({ accessToken: 'token' } as any);
+      const signinDto = {
+        emailOrPhone: 'user@test.com',
+        password: 'password123',
+      };
+      jest
+        .spyOn(service, 'signin')
+        .mockResolvedValue({ accessToken: 'token' } as any);
 
       const res = await controller.employeeSignin(signinDto);
       expect(res).toEqual({ accessToken: 'token' });
@@ -250,8 +308,13 @@ describe('Auth Module (Controller & Service)', () => {
     });
 
     it('should route admin/signin', async () => {
-      const signinDto = { emailOrPhone: 'user@test.com', password: 'password123' };
-      jest.spyOn(service, 'signin').mockResolvedValue({ accessToken: 'token' } as any);
+      const signinDto = {
+        emailOrPhone: 'user@test.com',
+        password: 'password123',
+      };
+      jest
+        .spyOn(service, 'signin')
+        .mockResolvedValue({ accessToken: 'token' } as any);
 
       const res = await controller.adminSignin(signinDto);
       expect(res).toEqual({ accessToken: 'token' });

@@ -25,7 +25,8 @@ export default function Highlights() {
 
       <div className="products-grid">
         {products
-          .filter((product) => product.isAdminSelected)
+          .filter((product) => product.isAvailable)
+          .slice(0, 4)
           .map((product) => (
             <ProductCard
               key={product.id}

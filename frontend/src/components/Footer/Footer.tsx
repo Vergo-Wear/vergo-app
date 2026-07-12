@@ -12,6 +12,7 @@ export default function Footer() {
     subject: "General Inquiry",
     message: "",
   });
+  const [contactError, setContactError] = useState<string | null>(null);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -20,9 +21,19 @@ export default function Footer() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleContactSubmit = (e: React.FormEvent) => {
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`Thank you, ${formData.fullName}! Your message has been sent successfully.`);
+    setContactError(null);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const response = await fetch(`${apiUrl}/contact`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formData),
+    });
+    if (!response.ok) {
+      setContactError("Unable to send your message. Please try again.");
+      return;
+    }
     setFormData({
       fullName: "",
       email: "",
@@ -136,6 +147,7 @@ export default function Footer() {
                   Whether you're looking for order updates, exclusive collaborations, or private styling, our concierge team is on standby.
                 </p>
                 <form onSubmit={handleContactSubmit} className="contact-form">
+                  {contactError && <p className="error-message">{contactError}</p>}
                   <div className="form-group">
                     <label htmlFor="fullName">FULL NAME</label>
                     <input

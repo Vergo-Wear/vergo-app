@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { type Product } from "@/data/product";
 
 export interface CartItem {
@@ -13,193 +19,275 @@ export interface CartItem {
 interface CartContextType {
   cart: CartItem[];
   addToCart: (product: Product, size: string, quantity?: number, color?: string) => void;
-  removeFromCart: (productId: number, size: string) => void;
-  updateQuantity: (productId: number, size: string, quantity: number) => void;
+  removeFromCart: (productId: string, size: string) => void;
+  updateQuantity: (productId: string, size: string, quantity: number) => void;
   clearCart: () => void;
   cartCount: number;
   cartSubtotal: number;
   formatLkr: (value: number) => string;
 }
 
+type CartOwner = "guest" | "customer";
+
+const GUEST_CART_KEY = "vergo_guest_cart";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const CartContext = createContext<CartContextType | undefined>(undefined);
+
+function isCartItem(value: unknown): value is CartItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<CartItem>;
+  return Boolean(
+    item.product &&
+      typeof item.product.id === "string" &&
+      typeof item.size === "string" &&
+      typeof item.quantity === "number" &&
+      item.quantity > 0,
+  );
+}
+
+function readCart(value: string | null): CartItem[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(isCartItem) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mergeCarts(primary: CartItem[], incoming: CartItem[]): CartItem[] {
+  const merged = primary.map((item) => ({ ...item }));
+  for (const item of incoming) {
+    const existing = merged.find(
+      (candidate) =>
+        candidate.product.id === item.product.id &&
+        candidate.size === item.size &&
+        candidate.color === item.color,
+    );
+    if (existing) {
+      existing.quantity = Math.min(99, existing.quantity + item.quantity);
+    } else {
+      merged.push({ ...item });
+    }
+  }
+  return merged;
+}
+
+function getCustomerSession() {
+  const isLoggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
+  const token = localStorage.getItem("vergo_access_token");
+  const rawUser = localStorage.getItem("vergo_user");
+  if (!isLoggedIn || !token || !rawUser) return null;
+
+  try {
+    const user = JSON.parse(rawUser) as { role?: string };
+    return user.role?.toLowerCase() === "customer" ? { token } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function requestCart(token: string, init?: RequestInit) {
+  const send = (accessToken: string) => fetch(`${API_URL}/cart`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...init?.headers,
+    },
+  });
+  let response = await send(token);
+  if (response.status === 401) {
+    const refreshToken = localStorage.getItem("vergo_refresh_token");
+    if (refreshToken) {
+      const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (refreshResponse.ok) {
+        const refreshed = (await refreshResponse.json()) as {
+          accessToken: string;
+          refreshToken: string;
+        };
+        localStorage.setItem("vergo_access_token", refreshed.accessToken);
+        localStorage.setItem("vergo_refresh_token", refreshed.refreshToken);
+        response = await send(refreshed.accessToken);
+      }
+    }
+  }
+  if (response.status === 401) {
+    localStorage.removeItem("vergo_user");
+    localStorage.removeItem("vergo_is_logged_in");
+    localStorage.removeItem("vergo_access_token");
+    localStorage.removeItem("vergo_refresh_token");
+  }
+  if (!response.ok) {
+    throw new Error(`Cart request failed with status ${response.status}.`);
+  }
+  return response.json() as Promise<{ items: unknown }>;
+}
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [owner, setOwner] = useState<CartOwner>("guest");
   const [isLoaded, setIsLoaded] = useState(false);
+  const tokenRef = useRef<string | null>(null);
+  const lastPersistedRef = useRef("[]");
 
-  // Load cart from localStorage on mount (safe for Next.js SSR)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedCart = localStorage.getItem("vergo_cart");
-      if (storedCart) {
-        try {
-          const parsed = JSON.parse(storedCart);
-          if (Array.isArray(parsed)) {
-            const validCart = parsed.filter(
-              (item) => item && item.product && (item.product.lkrPrice || item.product.price)
-            );
-            setCart(validCart);
-          } else {
-            setCart([]);
-          }
-        } catch (e) {
-          console.error("Failed to parse cart from localStorage:", e);
+    let active = true;
+
+    const loadCart = async () => {
+      setIsLoaded(false);
+      const session = getCustomerSession();
+
+      if (!session) {
+        const navigation = performance.getEntriesByType(
+          "navigation",
+        )[0] as PerformanceNavigationTiming | undefined;
+        if (navigation?.type === "reload") {
+          sessionStorage.removeItem(GUEST_CART_KEY);
         }
-      } else {
-        // Pre-populate with the exact Figma design items on first load!
-        const defaultCart: CartItem[] = [
-          {
-            product: {
-              id: 101,
-              name: "ESSENTIAL OVERSIZED TEE",
-              price: "$15.00",
-              lkrPrice: "LKR 4,500.00",
-              isAvailable: true,
-              image: "/images/boxy_tee.png",
-              category: "T-Shirts",
-              sizes: ["S", "M", "L", "XL"],
-              colors: ["Phantom Black"],
-            },
-            size: "XL",
-            color: "PHANTOM BLACK",
-            quantity: 1
-          },
-          {
-            product: {
-              id: 102,
-              name: "ARCHIE HEAVY HOODIE",
-              price: "$30.00",
-              lkrPrice: "LKR 8,900.00",
-              isAvailable: true,
-              image: "/images/oversized_hoodie.png",
-              category: "Hoodies & Sweatshirts",
-              sizes: ["S", "M", "L", "XL"],
-              colors: ["Cement Grey"],
-            },
-            size: "L",
-            color: "CEMENT GREY",
-            quantity: 1
-          },
-          {
-            product: {
-              id: 103,
-              name: "ERGO UTILITY TOTE",
-              price: "$8.00",
-              lkrPrice: "LKR 2,400.00",
-              isAvailable: true,
-              image: "/images/vergo_tote.png",
-              category: "Accessories",
-              sizes: ["OS"],
-              colors: ["Matte Black"],
-            },
-            size: "OS",
-            color: "MATTE BLACK",
-            quantity: 1
-          }
-        ];
-        setCart(defaultCart);
-        localStorage.setItem("vergo_cart", JSON.stringify(defaultCart));
+        const guestCart = readCart(sessionStorage.getItem(GUEST_CART_KEY));
+        if (!active) return;
+        tokenRef.current = null;
+        lastPersistedRef.current = JSON.stringify(guestCart);
+        setOwner("guest");
+        setCart(guestCart);
+        setIsLoaded(true);
+        return;
       }
-      setIsLoaded(true);
-    }
+
+      tokenRef.current = session.token;
+      setOwner("customer");
+      const guestCart = readCart(sessionStorage.getItem(GUEST_CART_KEY));
+
+      try {
+        const result = await requestCart(session.token);
+        tokenRef.current = localStorage.getItem("vergo_access_token");
+        const databaseCart = Array.isArray(result.items)
+          ? result.items.filter(isCartItem)
+          : [];
+        const nextCart = mergeCarts(databaseCart, guestCart);
+
+        if (guestCart.length > 0) {
+          await requestCart(session.token, {
+            method: "PUT",
+            body: JSON.stringify({ items: nextCart }),
+          });
+          sessionStorage.removeItem(GUEST_CART_KEY);
+        }
+
+        if (!active) return;
+        lastPersistedRef.current = JSON.stringify(nextCart);
+        setCart(nextCart);
+      } catch (error) {
+        if (!active) return;
+        if (!getCustomerSession()) {
+          const nextGuestCart = readCart(sessionStorage.getItem(GUEST_CART_KEY));
+          tokenRef.current = null;
+          setOwner("guest");
+          lastPersistedRef.current = JSON.stringify(nextGuestCart);
+          setCart(nextGuestCart);
+          return;
+        }
+        console.error("Unable to load the customer cart:", error);
+        lastPersistedRef.current = "[]";
+        setCart([]);
+      } finally {
+        if (active) setIsLoaded(true);
+      }
+    };
+
+    void loadCart();
+    window.addEventListener("vergo-auth-change", loadCart);
+    return () => {
+      active = false;
+      window.removeEventListener("vergo-auth-change", loadCart);
+    };
   }, []);
 
-  // Save cart to localStorage when it changes
   useEffect(() => {
-    if (isLoaded && typeof window !== "undefined") {
-      localStorage.setItem("vergo_cart", JSON.stringify(cart));
-      // Dispatch standard storage event or a custom event to notify other tabs/components
+    if (!isLoaded) return;
+    const serialized = JSON.stringify(cart);
+    if (serialized === lastPersistedRef.current) return;
+
+    if (owner === "guest") {
+      sessionStorage.setItem(GUEST_CART_KEY, serialized);
+      lastPersistedRef.current = serialized;
       window.dispatchEvent(new Event("vergo-cart-change"));
+      return;
     }
-  }, [cart, isLoaded]);
 
-  // Sync state between tabs/components
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const handleCartChange = () => {
-      const storedCart = localStorage.getItem("vergo_cart");
-      if (storedCart) {
-        try {
-          const parsed = JSON.parse(storedCart);
-          // Check if it's actually different before setting to avoid infinite loop
-          if (JSON.stringify(parsed) !== JSON.stringify(cart)) {
-            setCart(parsed);
-          }
-        } catch (e) {
-          console.error(e);
-        }
+    const token = tokenRef.current;
+    if (!token) return;
+    const timeout = window.setTimeout(async () => {
+      try {
+        await requestCart(token, {
+          method: "PUT",
+          body: JSON.stringify({ items: cart }),
+        });
+        lastPersistedRef.current = serialized;
+        window.dispatchEvent(new Event("vergo-cart-change"));
+      } catch (error) {
+        console.error("Unable to save the customer cart:", error);
       }
-    };
+    }, 300);
 
-    window.addEventListener("vergo-cart-change", handleCartChange);
-    window.addEventListener("storage", handleCartChange);
+    return () => window.clearTimeout(timeout);
+  }, [cart, isLoaded, owner]);
 
-    return () => {
-      window.removeEventListener("vergo-cart-change", handleCartChange);
-      window.removeEventListener("storage", handleCartChange);
-    };
-  }, [cart]);
-
-  const addToCart = (product: Product, size: string, quantity: number = 1, color?: string) => {
-    setCart((prevCart) => {
-      const existingItemIndex = prevCart.findIndex(
-        (item) => item.product.id === product.id && item.size === size
+  const addToCart = (product: Product, size: string, quantity = 1, color?: string) => {
+    setCart((previous) => {
+      const index = previous.findIndex(
+        (item) =>
+          item.product.id === product.id &&
+          item.size === size &&
+          item.color === color,
       );
-
-      if (existingItemIndex > -1) {
-        const newCart = [...prevCart];
-        newCart[existingItemIndex].quantity += quantity;
-        return newCart;
-      }
-
-      return [...prevCart, { product, size, color, quantity }];
+      if (index < 0) return [...previous, { product, size, color, quantity }];
+      const next = previous.map((item) => ({ ...item }));
+      next[index].quantity = Math.min(99, next[index].quantity + quantity);
+      return next;
     });
   };
 
-  const removeFromCart = (productId: number, size: string) => {
-    setCart((prevCart) =>
-      prevCart.filter((item) => !(item.product.id === productId && item.size === size))
+  const removeFromCart = (productId: string, size: string) => {
+    setCart((previous) =>
+      previous.filter(
+        (item) => !(item.product.id === productId && item.size === size),
+      ),
     );
   };
 
-  const updateQuantity = (productId: number, size: string, quantity: number) => {
+  const updateQuantity = (productId: string, size: string, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(productId, size);
       return;
     }
-    setCart((prevCart) =>
-      prevCart.map((item) =>
+    setCart((previous) =>
+      previous.map((item) =>
         item.product.id === productId && item.size === size
-          ? { ...item, quantity }
-          : item
-      )
+          ? { ...item, quantity: Math.min(99, quantity) }
+          : item,
+      ),
     );
   };
 
-  const clearCart = () => {
-    setCart([]);
-  };
-
+  const clearCart = () => setCart([]);
   const cartCount = cart.reduce((count, item) => count + item.quantity, 0);
-
-  // Helper to parse price string to number, e.g. "LKR 4,500.00" -> 4500
-  const parseLkrPrice = (lkrPriceStr: string): number => {
-    if (!lkrPriceStr) return 0;
-    const cleanStr = lkrPriceStr.replace(/LKR/g, "").replace(/,/g, "").trim();
-    const value = parseFloat(cleanStr);
-    return isNaN(value) ? 0 : value;
-  };
-
   const cartSubtotal = cart.reduce((total, item) => {
-    if (!item || !item.product || !item.product.lkrPrice) return total;
-    const priceNum = parseLkrPrice(item.product.lkrPrice);
-    return total + priceNum * item.quantity;
+    const value = Number.parseFloat(
+      item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim(),
+    );
+    return total + (Number.isFinite(value) ? value * item.quantity : 0);
   }, 0);
-
-  const formatLkr = (value: number): string => {
-    return `LKR ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  const formatLkr = (value: number) =>
+    `LKR ${value.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
 
   return (
     <CartContext.Provider
@@ -221,8 +309,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
 export function useCart() {
   const context = useContext(CartContext);
-  if (!context) {
-    throw new Error("useCart must be used within a CartProvider");
-  }
+  if (!context) throw new Error("useCart must be used within a CartProvider");
   return context;
 }

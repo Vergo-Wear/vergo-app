@@ -73,9 +73,7 @@ describe('ProductCatalogueService', () => {
           colour: 'Black',
           price: 4750,
           inventory: { quantity: 13, reserved_quantity: 3 },
-          images: [
-            { image_id: '1', url: 'https://cdn.example.com/tee.jpg' },
-          ],
+          images: [{ image_id: '1', url: 'https://cdn.example.com/tee.jpg' }],
         },
       ],
     });
