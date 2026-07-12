@@ -49,26 +49,8 @@ export default function CheckoutPage() {
     return isNaN(value) ? 0 : value;
   };
 
-  const hasItems = cart.length > 0;
-
-  const defaultItems = [
-    {
-      product: {
-        id: 999,
-        name: "ARCH-V1 TECH HOODIE",
-        price: "$185.00",
-        lkrPrice: "LKR 55,000.00",
-        image: "/images/hoodie.png",
-        colors: ["Noir"]
-      },
-      size: "L",
-      color: "NOIR",
-      quantity: 1
-    }
-  ];
-
-  const itemsToDisplay = hasItems ? cart : defaultItems;
-  const subtotalLkr = hasItems ? cartSubtotal : 55000;
+  const itemsToDisplay = cart;
+  const subtotalLkr = cartSubtotal;
 
   const handleInputChange = (field: string, value: string) => {
     if (field === "firstName") setFirstName(value);
@@ -203,33 +185,9 @@ export default function CheckoutPage() {
         proceedWithSubmission();
       }
     } catch (apiError) {
-      console.warn("Failed to check existing contact via backend API, falling back to local simulation:", apiError);
-
-      // Resilient Fallback to local simulation if backend is down or unconfigured
-      const emailMatch = email.trim().toLowerCase();
-      const cleanEnteredPhone = phone.trim().replace(/[^0-9+]/g, "");
-      const EXISTING_CUSTOMERS = [
-        { email: "julian@verso.com", phone: "+1 (555) 000-0000" },
-        { email: "jane.doe@example.com", phone: "+1 (555) 111-1111" }
-      ];
-
-      const emailExists = EXISTING_CUSTOMERS.some(c => c.email.toLowerCase() === emailMatch);
-      const phoneExists = EXISTING_CUSTOMERS.some(c => {
-        const cleanCustomerPhone = c.phone.trim().replace(/[^0-9+]/g, "");
-        return cleanCustomerPhone === cleanEnteredPhone;
-      });
-
+      console.error("Failed to check existing contact via backend API:", apiError);
       setIsSubmitting(false);
-
-      if (emailExists && phoneExists) {
-        setShowPopup(true);
-      } else if (emailExists) {
-        setShowPopup(true);
-      } else if (phoneExists) {
-        setShowPopup(true);
-      } else {
-        proceedWithSubmission();
-      }
+      setErrors({ email: "Unable to verify this contact with the database. Please try again." });
     }
   };
 

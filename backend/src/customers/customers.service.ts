@@ -86,6 +86,11 @@ export class CustomersService {
     return customer;
   }
 
+  async updateByProfileId(profileId: string, dto: UpdateCustomerDto) {
+    const customer = await this.findByProfileId(profileId);
+    return this.update(customer.customerId, dto);
+  }
+
   /**
    * Updates an existing customer record.
    * Validates email uniqueness if email is being changed.

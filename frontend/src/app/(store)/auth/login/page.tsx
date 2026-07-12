@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { createSupabaseClient } from "@/lib/supabase";
+import { createSupabaseClient, getSupabaseRedirectSession } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -83,7 +83,7 @@ export default function LoginPage() {
     const handleAuthSession = async () => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       try {
-        const { data: { session } } = await client.auth.getSession();
+        const session = await getSupabaseRedirectSession(client);
         if (session) {
           setIsSubmitting(true);
 
@@ -183,17 +183,6 @@ export default function LoginPage() {
 
     handleAuthSession();
 
-    // Also listen for the SIGNED_IN event fired by onAuthStateChange — this fires
-    // with the fresh session from the OAuth redirect and avoids the stale URL warning
-    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
-        handleAuthSession();
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, [router]);
 
   const handleProfileCompletionSubmit = async (e: React.FormEvent) => {
@@ -430,12 +419,14 @@ export default function LoginPage() {
       const userId = signinData.user.id;
       const userRole = signinData.user.role;
       let displayName = "";
+      let databaseProfile: Record<string, unknown> = {};
 
       if (userRole === "Customer") {
         try {
           const profileRes = await fetch(`${apiUrl}/customers/profile/${userId}`);
           if (profileRes.ok) {
             const profileData = await profileRes.json();
+            databaseProfile = profileData;
             displayName = `${profileData.firstName} ${profileData.lastName}`;
           }
         } catch (e) {
@@ -446,6 +437,7 @@ export default function LoginPage() {
           const profileRes = await fetch(`${apiUrl}/employees/profile/${userId}`);
           if (profileRes.ok) {
             const profileData = await profileRes.json();
+            databaseProfile = profileData;
             displayName = `${profileData.firstName} ${profileData.lastName}`;
           }
         } catch (e) {
@@ -470,6 +462,7 @@ export default function LoginPage() {
           email: signinData.user.email,
           avatarUrl: "/images/default-avatar.png",
           role: userRole,
+          ...databaseProfile,
         })
       );
 

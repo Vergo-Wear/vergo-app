@@ -15,8 +15,9 @@ export class SupabaseService {
     const supabaseUrl = this.configService.getOrThrow<string>('SUPABASE_URL');
     const supabaseAnonKey =
       this.configService.getOrThrow<string>('SUPABASE_ANON_KEY');
-    const supabaseServiceKey =
-      this.configService.getOrThrow<string>('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseServiceKey = this.configService.getOrThrow<string>(
+      'SUPABASE_SERVICE_ROLE_KEY',
+    );
 
     // Anon client for normal requests
     this.client = createClient(supabaseUrl, supabaseAnonKey, {

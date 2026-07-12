@@ -32,6 +32,8 @@ export default function ProductCreationPage() {
 
     // Section C: Dynamic Matrix
     const [variants, setVariants] = useState<Variant[]>([]);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Handlers for Tag Inputs
     const handleAddColor = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -134,16 +136,23 @@ export default function ProductCreationPage() {
     };
 
     // Section D Actions
-    const handleSaveDraft = () => {
-        // Collect data + variant data
-        console.log("Saving Draft", { productName, categoryId, supplierId, basePrice, variants, status: "draft" });
+    const saveProduct = async (status: "draft" | "active") => {
+        const token = localStorage.getItem("vergo_access_token");
+        if (!token) return setSaveError("Admin authentication is required.");
+        if (!productName.trim() || variants.length === 0) return setSaveError("Add a product name and generate at least one variant.");
+        setIsSaving(true); setSaveError(null);
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+        const response = await fetch(`${apiUrl}/admin/products`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ name: productName, categoryId: categoryId || undefined, supplierId: supplierId || undefined, basePrice, status, variants: variants.map((variant) => ({ sku: variant.sku, color: variant.color, size: variant.size, priceAdjustment: variant.price_adjustment, quantity: variant.quantity, imageUrl: variant.image_url || undefined })) }),
+        });
+        setIsSaving(false);
+        if (!response.ok) { const body = await response.json().catch(() => ({})); return setSaveError(Array.isArray(body.message) ? body.message.join(" ") : body.message || "Unable to save product."); }
         router.push("/admin/inventory");
     };
-
-    const handlePublish = () => {
-        console.log("Publishing", { productName, categoryId, supplierId, basePrice, variants, status: "active" });
-        router.push("/admin/inventory");
-    };
+    const handleSaveDraft = () => void saveProduct("draft");
+    const handlePublish = () => void saveProduct("active");
 
     return (
         <div className="flex flex-col min-h-screen bg-[#050505] text-[#f5f5f7] font-sans">
@@ -368,6 +377,7 @@ export default function ProductCreationPage() {
             {/* Section D: Global Action Bar */}
             <footer className="fixed bottom-0 left-0 right-0 bg-[#050505] border-t border-[rgba(255,255,255,0.08)] py-4 px-8 z-50 flex items-center justify-between shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">
                 <div className="text-xs text-[#8e8e93] font-mono-meta flex gap-4">
+                    {saveError && <span className="text-red-400">{saveError}</span>}
                     <span>{variants.length} Matrix Definitions</span>
                     <span>•</span>
                     <span>{variants.reduce((acc, curr) => acc + curr.quantity, 0)} Total Units</span>
@@ -378,16 +388,17 @@ export default function ProductCreationPage() {
                     </Link>
                     <button
                         onClick={handleSaveDraft}
+                        disabled={isSaving}
                         className="bg-[#121212] hover:bg-[#1f1f1f] border border-[rgba(255,255,255,0.2)] text-white font-bold text-[11px] tracking-widest px-6 py-3 rounded-md transition-all uppercase shadow-md cursor-pointer"
                     >
                         Save as Draft
                     </button>
                     <button
                         onClick={handlePublish}
-                        disabled={!productName || variants.length === 0}
+                        disabled={isSaving || !productName || variants.length === 0}
                         className="bg-white text-black hover:bg-[#eaeaea] disabled:bg-white/30 disabled:text-[#8e8e93] active:bg-[#d9d9d9] font-bold text-[11px] tracking-widest px-8 py-3 rounded-md transition-all uppercase shadow-md cursor-pointer"
                     >
-                        Publish Product
+                        {isSaving ? "Saving..." : "Publish Product"}
                     </button>
                 </div>
             </footer>

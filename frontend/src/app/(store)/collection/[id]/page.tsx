@@ -15,7 +15,7 @@ interface PageProps {
 export default function ProductDetailPage({ params }: PageProps) {
   const products = useProducts();
   const resolvedParams = use(params);
-  const productId = parseInt(resolvedParams.id, 10);
+  const productId = resolvedParams.id;
   const searchParams = useSearchParams();
   const autoOpenFeedback = searchParams ? searchParams.get("add-feedback") === "true" : false;
   const { addToCart } = useCart();

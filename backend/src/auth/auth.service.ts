@@ -22,13 +22,39 @@ export class AuthService {
     private readonly supabaseService: SupabaseService,
   ) {}
 
+  async refreshSession(refreshToken: string) {
+    const { data, error } =
+      await this.supabaseService.client.auth.refreshSession({
+        refresh_token: refreshToken,
+      });
+    if (error || !data.session || !data.user) {
+      throw new UnauthorizedException(
+        'Session refresh failed. Please sign in again.',
+      );
+    }
+    return {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      expiresIn: data.session.expires_in,
+    };
+  }
+
   /**
    * Registers a new customer. Pre-validates constraints, registers the auth user
    * via Supabase Auth, creates the linked database profile and customer records,
    * and rolls back Supabase Auth creation if the database inserts fail.
    */
   async customerSignup(dto: CustomerSignupDto) {
-    const { email, password, firstName, lastName, username, phone, mobileNumber, defaultShippingAddress } = dto;
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      username,
+      phone,
+      mobileNumber,
+      defaultShippingAddress,
+    } = dto;
 
     // Normalize phone: strip leading 0, prepend +94
     const rawPhone = phone || mobileNumber;
@@ -62,7 +88,9 @@ export class AuthService {
         where: { phone: resolvedPhone.trim() },
       });
       if (existingCustomerByPhone) {
-        throw new ConflictException('A customer with this phone number already exists.');
+        throw new ConflictException(
+          'A customer with this phone number already exists.',
+        );
       }
     }
 
@@ -77,20 +105,25 @@ export class AuthService {
     });
 
     if (!customerRole) {
-      throw new BadRequestException('Customer role not configured in the database.');
+      throw new BadRequestException(
+        'Customer role not configured in the database.',
+      );
     }
 
     // 2. Register user in Supabase Auth (admin client auto-confirms the email,
     //    allowing immediate sign-in without requiring email verification)
-    const { data: authData, error: authError } = await this.supabaseService.adminClient.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
-      password,
-      email_confirm: true,
-    });
+    const { data: authData, error: authError } =
+      await this.supabaseService.adminClient.auth.admin.createUser({
+        email: email.trim().toLowerCase(),
+        password,
+        email_confirm: true,
+      });
 
     if (authError || !authData.user) {
       this.logger.error(`Supabase Auth signup failed: ${authError?.message}`);
-      throw new BadRequestException(authError?.message || 'Failed to register user in Supabase Auth.');
+      throw new BadRequestException(
+        authError?.message || 'Failed to register user in Supabase Auth.',
+      );
     }
 
     const userId = authData.user.id;
@@ -122,7 +155,9 @@ export class AuthService {
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             phone: resolvedPhone,
-            defaultShippingAddress: defaultShippingAddress ? defaultShippingAddress.trim() : null,
+            defaultShippingAddress: defaultShippingAddress
+              ? defaultShippingAddress.trim()
+              : null,
           },
           create: {
             profileId: userId,
@@ -130,14 +165,18 @@ export class AuthService {
             lastName: lastName.trim(),
             phone: resolvedPhone,
             email: email.trim().toLowerCase(),
-            defaultShippingAddress: defaultShippingAddress ? defaultShippingAddress.trim() : null,
+            defaultShippingAddress: defaultShippingAddress
+              ? defaultShippingAddress.trim()
+              : null,
           },
         });
 
         return { profile, customer };
       });
 
-      this.logger.log(`Customer successfully created in DB and Supabase Auth with ID: ${userId}`);
+      this.logger.log(
+        `Customer successfully created in DB and Supabase Auth with ID: ${userId}`,
+      );
 
       return {
         message: 'Signup successful',
@@ -160,16 +199,24 @@ export class AuthService {
         },
       };
     } catch (dbError) {
-      this.logger.error(`Database operations failed for user ID ${userId}. Rolling back Supabase registration.`, dbError);
-      
+      this.logger.error(
+        `Database operations failed for user ID ${userId}. Rolling back Supabase registration.`,
+        dbError,
+      );
+
       // 4. Rollback Supabase user creation if database write fails
       try {
         await this.supabaseService.adminClient.auth.admin.deleteUser(userId);
-        this.logger.log(`Successfully deleted orphaned Supabase user with ID: ${userId}`);
+        this.logger.log(
+          `Successfully deleted orphaned Supabase user with ID: ${userId}`,
+        );
       } catch (deleteError) {
-        this.logger.error(`Failed to rollback Supabase user deletion for user ID ${userId}:`, deleteError);
+        this.logger.error(
+          `Failed to rollback Supabase user deletion for user ID ${userId}:`,
+          deleteError,
+        );
       }
-      
+
       throw dbError;
     }
   }
@@ -178,7 +225,10 @@ export class AuthService {
    * Signs in a user and returns authentication session details alongside their role.
    * If input is a phone number, resolves it to the linked email address before authenticating.
    */
-  async signin(dto: SigninDto, allowedRoleName: 'Customer' | 'Employee' | 'Admin') {
+  async signin(
+    dto: SigninDto,
+    allowedRoleName: 'Customer' | 'Employee' | 'Admin',
+  ) {
     const { emailOrPhone, password } = dto;
     let email = emailOrPhone.trim();
 
@@ -220,29 +270,11 @@ export class AuthService {
     }
 
     // 2. Sign in with Supabase Auth
-    let authData: any = null;
-    let authError: any = null;
-
-    try {
-      const res = await this.supabaseService.client.auth.signInWithPassword({
+    const { data: authData, error: authError } =
+      await this.supabaseService.client.auth.signInWithPassword({
         email: email.toLowerCase(),
         password,
       });
-      authData = res.data;
-      authError = res.error;
-    } catch (e) {
-      this.logger.warn(`Supabase client error, using simulation fallback: ${e.message}`);
-      authData = {
-        user: {
-          id: 'd3b07384-d113-4c9f-b3a6-8e5cd8cc3bbd',
-          email: email.toLowerCase(),
-        },
-        session: {
-          access_token: 'mock-access-token',
-          refresh_token: 'mock-refresh-token',
-        }
-      };
-    }
 
     if (authError || !authData || !authData.user || !authData.session) {
       this.logger.warn(`Auth login failed: ${authError?.message}`);
@@ -252,22 +284,10 @@ export class AuthService {
     const userId = authData.user.id;
 
     // 3. Fetch profile and verify role & active status
-    let profile: any = null;
-    try {
-      profile = await this.prisma.profiles.findUnique({
-        where: { id: userId },
-        include: { role: true },
-      });
-    } catch (dbErr) {
-      this.logger.warn(`Database connection failed, using simulation profile: ${dbErr.message}`);
-      profile = {
-        id: userId,
-        status: ProfileStatus.ACTIVE,
-        role: {
-          roleName: allowedRoleName,
-        }
-      };
-    }
+    const profile = await this.prisma.profiles.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
 
     if (!profile) {
       throw new UnauthorizedException('Profile not found.');
@@ -283,7 +303,9 @@ export class AuthService {
     // Verify role matches
     const roleName = profile.role?.roleName;
     if (!roleName || roleName.toLowerCase() !== allowedRoleName.toLowerCase()) {
-      throw new ForbiddenException(`Access denied. You do not have the required role: ${allowedRoleName}.`);
+      throw new ForbiddenException(
+        `Access denied. You do not have the required role: ${allowedRoleName}.`,
+      );
     }
 
     // 4. Return formatted login response
@@ -314,11 +336,18 @@ export class AuthService {
    */
   async googleSignin(accessToken: string) {
     // 1. Validate the token and retrieve the Supabase user
-    const { data: { user }, error } = await this.supabaseService.client.auth.getUser(accessToken);
+    const {
+      data: { user },
+      error,
+    } = await this.supabaseService.client.auth.getUser(accessToken);
 
     if (error || !user) {
-      this.logger.warn(`Google signin token validation failed: ${error?.message}`);
-      throw new UnauthorizedException('Invalid or expired Google access token.');
+      this.logger.warn(
+        `Google signin token validation failed: ${error?.message}`,
+      );
+      throw new UnauthorizedException(
+        'Invalid or expired Google access token.',
+      );
     }
 
     const userId = user.id;
@@ -334,7 +363,9 @@ export class AuthService {
 
     // New user (no profile, or trigger-created profile with no role) — send to onboarding
     if (!isOnboarded) {
-      this.logger.log(`Google signin: new/incomplete user detected (ID: ${userId}), onboarding required.`);
+      this.logger.log(
+        `Google signin: new/incomplete user detected (ID: ${userId}), onboarding required.`,
+      );
       return {
         needsOnboarding: true,
         user: {
@@ -354,10 +385,14 @@ export class AuthService {
     // 4. Returning user — must be a Customer role (all Google auth users are customers)
     const roleName = profile.role?.roleName;
     if (!roleName || roleName.toLowerCase() !== 'customer') {
-      throw new ForbiddenException('Access denied. Google sign-in is only available for customer accounts.');
+      throw new ForbiddenException(
+        'Access denied. Google sign-in is only available for customer accounts.',
+      );
     }
 
-    this.logger.log(`Google signin: returning customer logged in (ID: ${userId})`);
+    this.logger.log(
+      `Google signin: returning customer logged in (ID: ${userId})`,
+    );
 
     return {
       needsOnboarding: false,
@@ -382,14 +417,28 @@ export class AuthService {
    * OAuth users — ensuring no orphaned rows exist for incomplete sign-ups.
    */
   async googleCompleteProfile(dto: GoogleCompleteProfileDto) {
-    const { accessToken, firstName, lastName, username, phone, defaultShippingAddress } = dto;
+    const {
+      accessToken,
+      firstName,
+      lastName,
+      username,
+      phone,
+      defaultShippingAddress,
+    } = dto;
 
     // 1. Validate token and get user identity
-    const { data: { user }, error } = await this.supabaseService.client.auth.getUser(accessToken);
+    const {
+      data: { user },
+      error,
+    } = await this.supabaseService.client.auth.getUser(accessToken);
 
     if (error || !user || !user.email) {
-      this.logger.warn(`googleCompleteProfile: token validation failed: ${error?.message}`);
-      throw new UnauthorizedException('Invalid or expired Google access token.');
+      this.logger.warn(
+        `googleCompleteProfile: token validation failed: ${error?.message}`,
+      );
+      throw new UnauthorizedException(
+        'Invalid or expired Google access token.',
+      );
     }
 
     const userId = user.id;
@@ -423,7 +472,9 @@ export class AuthService {
         where: { phone: resolvedPhone },
       });
       if (existingPhone) {
-        throw new ConflictException('A customer with this phone number already exists.');
+        throw new ConflictException(
+          'A customer with this phone number already exists.',
+        );
       }
     }
 
@@ -432,7 +483,9 @@ export class AuthService {
       where: { roleName: { equals: 'Customer', mode: 'insensitive' } },
     });
     if (!customerRole) {
-      throw new BadRequestException('Customer role not configured in the database.');
+      throw new BadRequestException(
+        'Customer role not configured in the database.',
+      );
     }
 
     // 6. Create profile and customer in a single transaction
@@ -461,7 +514,9 @@ export class AuthService {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           phone: resolvedPhone,
-          defaultShippingAddress: defaultShippingAddress ? defaultShippingAddress.trim() : null,
+          defaultShippingAddress: defaultShippingAddress
+            ? defaultShippingAddress.trim()
+            : null,
         },
         create: {
           profileId: userId,
@@ -469,7 +524,9 @@ export class AuthService {
           lastName: lastName.trim(),
           phone: resolvedPhone,
           email,
-          defaultShippingAddress: defaultShippingAddress ? defaultShippingAddress.trim() : null,
+          defaultShippingAddress: defaultShippingAddress
+            ? defaultShippingAddress.trim()
+            : null,
         },
       });
 
@@ -523,14 +580,17 @@ export class AuthService {
 
     const cleanFirst = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanLast = lastName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const base = cleanFirst && cleanLast
-      ? `${cleanFirst}_${cleanLast}`
-      : cleanFirst || cleanLast || 'user';
+    const base =
+      cleanFirst && cleanLast
+        ? `${cleanFirst}_${cleanLast}`
+        : cleanFirst || cleanLast || 'user';
 
     for (let attempt = 0; attempt < 10; attempt++) {
       const suffix = Math.floor(1000 + Math.random() * 9000);
       const candidate = `${base}_${suffix}`;
-      const taken = await this.prisma.profiles.findUnique({ where: { username: candidate } });
+      const taken = await this.prisma.profiles.findUnique({
+        where: { username: candidate },
+      });
       if (!taken) return candidate;
     }
 

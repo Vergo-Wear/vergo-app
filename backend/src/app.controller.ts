@@ -8,7 +8,20 @@ import {
 } from '@nestjs/common';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
-import { IsEmail, IsOptional, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Matches,
+  MinLength,
+} from 'class-validator';
+
+class ContactMessageDto {
+  @IsString() @MinLength(2) fullName: string;
+  @IsEmail() email: string;
+  @IsString() @MinLength(2) subject: string;
+  @IsString() @MinLength(10) message: string;
+}
 
 export class CheckContactDto {
   @IsOptional()
@@ -17,7 +30,8 @@ export class CheckContactDto {
 
   @IsOptional()
   @Matches(/^(?:\+94|0)?[1-9][0-9]{8}$/, {
-    message: 'Phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).'
+    message:
+      'Phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).',
   })
   phone?: string;
 }
@@ -69,55 +83,40 @@ export class AppController {
     let emailExists = false;
     let phoneExists = false;
 
-    // database check with query raw
-    try {
-      if (email) {
-        const emailResults = await this.prisma.$queryRawUnsafe<any[]>(
-          `SELECT customer_id FROM "customer" WHERE LOWER("email") = $1 LIMIT 1`,
-          email
-        );
-        emailExists = emailResults && emailResults.length > 0;
-      }
-
-      if (phone) {
-        const cleanEnteredPhone = phone.replace(/[^0-9+]/g, '');
-        const phoneResults = await this.prisma.$queryRawUnsafe<any[]>(
-          `SELECT customer_id FROM "customer" WHERE regexp_replace("phone", '[^0-9+]', '', 'g') = $1 LIMIT 1`,
-          cleanEnteredPhone
-        );
-        phoneExists = phoneResults && phoneResults.length > 0;
-      }
-      
-      this.logger.log(`Checked contact in DB. emailExists=${emailExists}, phoneExists=${phoneExists}`);
-    } catch (dbError) {
-      this.logger.warn(
-        `Database query failed or profiles table not found. Falling back to mock checks. Error: ${dbError.message}`
+    if (email) {
+      emailExists = Boolean(
+        await this.prisma.customer.findUnique({ where: { email } }),
       );
-
-      // Fallback: mock dataset of existing customers
-      const EXISTING_CUSTOMERS = [
-        { email: 'julian@verso.com', phone: '+1 (555) 000-0000' },
-        { email: 'jane.doe@example.com', phone: '+1 (555) 111-1111' },
-      ];
-
-      if (email) {
-        emailExists = EXISTING_CUSTOMERS.some(
-          (c) => c.email.toLowerCase() === email
-        );
-      }
-
-      if (phone) {
-        const cleanEnteredPhone = phone.replace(/[^0-9+]/g, '');
-        phoneExists = EXISTING_CUSTOMERS.some((c) => {
-          const cleanCustomerPhone = c.phone.replace(/[^0-9+]/g, '');
-          return cleanCustomerPhone === cleanEnteredPhone;
-        });
-      }
     }
+    if (phone) {
+      const normalizedPhone = phone.startsWith('+94')
+        ? phone
+        : `+94${phone.replace(/\D/g, '').replace(/^0/, '')}`;
+      phoneExists = Boolean(
+        await this.prisma.customer.findFirst({
+          where: { phone: { in: [phone, normalizedPhone] } },
+        }),
+      );
+    }
+    this.logger.log(
+      `Checked contact in DB. emailExists=${emailExists}, phoneExists=${phoneExists}`,
+    );
 
     return {
       emailExists,
       phoneExists,
     };
+  }
+
+  @Post('/contact')
+  createContactMessage(@Body() dto: ContactMessageDto) {
+    return this.prisma.contactMessage.create({
+      data: {
+        fullName: dto.fullName.trim(),
+        email: dto.email.trim().toLowerCase(),
+        subject: dto.subject.trim(),
+        message: dto.message.trim(),
+      },
+    });
   }
 }

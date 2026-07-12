@@ -80,6 +80,14 @@ export class EmployeesService {
     return employee;
   }
 
+  async updateAvailability(profileId: string, status: string) {
+    const employee = await this.findByProfileId(profileId);
+    return this.prisma.employee.update({
+      where: { employeeId: employee.employeeId },
+      data: { availabilityStatus: status },
+    });
+  }
+
   /**
    * Updates an existing employee record.
    */

@@ -1,12 +1,26 @@
-import { Body, Controller, Post, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  HttpCode,
+  HttpStatus,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CustomerSignupDto } from './dto/customer-signup.dto';
 import { SigninDto } from './dto/signin.dto';
 import { GoogleCompleteProfileDto } from './dto/google-complete-profile.dto';
+import { RefreshSessionDto } from './dto/refresh-session.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  refreshSession(@Body() dto: RefreshSessionDto) {
+    return this.authService.refreshSession(dto.refreshToken);
+  }
 
   /**
    * Registers a new customer and returns the created customer and profile details.

@@ -1,4 +1,11 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+  Matches,
+} from 'class-validator';
 
 export class CustomerSignupDto {
   @IsEmail({}, { message: 'Invalid email address format.' })
@@ -24,13 +31,15 @@ export class CustomerSignupDto {
 
   @IsOptional()
   @Matches(/^(?:\+94|0)?[1-9][0-9]{8}$/, {
-    message: 'Phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).'
+    message:
+      'Phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).',
   })
   phone?: string;
 
   @IsOptional()
   @Matches(/^(?:\+94|0)?[1-9][0-9]{8}$/, {
-    message: 'Mobile number must be a valid Sri Lankan mobile number (e.g. 0771234567 or +94771234567).'
+    message:
+      'Mobile number must be a valid Sri Lankan mobile number (e.g. 0771234567 or +94771234567).',
   })
   mobileNumber?: string;
 
