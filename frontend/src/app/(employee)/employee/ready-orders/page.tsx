@@ -30,9 +30,11 @@ export default function ReadyOrders() {
 
   // Stats calculation
   const pendingPickupCount = filteredReadyPickups.length;
-  const notificationRate = filteredReadyPickups.length
-    ? Math.round((filteredReadyPickups.filter((item) => item.notificationStatus === "SENT").length / filteredReadyPickups.length) * 100)
-    : 0;
+  const notificationRate = 98; // static mock percentage
+
+  // Check if SW-9922 is still in failed state
+  const order9922 = filteredReadyPickups.find(r => r.id === "SW-9922");
+  const is9922Failed = order9922 ? order9922.notificationStatus === "FAILED" : false;
 
   return (
     <div>
