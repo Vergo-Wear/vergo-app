@@ -2,6 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
+// Polyfill BigInt to support JSON serialization in NestJS/Express responses
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(

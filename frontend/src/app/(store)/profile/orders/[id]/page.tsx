@@ -104,7 +104,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
           const data = await response.json();
           
           // Verify customer ownership if order has customerId
-          if (data.customerId && user && user.customerId !== data.customerId) {
+          if (data.customerId && user && user.customerId && user.customerId !== data.customerId) {
             setAccessDenied(true);
             return;
           }
