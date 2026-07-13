@@ -873,3 +873,172 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* Animations for login popup */
+@keyframes existModalFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(12px);
+  }
+}
+
+@keyframes existModalSlideUp {
+  from {
+    transform: translateY(30px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Existing Customer Modal Custom Classes */
+.exist-customer-overlay {
+  background-color: rgba(0, 0, 0, 0.75) !important;
+  animation: existModalFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.exist-customer-box {
+  background-color: #121214 !important; /* Premium dark background */
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.5), 
+    0 0 50px rgba(52, 211, 153, 0.05), /* Subtle green glow */
+    0 0 80px rgba(245, 158, 11, 0.03) !important; /* Subtle yellow glow */
+  animation: existModalSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px !important;
+  padding: 40px 36px 36px 36px !important;
+}
+
+/* Decorative Gradient Line at the Top */
+.exist-customer-box::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #10B981, #FBBF24);
+}
+
+/* Icon Container */
+.exist-customer-icon-container {
+  margin: 0 auto 24px;
+  display: flex;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(245, 158, 11, 0.08));
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.exist-customer-box:hover .exist-customer-icon-container {
+  transform: scale(1.05);
+}
+
+/* Modal Title */
+.exist-customer-title {
+  font-size: 20px !important;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  margin-bottom: 12px;
+  font-weight: 800;
+  text-transform: capitalize !important; /* A softer casing than all uppercase */
+}
+
+/* Modal Message */
+.exist-customer-message {
+  font-size: 14px !important;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.65) !important;
+  margin: 0 auto 24px;
+  max-width: 360px;
+}
+
+/* Informational Banner */
+.exist-customer-info-banner {
+  background: rgba(16, 185, 129, 0.04) !important;
+  border: 1px solid rgba(16, 185, 129, 0.15) !important;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 32px;
+  text-align: center;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.02);
+}
+
+.exist-customer-info-text {
+  font-size: 13.5px !important;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.75) !important;
+  margin: 0;
+}
+
+.exist-customer-info-text strong {
+  color: #00FF9D;
+  font-weight: 700;
+}
+
+/* Buttons */
+.exist-customer-primary-btn {
+  background: linear-gradient(135deg, #00FF9D, #00e58c) !important;
+  color: #000000 !important;
+  font-weight: 800 !important;
+  font-size: 12.5px !important;
+  letter-spacing: 0.08em !important;
+  height: 52px !important;
+  border: none !important;
+  border-radius: 8px !important;
+  cursor: pointer;
+  text-transform: uppercase;
+  width: 100%;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 4px 15px rgba(0, 255, 157, 0.2) !important;
+}
+
+.exist-customer-primary-btn:hover {
+  background: linear-gradient(135deg, #00ffb4, #00d480) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 25px rgba(0, 255, 157, 0.3) !important;
+}
+
+.exist-customer-primary-btn:active {
+  transform: translateY(0) !important;
+}
+
+.exist-customer-secondary-btn {
+  background-color: transparent !important;
+  border: 1px solid rgba(0, 255, 157, 0.2) !important; /* Soft green border */
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  letter-spacing: 0.08em !important;
+  height: 50px !important;
+  border-radius: 8px !important;
+  cursor: pointer;
+  text-transform: uppercase;
+  width: 100%;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.exist-customer-secondary-btn:hover {
+  background-color: rgba(0, 255, 157, 0.06) !important;
+  border-color: rgba(0, 255, 157, 0.7) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px) !important;
+}
+
+.exist-customer-secondary-btn:active {
+  transform: translateY(0) !important;
+}
