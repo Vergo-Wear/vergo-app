@@ -59,12 +59,23 @@ export class OrdersService {
 
   async cancelCustomerOrder(profileId: string, orderId: string) {
     const order = await this.findCustomerOrder(profileId, orderId);
-    const status = order.orderStatus?.toLowerCase();
-    if (status === 'delivered' || status === 'cancelled' || status === 'sent') {
+    
+    // 1. Block cancellation if an employee has already claimed it
+    if (order.employeeId) {
       throw new ForbiddenException(
-        `An order in "${order.orderStatus}" status cannot be cancelled.`,
+        "This order has already been claimed by an employee and cannot be cancelled."
       );
     }
+
+    // 2. Only allow cancellation in initial stages
+    const status = order.orderStatus?.toLowerCase() || "";
+    const allowedCancelStatuses = ['draft', 'pending payment', 'pending verification', 'ready to process'];
+    if (!allowedCancelStatuses.includes(status)) {
+      throw new ForbiddenException(
+        `An order in "${order.orderStatus}" status cannot be cancelled.`
+      );
+    }
+
     return this.prisma.orders.update({
       where: { orderId },
       data: { orderStatus: 'Cancelled' },
