@@ -990,6 +990,10 @@
   font-weight: 700;
 }
 
+.exist-customer-info-text strong.highlight-orange {
+  color: #ff9f0a;
+}
+
 /* Buttons */
 .exist-customer-primary-btn {
   background: linear-gradient(135deg, #00FF9D, #00e58c) !important;

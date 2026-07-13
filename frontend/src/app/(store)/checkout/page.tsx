@@ -511,11 +511,11 @@ export default function CheckoutPage() {
                 <path d="M17 11V9a1.5 1.5 0 0 1 3 0v2" stroke="#00FF9D" />
               </svg>
             </div>
-            
+
             <h3 className="exist-customer-title">
               Account Already Exists
             </h3>
-            
+
             <p className="exist-customer-message">
               An account with your email or phone number already exists in our system.
             </p>
@@ -523,7 +523,7 @@ export default function CheckoutPage() {
             {/* Highlighted Payment Info Banner */}
             <div className="exist-customer-info-banner">
               <p className="exist-customer-info-text">
-                Continuing as a guest restricts you to <strong>Cash on Delivery (COD) only</strong> and disables <strong>Direct Bank Transfer</strong>.
+                Continuing as a guest restricts you to <strong>Cash on Delivery (COD) only</strong> and <strong className="highlight-orange">disables Direct Bank Transfer</strong>.
               </p>
             </div>
 
