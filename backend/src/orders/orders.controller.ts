@@ -69,6 +69,15 @@ export class OrdersController {
     return this.ordersService.findAllOrders();
   }
 
+  @Get('manage/:id')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin', 'Employee')
+  getManagedOrder(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
+  ) {
+    return this.ordersService.findManagedOrder(orderId);
+  }
+
   @Patch('manage/:id/status')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('Admin', 'Employee')

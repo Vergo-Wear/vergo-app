@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsNumber,
@@ -145,6 +146,31 @@ export class CreateOrderDto {
   @Type(() => ShippingDetailsDto)
   @IsNotEmpty({ message: 'Shipping details are required.' })
   shippingDetails: ShippingDetailsDto;
+
+  /**
+   * Saved address to ship to (registered customers only). When provided,
+   * the address is loaded from user_addresses and snapshotted into
+   * order_shipping_details, overriding the address fields above.
+   */
+  @IsUUID(4, { message: 'Invalid saved address ID format.' })
+  @IsOptional()
+  savedAddressId?: string;
+
+  /**
+   * Save the newly entered address into the customer's address book
+   * (registered customers only; ignored for guests and saved addresses).
+   */
+  @IsBoolean({ message: 'saveAddress must be a boolean value.' })
+  @IsOptional()
+  saveAddress?: boolean;
+
+  /**
+   * Make the newly saved address the customer's primary address.
+   * Only meaningful together with saveAddress.
+   */
+  @IsBoolean({ message: 'setAsPrimary must be a boolean value.' })
+  @IsOptional()
+  setAsPrimary?: boolean;
 
   @IsArray({ message: 'Items list must be an array.' })
   @ArrayMinSize(1, { message: 'Order must contain at least 1 item.' })

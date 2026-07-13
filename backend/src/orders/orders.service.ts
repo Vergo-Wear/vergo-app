@@ -8,6 +8,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, SRI_LANKAN_DISTRICTS } from './dto/create-order.dto';
 import { Prisma } from '@prisma/client';
 import { SupabaseService } from '../auth/supabase.service';
+import { AddressesService } from '../addresses/addresses.service';
+
+/** Address fields snapshotted into order_shipping_details */
+interface ShippingSnapshot {
+  receiverName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  district: string;
+  postalCode: string | null;
+}
 
 @Injectable()
 export class OrdersService {
@@ -79,6 +91,20 @@ export class OrdersService {
     });
   }
 
+  /**
+   * Loads a single order for admin/employee views. Customer contact and
+   * shipping information come from the immutable order_customer_details /
+   * order_shipping_details snapshots — never from profile tables.
+   */
+  async findManagedOrder(orderId: string) {
+    const order = await this.prisma.orders.findUnique({
+      where: { orderId },
+      include: this.orderInclude,
+    });
+    if (!order) throw new NotFoundException('Order not found.');
+    return order;
+  }
+
   async updateManagedStatus(
     profileId: string,
     role: string | null,
@@ -121,7 +147,14 @@ export class OrdersService {
       );
     }
 
-    // 2. Validate that district is one of the supported districts
+    // 2. Guests have no address book, so they can never ship to a saved address
+    if (isGuest && createOrderDto.savedAddressId) {
+      throw new BadRequestException(
+        'Guest checkouts cannot use a saved address. Please enter shipping details manually.',
+      );
+    }
+
+    // 3. Validate that district is one of the supported districts
     const enteredDistrict = createOrderDto.shippingDetails.district
       .trim()
       .toLowerCase();
@@ -182,8 +215,52 @@ export class OrdersService {
         createOrderDto.paymentMethod.toLowerCase() === 'cash on delivery';
       const codAmount = isCod ? totalAmount : 0.0;
 
-      // 3. Construct a standard shipping address string representation
-      const sd = createOrderDto.shippingDetails;
+      // 3. Resolve the shipping address to snapshot. A saved address is
+      //    copied at this point so the snapshot stays immutable even if
+      //    the customer later edits or deletes the saved address.
+      const dtoSd = createOrderDto.shippingDetails;
+      let sd: ShippingSnapshot = {
+        receiverName: dtoSd.receiverName,
+        phone: dtoSd.phone,
+        addressLine1: dtoSd.addressLine1,
+        addressLine2: dtoSd.addressLine2 || null,
+        city: dtoSd.city,
+        district: dtoSd.district,
+        postalCode: dtoSd.postalCode || null,
+      };
+      if (createOrderDto.savedAddressId && customerId) {
+        const savedAddress = await tx.userAddress.findFirst({
+          where: { addressId: createOrderDto.savedAddressId, customerId },
+        });
+        if (!savedAddress) {
+          throw new BadRequestException(
+            'The selected saved address could not be found.',
+          );
+        }
+        sd = {
+          receiverName: savedAddress.receiverName,
+          phone: savedAddress.phone,
+          addressLine1: savedAddress.addressLine1,
+          addressLine2: savedAddress.addressLine2,
+          city: savedAddress.city,
+          district: savedAddress.district,
+          postalCode: savedAddress.postalCode,
+        };
+      } else if (customerId && createOrderDto.saveAddress) {
+        // Save the newly entered address into the customer's address book.
+        // Guests never reach this branch, so guest addresses are never stored.
+        await AddressesService.saveAddress(tx, customerId, {
+          receiverName: sd.receiverName,
+          phone: sd.phone,
+          addressLine1: sd.addressLine1,
+          addressLine2: sd.addressLine2 || undefined,
+          city: sd.city,
+          district: sd.district,
+          postalCode: sd.postalCode || undefined,
+          isPrimary: createOrderDto.setAsPrimary ?? false,
+        });
+      }
+
       const shippingAddress = `${sd.addressLine1}${sd.addressLine2 ? ', ' + sd.addressLine2 : ''}, ${sd.city}, ${sd.district}${sd.postalCode ? ' (' + sd.postalCode + ')' : ''}`;
 
       // 4. Set appropriate order status based on payment method
@@ -221,6 +298,7 @@ export class OrdersService {
       await tx.orderCustomerDetails.create({
         data: {
           orderId: order.orderId,
+          customerId,
           firstName: createOrderDto.contactDetails.firstName,
           lastName: createOrderDto.contactDetails.lastName,
           email: createOrderDto.contactDetails.email,
@@ -236,11 +314,11 @@ export class OrdersService {
           receiverName: sd.receiverName,
           phone: sd.phone,
           addressLine1: sd.addressLine1,
-          addressLine2: sd.addressLine2 || null,
+          addressLine2: sd.addressLine2,
           city: sd.city,
           district: sd.district,
-          postalCode: sd.postalCode || null,
-          deliveryNote: sd.deliveryNote || null,
+          postalCode: sd.postalCode,
+          deliveryNote: dtoSd.deliveryNote || null,
         },
       });
 

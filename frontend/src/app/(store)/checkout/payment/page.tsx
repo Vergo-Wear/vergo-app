@@ -23,6 +23,9 @@ interface ShippingInfo {
   postalCode?: string;
   deliveryNote?: string;
   deliveryFee?: number;
+  savedAddressId?: string;
+  saveAddress?: boolean;
+  setAsPrimary?: boolean;
 }
 
 interface UserProfile {
@@ -106,6 +109,17 @@ export default function PaymentPage() {
         postalCode: shippingInfo?.postalCode || "",
         deliveryNote: shippingInfo?.deliveryNote || "",
       },
+      // Saved-address handling (registered customers only; guests never
+      // send these, so guest addresses are never persisted)
+      ...(isLoggedIn && shippingInfo?.savedAddressId
+        ? { savedAddressId: shippingInfo.savedAddressId }
+        : {}),
+      ...(isLoggedIn && !shippingInfo?.savedAddressId
+        ? {
+            saveAddress: shippingInfo?.saveAddress ?? false,
+            setAsPrimary: shippingInfo?.setAsPrimary ?? false,
+          }
+        : {}),
       items: itemsToDisplay.map((item) => ({
         variantId: item.product.variants.find(
           (variant) =>
