@@ -31,7 +31,7 @@ export default function OrderHistoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
     if (!token) {
       setError("Please sign in to view your order history.");
       setIsLoading(false);

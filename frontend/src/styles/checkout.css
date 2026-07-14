@@ -26,6 +26,44 @@
   gap: 10px;
 }
 
+button.step-item {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.step-item:disabled {
+  cursor: not-allowed;
+}
+
+button.step-item:disabled:hover .step-circle {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+button.step-item:disabled:hover .step-label {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+button.step-item:hover .step-circle,
+button.step-item:focus-visible .step-circle {
+  border-color: #00FF9D;
+  color: #00FF9D;
+}
+
+button.step-item:hover .step-label,
+button.step-item:focus-visible .step-label {
+  color: #00FF9D;
+}
+
+button.step-item:focus-visible {
+  outline: 2px solid #00FF9D;
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
 .step-circle {
   width: 24px;
   height: 24px;
@@ -186,6 +224,17 @@
   box-shadow: 0 0 0 2px rgba(255, 69, 58, 0.15);
 }
 
+/* Keep validation visible despite global input and disabled-state styles. */
+.checkout-form .form-input.input-error,
+.checkout-form .form-select.input-error,
+.checkout-form .form-input.input-error:focus,
+.checkout-form .form-select.input-error:focus,
+.checkout-form .form-input.input-error:disabled,
+.checkout-form .form-select.input-error:disabled {
+  border-color: #ff453a !important;
+  box-shadow: 0 0 0 2px rgba(255, 69, 58, 0.18) !important;
+}
+
 /* Adjust email padding for icon */
 .form-input-email {
   padding-right: 48px;
@@ -210,6 +259,46 @@
 /* Button */
 .submit-btn-container {
   margin-top: 12px;
+}
+
+.checkout-actions {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.checkout-actions .submit-btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.checkout-back-btn {
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checkout-back-btn:hover,
+.checkout-back-btn:focus-visible {
+  border-color: #00FF9D;
+  color: #00FF9D;
+  outline: none;
+}
+
+@media (max-width: 480px) {
+  .checkout-actions {
+    flex-direction: column-reverse;
+  }
 }
 
 .submit-btn {
@@ -632,19 +721,10 @@
 /* Select Input Component */
 .form-select {
   display: block;
-  width: 100%;
-  height: 52px;
-  background-color: #ffffff;
-  color: #000000;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
+  background-color: #141416;
+  color: #ffffff;
   padding: 0 40px 0 18px;
   font-family: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.2;
-  outline: none;
-  transition: all 0.2s ease;
   appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat;
@@ -653,18 +733,8 @@
   cursor: pointer;
 }
 
-.form-select:focus {
-  border-color: #000000;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
-}
-
-.form-select.input-error {
-  border-color: #ff453a;
-  box-shadow: 0 0 0 2px rgba(255, 69, 58, 0.15);
-}
-
 .form-select.placeholder-color {
-  color: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .district-select option[value=""] {
@@ -682,8 +752,10 @@
 }
 
 .district-select:disabled {
-  background-color: #f5f5f5;
-  color: rgba(0, 0, 0, 0.4);
+  background-color: #141416;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.1);
+  -webkit-text-fill-color: #ffffff;
   cursor: not-allowed;
   opacity: 1;
 }

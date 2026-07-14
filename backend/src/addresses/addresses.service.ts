@@ -63,11 +63,27 @@ export class AddressesService {
 
   async deleteCustomerAddress(profileId: string, addressId: string) {
     const customerId = await this.customerIdForProfile(profileId);
-    const address = await this.prisma.userAddress.findFirst({
-      where: { addressId, customerId },
+    return this.prisma.$transaction(async (tx) => {
+      const address = await tx.userAddress.findFirst({
+        where: { addressId, customerId },
+      });
+      if (!address) throw new NotFoundException('Saved address not found.');
+
+      const deleted = await tx.userAddress.delete({ where: { addressId } });
+      if (address.isPrimary) {
+        const replacement = await tx.userAddress.findFirst({
+          where: { customerId },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (replacement) {
+          await tx.userAddress.update({
+            where: { addressId: replacement.addressId },
+            data: { isPrimary: true, updatedAt: new Date() },
+          });
+        }
+      }
+      return deleted;
     });
-    if (!address) throw new NotFoundException('Saved address not found.');
-    return this.prisma.userAddress.delete({ where: { addressId } });
   }
 
   /**
@@ -80,7 +96,13 @@ export class AddressesService {
     customerId: string,
     dto: CreateUserAddressDto,
   ) {
-    if (dto.isPrimary) {
+    const currentPrimary = await tx.userAddress.findFirst({
+      where: { customerId, isPrimary: true },
+      select: { addressId: true },
+    });
+    const shouldBePrimary = dto.isPrimary === true || !currentPrimary;
+
+    if (dto.isPrimary === true && currentPrimary) {
       await tx.userAddress.updateMany({
         where: { customerId, isPrimary: true },
         data: { isPrimary: false, updatedAt: new Date() },
@@ -96,7 +118,7 @@ export class AddressesService {
         city: dto.city,
         district: dto.district,
         postalCode: dto.postalCode || null,
-        isPrimary: dto.isPrimary ?? false,
+        isPrimary: shouldBePrimary,
       },
     });
   }

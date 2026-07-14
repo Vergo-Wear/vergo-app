@@ -3,8 +3,8 @@
 import { useState, use, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useProducts } from "@/hooks/useProducts";
+import { useSearchParams } from "next/navigation";
+import { useProductsState } from "@/hooks/useProducts";
 import ProductFeedback from "@/components/ProductFeedback";
 import { useCart } from "@/context/CartContext";
 
@@ -13,7 +13,7 @@ interface PageProps {
 }
 
 export default function ProductDetailPage({ params }: PageProps) {
-  const products = useProducts();
+  const { products, isLoading } = useProductsState();
   const resolvedParams = use(params);
   const productId = resolvedParams.id;
   const searchParams = useSearchParams();
@@ -62,6 +62,19 @@ export default function ProductDetailPage({ params }: PageProps) {
       .filter((p) => p.id !== product.id)
       .slice(0, 4);
   }, [products, product]);
+
+  if (isLoading) {
+    return (
+      <div className="product-detail-loading" role="status" aria-live="polite">
+        <div className="product-loading-mark" aria-hidden="true">
+          <span className="product-loading-ring" />
+          <span className="product-loading-v">V</span>
+        </div>
+        <p className="product-loading-title">PREPARING YOUR SELECTION</p>
+        <p className="product-loading-copy">Loading product details...</p>
+      </div>
+    );
+  }
 
   if (!product) {
     return (

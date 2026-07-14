@@ -107,8 +107,11 @@ export class ShippingDetailsDto {
   district: string;
 
   @IsString()
-  @IsOptional()
-  postalCode?: string;
+  @IsNotEmpty({ message: 'Postal code is required.' })
+  @Matches(/^\d{5}$/, {
+    message: 'Postal code must be a valid 5-digit Sri Lankan postal code.',
+  })
+  postalCode: string;
 
   @IsString()
   @IsOptional()

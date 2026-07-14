@@ -43,8 +43,8 @@ export default function Navbar({
 
   useEffect(() => {
     const loadAuthState = () => {
-      const storedUser = localStorage.getItem("vergo_user");
-      const storedLoggedIn = localStorage.getItem("vergo_is_logged_in");
+      const storedUser = sessionStorage.getItem("vergo_user");
+      const storedLoggedIn = sessionStorage.getItem("vergo_is_logged_in");
 
       if (storedLoggedIn === "true" && storedUser) {
         try {
@@ -173,10 +173,7 @@ export default function Navbar({
                     if (onLogoutClick) {
                       onLogoutClick();
                     } else {
-                      localStorage.removeItem("vergo_user");
-                      localStorage.removeItem("vergo_is_logged_in");
-                      localStorage.removeItem("vergo_access_token");
-                      localStorage.removeItem("vergo_refresh_token");
+                      sessionStorage.clear();
                       window.dispatchEvent(new Event("vergo-auth-change"));
                       router.push("/");
                     }
@@ -247,10 +244,7 @@ export default function Navbar({
                     if (onLogoutClick) {
                       onLogoutClick();
                     } else {
-                      localStorage.removeItem("vergo_user");
-                      localStorage.removeItem("vergo_is_logged_in");
-                      localStorage.removeItem("vergo_access_token");
-                      localStorage.removeItem("vergo_refresh_token");
+                      sessionStorage.clear();
                       window.dispatchEvent(new Event("vergo-auth-change"));
                       router.push("/");
                     }

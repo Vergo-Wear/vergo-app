@@ -33,6 +33,7 @@ describe('AddressesService', () => {
     addressLine1: '12 Galle Road',
     city: 'Colombo',
     district: 'Colombo',
+    postalCode: '00100',
   };
 
   beforeEach(() => {
@@ -40,6 +41,10 @@ describe('AddressesService', () => {
     service = new AddressesService(prisma as never);
     customerDelegate.findFirst.mockResolvedValue({ customerId });
     userAddressDelegate.updateMany.mockResolvedValue({ count: 1 });
+    userAddressDelegate.findFirst.mockResolvedValue({
+      addressId: 'existing-primary',
+      isPrimary: true,
+    });
   });
 
   it('throws when no customer exists for the profile', async () => {
@@ -73,6 +78,18 @@ describe('AddressesService', () => {
         receiverName: 'Julian Verso',
         isPrimary: false,
       }),
+    });
+  });
+
+  it('makes the first saved address primary automatically', async () => {
+    userAddressDelegate.findFirst.mockResolvedValue(null);
+    userAddressDelegate.create.mockResolvedValue({ addressId });
+
+    await service.createCustomerAddress(profileId, dto);
+
+    expect(userAddressDelegate.updateMany).not.toHaveBeenCalled();
+    expect(userAddressDelegate.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ isPrimary: true }),
     });
   });
 
@@ -133,7 +150,11 @@ describe('AddressesService', () => {
   });
 
   it('deletes an owned address', async () => {
-    userAddressDelegate.findFirst.mockResolvedValue({ addressId, customerId });
+    userAddressDelegate.findFirst.mockResolvedValue({
+      addressId,
+      customerId,
+      isPrimary: false,
+    });
     userAddressDelegate.delete.mockResolvedValue({ addressId });
 
     await service.deleteCustomerAddress(profileId, addressId);

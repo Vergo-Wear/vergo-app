@@ -256,7 +256,7 @@ export class OrdersService {
           addressLine2: sd.addressLine2 || undefined,
           city: sd.city,
           district: sd.district,
-          postalCode: sd.postalCode || undefined,
+          postalCode: sd.postalCode ?? dtoSd.postalCode,
           isPrimary: createOrderDto.setAsPrimary ?? false,
         });
       }

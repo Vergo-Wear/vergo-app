@@ -137,7 +137,7 @@ export default function ProductCreationPage() {
 
     // Section D Actions
     const saveProduct = async (status: "draft" | "active") => {
-        const token = localStorage.getItem("vergo_access_token");
+        const token = sessionStorage.getItem("vergo_access_token");
         if (!token) return setSaveError("Admin authentication is required.");
         if (!productName.trim() || variants.length === 0) return setSaveError("Add a product name and generate at least one variant.");
         setIsSaving(true); setSaveError(null);

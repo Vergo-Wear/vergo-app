@@ -37,7 +37,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const removeNotification = (id: string) => setNotifications((current) => current.filter((item) => item.id !== id));
 
   useEffect(() => {
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
     if (!token) return;
     fetch(`${API_URL}/admin/overview`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
       .then((response) => {
@@ -53,7 +53,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const persistQuantity = (item: InventoryItem, quantity: number) => {
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
     if (!token || !item.inventoryId) return;
     fetch(`${API_URL}/admin/inventory/${item.inventoryId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ quantity }) })
       .catch(() => addNotification("Unable to update inventory.", "error"));

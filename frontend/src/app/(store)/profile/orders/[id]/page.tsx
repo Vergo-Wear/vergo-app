@@ -35,7 +35,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
   const [isLoading, setIsLoading] = useState(true);
 
   const loadOrder = async () => {
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
     if (!token) throw new Error("Please sign in to view this order.");
     const response = await fetch(`${API_URL}/orders/mine/${id}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     if (!response.ok) throw new Error("Order not found or access was denied.");
@@ -47,7 +47,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
   }, [id]);
 
   const cancelOrder = async () => {
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
     if (!token) return;
     const response = await fetch(`${API_URL}/orders/mine/${id}/cancel`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
     if (!response.ok) {

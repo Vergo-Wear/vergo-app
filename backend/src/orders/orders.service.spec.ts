@@ -196,6 +196,10 @@ describe('OrdersService', () => {
     });
 
     it('saves a new address (non-primary) when saveAddress is set', async () => {
+      userAddressDelegate.findFirst.mockResolvedValue({
+        addressId: 'existing-primary',
+        isPrimary: true,
+      });
       const dto = baseDto();
       dto.saveAddress = true;
 
@@ -213,6 +217,10 @@ describe('OrdersService', () => {
 
     it('demotes existing primaries before saving a new primary address', async () => {
       const calls: string[] = [];
+      userAddressDelegate.findFirst.mockResolvedValue({
+        addressId: 'existing-primary',
+        isPrimary: true,
+      });
       userAddressDelegate.updateMany.mockImplementation(() => {
         calls.push('demote');
         return Promise.resolve({ count: 1 });

@@ -24,7 +24,7 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
     if (!token) {
       setError("Please sign in to view your account.");
       return;
@@ -56,7 +56,7 @@ export default function ProfilePage() {
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
     if (!token || !draft) return;
 
     setIsSaving(true);
@@ -79,10 +79,10 @@ export default function ProfilePage() {
 
       const updated = (await response.json()) as CustomerProfile;
       setProfile(updated);
-      const storedUser = localStorage.getItem("vergo_user");
+      const storedUser = sessionStorage.getItem("vergo_user");
       if (storedUser) {
         const user = JSON.parse(storedUser);
-        localStorage.setItem("vergo_user", JSON.stringify({
+        sessionStorage.setItem("vergo_user", JSON.stringify({
           ...user,
           name: `${updated.firstName} ${updated.lastName}`.trim(),
           phone: updated.phone,

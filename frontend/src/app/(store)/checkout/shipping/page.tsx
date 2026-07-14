@@ -4,6 +4,9 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
+import { hasCompletedContact, hasCompletedShipping } from "@/lib/checkout-progress";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { useGuestCheckoutGuard } from "@/hooks/useGuestCheckoutGuard";
 import "@/styles/checkout.css";
 
 // Standard Sri Lankan Districts list plus Figma custom "Tech District"
@@ -49,9 +52,16 @@ interface SavedAddress {
   isPrimary?: boolean | null;
 }
 
+interface CustomerProfile {
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+}
+
 export default function ShippingPage() {
   const router = useRouter();
-  const { cart, cartSubtotal, formatLkr } = useCart();
+  const { cart, cartSubtotal, formatLkr, isLoaded: isCartLoaded } = useCart();
+  useGuestCheckoutGuard(cart.length, isCartLoaded);
 
   // User auth state
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -76,6 +86,15 @@ export default function ShippingPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [shippingComplete, setShippingComplete] = useState(false);
+
+  useEffect(() => {
+    if (!hasCompletedContact()) {
+      router.replace("/checkout");
+      return;
+    }
+    setShippingComplete(hasCompletedShipping());
+  }, [router]);
 
   // Delivery calculation state
   const [baseShipping, setBaseShipping] = useState<number | null>(null);
@@ -99,11 +118,11 @@ export default function ShippingPage() {
   // Load auth status and contact details from checkout step 1
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
+      const loggedIn = sessionStorage.getItem("vergo_is_logged_in") === "true";
       setIsLoggedIn(loggedIn);
 
       if (loggedIn) {
-        const storedUser = localStorage.getItem("vergo_user");
+        const storedUser = sessionStorage.getItem("vergo_user");
         if (storedUser) {
           try {
             const parsedUser = JSON.parse(storedUser);
@@ -121,16 +140,34 @@ export default function ShippingPage() {
           }
         }
 
+        // Refresh account contact details from the database. Some login paths
+        // do not include the customer's phone number in vergo_user.
+        const token = sessionStorage.getItem("vergo_access_token");
+        if (token) {
+          void authenticatedFetch("/customers/me", { cache: "no-store" })
+            .then(async (response) => {
+              if (!response?.ok) return null;
+              return response.json() as Promise<CustomerProfile>;
+            })
+            .then((profile) => {
+              if (!profile) return;
+              const accountUser = {
+                name: `${profile.firstName} ${profile.lastName}`.trim(),
+                phone: profile.phone || "",
+              };
+              setUserProfile(accountUser);
+              setReceiverName((current) => current || accountUser.name);
+              setReceiverPhone((current) => current || accountUser.phone);
+            })
+            .catch(() => undefined);
+        }
+
         // Load the customer's saved address book and auto-select the primary
         const loadSavedAddresses = async () => {
-          const token = localStorage.getItem("vergo_access_token");
           if (!token) return;
           try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-            const response = await fetch(`${apiUrl}/addresses/mine`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!response.ok) return;
+            const response = await authenticatedFetch("/addresses/mine");
+            if (!response?.ok) return;
             const addresses: SavedAddress[] = await response.json();
             setSavedAddresses(addresses);
             const primary = addresses.find((a) => a.isPrimary);
@@ -268,6 +305,12 @@ export default function ShippingPage() {
       newErrors.district = "Please select a valid Sri Lankan district";
     }
 
+    if (!postalCode.trim()) {
+      newErrors.postalCode = "Postal code is required";
+    } else if (!/^\d{5}$/.test(postalCode.trim())) {
+      newErrors.postalCode = "Enter a valid 5-digit Sri Lankan postal code";
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -286,7 +329,7 @@ export default function ShippingPage() {
       addressLine2,
       city,
       district,
-      postalCode: postalCode.trim() || undefined,
+      postalCode: postalCode.trim(),
       deliveryNote: deliveryNote.trim() || undefined,
       deliveryFee: totalDeliveryFee || 0,
       baseShipping: baseShipping || 0,
@@ -298,6 +341,7 @@ export default function ShippingPage() {
 
     // Save details to localStorage
     localStorage.setItem("vergo_checkout_shipping", JSON.stringify(shippingDetails));
+    setShippingComplete(true);
 
     setTimeout(() => {
       setIsSubmitting(false);
@@ -317,20 +361,20 @@ export default function ShippingPage() {
     <div className="checkout-wrapper">
       {/* Progress Steps */}
       <div className="checkout-progress">
-        <div className="step-item completed-step">
+        <button type="button" className="step-item completed-step" onClick={() => router.push("/checkout")}>
           <span className="step-circle">1</span>
           <span className="step-label">Details</span>
-        </div>
+        </button>
         <div className="progress-line"></div>
-        <div className="step-item active-green">
+        <button type="button" className="step-item active-green" onClick={() => router.push("/checkout/shipping")} aria-current="step">
           <span className="step-circle">2</span>
           <span className="step-label">Shipping</span>
-        </div>
+        </button>
         <div className="progress-line"></div>
-        <div className="step-item">
+        <button type="button" className="step-item" disabled={!shippingComplete} onClick={() => router.push("/checkout/payment")}>
           <span className="step-circle">3</span>
           <span className="step-label">Payment</span>
-        </div>
+        </button>
       </div>
 
       {/* Main Container */}
@@ -452,6 +496,7 @@ export default function ShippingPage() {
                   placeholder="Full Name"
                   disabled={usingSavedAddress}
                   className={`form-input ${errors.receiverName ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.receiverName)}
                   value={receiverName}
                   onChange={(e) => handleInputChange("receiverName", e.target.value)}
                 />
@@ -470,6 +515,7 @@ export default function ShippingPage() {
                   placeholder="+1 (555) 000-0000"
                   disabled={usingSavedAddress}
                   className={`form-input ${errors.receiverPhone ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.receiverPhone)}
                   value={receiverPhone}
                   onChange={(e) => handleInputChange("receiverPhone", e.target.value)}
                 />
@@ -490,6 +536,7 @@ export default function ShippingPage() {
                 placeholder="Street address, P.O. box, company name"
                 disabled={usingSavedAddress}
                 className={`form-input ${errors.addressLine1 ? "input-error" : ""}`}
+                aria-invalid={Boolean(errors.addressLine1)}
                 value={addressLine1}
                 onChange={(e) => handleInputChange("addressLine1", e.target.value)}
               />
@@ -526,6 +573,7 @@ export default function ShippingPage() {
                   placeholder="City"
                   disabled={usingSavedAddress}
                   className={`form-input ${errors.city ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.city)}
                   value={city}
                   onChange={(e) => handleInputChange("city", e.target.value)}
                 />
@@ -539,7 +587,8 @@ export default function ShippingPage() {
                 <select
                   id="district"
                   disabled={usingSavedAddress}
-                  className={`form-select district-select ${errors.district ? "input-error" : ""} ${!district ? "placeholder-color" : ""}`}
+                  className={`form-input form-select district-select ${errors.district ? "input-error" : ""} ${!district ? "placeholder-color" : ""}`}
+                  aria-invalid={Boolean(errors.district)}
                   value={district}
                   onChange={(e) => handleInputChange("district", e.target.value)}
                 >
@@ -560,17 +609,21 @@ export default function ShippingPage() {
             <div className="form-row-half">
               <div className="form-group">
                 <label className="form-label" htmlFor="postalCode">
-                  Postal Code (Optional)
+                  Postal Code
                 </label>
                 <input
                   id="postalCode"
                   type="text"
                   placeholder="e.g. 10100"
                   disabled={usingSavedAddress}
-                  className="form-input"
+                  className={`form-input ${errors.postalCode ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.postalCode)}
                   value={postalCode}
                   onChange={(e) => handleInputChange("postalCode", e.target.value)}
                 />
+                {errors.postalCode && (
+                  <span className="error-message">{errors.postalCode}</span>
+                )}
               </div>
 
               <div className="form-group">
@@ -681,12 +734,14 @@ export default function ShippingPage() {
             </div>
 
             {/* Proceed to Payment Button */}
-            <div className="submit-btn-container" style={{ marginTop: "24px" }}>
+            <div className="submit-btn-container checkout-actions" style={{ marginTop: "24px" }}>
+              <button type="button" className="checkout-back-btn" onClick={() => router.push("/checkout")}>
+                Back
+              </button>
               <button
                 type="button"
                 disabled={isSubmitting || !district}
                 className="submit-btn"
-                style={{ width: "100%", justifyContent: "center" }}
                 onClick={handleSubmit}
               >
                 {isSubmitting ? (
