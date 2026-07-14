@@ -407,9 +407,15 @@ export class AuthService {
         role: 'Customer',
       },
       profile: {
+<<<<<<< HEAD
         id: userId,
         username: profile?.username || user.email.split('@')[0],
         status: profile?.status || 'active',
+=======
+        id: profile.id,
+        username: profile.username,
+        status: profile.status,
+>>>>>>> ed64c263ab921eb9ce01f33dc67636f50fd3041f
       },
       customer: {
         customerId: customer?.customerId || "mock-customer-uuid-1234",
