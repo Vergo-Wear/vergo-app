@@ -406,6 +406,11 @@ export class AuthService {
         email: user.email,
         role: 'Customer',
       },
+      profile: {
+        id: userId,
+        username: profile?.username || user.email.split('@')[0],
+        status: profile?.status || 'active',
+      },
       customer: {
         customerId: customer?.customerId || "mock-customer-uuid-1234",
         firstName: customer?.firstName || "Google",

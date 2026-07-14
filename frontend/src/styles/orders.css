@@ -248,6 +248,16 @@
   background-color: #ff4d4d;
 }
 
+.order-status-badge.pending {
+  background: rgba(255, 193, 7, 0.06);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.order-status-badge.pending::before {
+  background-color: #ffc107;
+}
+
 /* Order Item Row */
 .order-card-body {
   display: flex;

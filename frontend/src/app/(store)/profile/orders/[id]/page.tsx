@@ -521,6 +521,20 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
   const isInitialStatus = ["draft", "pending payment", "pending verification", "ready to process"].includes(statusStr);
   const canCancel = isInitialStatus && isUnclaimed;
 
+  let statusColor = "#00FF9D"; // Green default
+  let statusDisplayName = order.orderStatus || "Pending";
+  
+  if (statusStr.includes("pending")) {
+    statusDisplayName = "Pending";
+    statusColor = "#ffc107"; // Gold
+  } else if (statusStr === "cancelled" || statusStr === "rejected" || statusStr === "expired") {
+    statusDisplayName = statusStr === "cancelled" ? "Cancelled" : statusStr === "rejected" ? "Rejected" : "Expired";
+    statusColor = "#ff4d4d"; // Red
+  } else if (statusStr === "draft") {
+    statusDisplayName = "Draft";
+    statusColor = "rgba(255,255,255,0.6)";
+  }
+
   const paymentStatus = getPaymentStatus(order);
   const payStatusLower = paymentStatus.toLowerCase();
 
@@ -574,7 +588,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div style={{ color: "#00FF9D", display: "flex", alignItems: "center" }}>
+            <div style={{ color: statusColor, display: "flex", alignItems: "center" }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 8 12 12 14 14" />
@@ -584,8 +598,8 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
               <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 Current Status
               </div>
-              <h2 style={{ fontSize: "20px", fontWeight: "900", color: "#00FF9D", textTransform: "uppercase", margin: "2px 0 0 0", fontFamily: "'Oswald', sans-serif" }}>
-                {order.orderStatus}
+              <h2 style={{ fontSize: "20px", fontWeight: "900", color: statusColor, textTransform: "uppercase", margin: "2px 0 0 0", fontFamily: "'Oswald', sans-serif" }}>
+                {statusDisplayName}
               </h2>
             </div>
           </div>
