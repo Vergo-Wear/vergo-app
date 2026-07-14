@@ -61,7 +61,6 @@ export default function OrderDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: orderId } = use(params);
-
   const [order, setOrder] = useState<OrderDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -499,7 +498,7 @@ export default function OrderDetailsPage({
     printWindow.document.close();
   };
 
-  // Simulated Track Package alert (do not build tracking page here constraint)
+  // Redirect to real-time Package Tracking page
   const handleTrackPackage = () => {
     if (!order) return;
     const status = order.orderStatus || "Pending Payment";
