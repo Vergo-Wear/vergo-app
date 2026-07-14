@@ -151,10 +151,12 @@ export default function RegisterPage() {
         }
 
         let displayName = "";
+        let databaseProfile = {};
         try {
           const res = await fetch(`${apiUrl}/customers/profile/${session.user.id}`);
           if (res.ok) {
             const customerData = await res.json();
+            databaseProfile = customerData;
             displayName = `${customerData.firstName} ${customerData.lastName}`;
           }
         } catch (e) { console.warn(e); }
@@ -172,12 +174,13 @@ export default function RegisterPage() {
           email: session.user.email,
           avatarUrl: session.user.user_metadata?.avatar_url || "/images/default-avatar.png",
           role: "Customer",
+          ...databaseProfile,
         }));
         window.dispatchEvent(new Event("vergo-auth-change"));
         setMessage({ text: "Signed in successfully! Redirecting...", type: "success" });
         setTimeout(() => router.push("/"), 1000);
       } catch (err: any) {
-        console.error("Google OAuth callback failed:", err);
+        console.warn("Google OAuth callback failed:", err.message || err);
         setIsSubmitting(false);
         await createSupabaseClient()?.auth.signOut();
         setMessage({ text: err.message || "Failed to process Google sign in.", type: "error" });
@@ -250,9 +253,9 @@ export default function RegisterPage() {
         }),
       });
 
+      const data = await completeRes.json();
       if (!completeRes.ok) {
-        const errData = await completeRes.json();
-        throw new Error(errData.message || "Failed to complete profile.");
+        throw new Error(data.message || "Failed to complete profile.");
       }
 
       localStorage.setItem("vergo_is_logged_in", "true");
@@ -264,12 +267,13 @@ export default function RegisterPage() {
         email: oauthSession.user.email,
         avatarUrl: oauthSession.user.user_metadata?.avatar_url || "/images/default-avatar.png",
         role: "Customer",
+        ...(data.customer || {}),
       }));
       window.dispatchEvent(new Event("vergo-auth-change"));
       setMessage({ text: "Profile completed! Redirecting...", type: "success" });
       setTimeout(() => router.push("/"), 1000);
     } catch (err: any) {
-      console.error("Profile completion failed:", err);
+      console.warn("Profile completion failed:", err.message || err);
       setMessage({ text: err.message || "An error occurred while saving your profile.", type: "error" });
     } finally {
       setIsSubmitting(false);
@@ -315,7 +319,7 @@ export default function RegisterPage() {
         throw error;
       }
     } catch (err: any) {
-      console.error(err);
+      console.warn("Google sign up failed:", err.message || err);
       setMessage({ text: err.message || "Failed to initiate Google sign up.", type: "error" });
       setIsSubmitting(false);
     }
@@ -417,7 +421,7 @@ export default function RegisterPage() {
         router.push("/");
       }, 1000);
     } catch (err: any) {
-      console.error(err);
+      console.warn("Registration failed:", err.message || err);
       setMessage({
         text: err.message || "An unexpected error occurred during registration. Please try again.",
         type: "error",

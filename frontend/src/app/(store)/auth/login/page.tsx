@@ -130,10 +130,12 @@ export default function LoginPage() {
 
           // Fetch display name from customer record
           let displayName = "";
+          let databaseProfile = {};
           try {
             const res = await fetch(`${apiUrl}/customers/profile/${session.user.id}`);
             if (res.ok) {
               const customerData = await res.json();
+              databaseProfile = customerData;
               displayName = `${customerData.firstName} ${customerData.lastName}`;
             }
           } catch (e) {
@@ -156,6 +158,7 @@ export default function LoginPage() {
               email: session.user.email,
               avatarUrl: session.user.user_metadata?.avatar_url || "/images/default-avatar.png",
               role: "Customer",
+              ...databaseProfile,
             })
           );
 
@@ -171,7 +174,7 @@ export default function LoginPage() {
           }, 1000);
         }
       } catch (err: any) {
-        console.error("OAuth callback processing failed:", err);
+        console.warn("OAuth callback processing failed:", err.message || err);
         setIsSubmitting(false);
 
         // Clear Supabase session on failure so we can try again
@@ -234,9 +237,9 @@ export default function LoginPage() {
         }),
       });
 
+      const data = await completeRes.json();
       if (!completeRes.ok) {
-        const errData = await completeRes.json();
-        throw new Error(errData.message || "Failed to complete profile.");
+        throw new Error(data.message || "Failed to complete profile.");
       }
 
       // Save auth info to local storage
@@ -251,6 +254,7 @@ export default function LoginPage() {
           email: oauthSession.user.email,
           avatarUrl: oauthSession.user.user_metadata?.avatar_url || "/images/default-avatar.png",
           role: "Customer",
+          ...(data.customer || {}),
         })
       );
 
@@ -265,7 +269,7 @@ export default function LoginPage() {
         router.push(redirectPath);
       }, 1000);
     } catch (err: any) {
-      console.error("Profile completion failed:", err);
+      console.warn("Profile completion failed:", err.message || err);
       setMessage({ text: err.message || "An error occurred while saving your profile.", type: "error" });
     } finally {
       setIsSubmitting(false);
@@ -305,7 +309,7 @@ export default function LoginPage() {
         throw error;
       }
     } catch (err: any) {
-      console.error(err);
+      console.warn("Google sign in failed:", err.message || err);
       setMessage({ text: err.message || "Failed to initiate Google sign in.", type: "error" });
       setIsSubmitting(false);
     }
@@ -486,7 +490,7 @@ export default function LoginPage() {
         }
       }, 1000);
     } catch (err: any) {
-      console.error(err);
+      console.warn("Sign in failed:", err.message || err);
       setMessage({
         text: err.message || "An unexpected error occurred. Please check your credentials and try again.",
         type: "error",

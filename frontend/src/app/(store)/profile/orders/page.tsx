@@ -81,7 +81,16 @@ export default function OrderHistoryPage() {
           {orders.map((order) => {
             const firstItem = order.orderItems[0];
             const variant = firstItem?.variant;
-            const statusClass = (order.orderStatus || "pending").toLowerCase().replaceAll(" ", "-");
+            
+            let displayStatus = order.orderStatus || "Pending";
+            let statusClass = displayStatus.toLowerCase().replaceAll(" ", "-");
+            if (statusClass.includes("pending")) {
+              displayStatus = "Pending";
+              statusClass = "pending";
+            } else if (statusClass === "cancelled") {
+              displayStatus = "Cancelled";
+            }
+
             return (
               <div className="order-card" key={order.orderId}>
                 <div className="order-card-header">
@@ -97,7 +106,7 @@ export default function OrderHistoryPage() {
                       </span>
                     </div>
                   </div>
-                  <span className={`order-status-badge ${statusClass}`}>{order.orderStatus || "Pending"}</span>
+                  <span className={`order-status-badge ${statusClass}`}>{displayStatus}</span>
                 </div>
                 {firstItem && (
                   <Link href={`/profile/orders/${order.orderId}`} className="order-card-body">
