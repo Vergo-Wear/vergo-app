@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import "@/styles/orders.css";
 
 interface OrderDetails {
@@ -57,6 +58,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export default function OrderDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: orderId } = use(params);
+  const router = useRouter();
   
   const [order, setOrder] = useState<OrderDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -457,11 +459,10 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
     printWindow.document.close();
   };
 
-  // Simulated Track Package alert (do not build tracking page here constraint)
+  // Redirect to real-time Package Tracking page
   const handleTrackPackage = () => {
     if (!order) return;
-    const status = order.orderStatus || "Pending Payment";
-    alert(`Order Tracking Ref: #${order.orderId}\nStatus: ${status}\nFulfillment Stage: Tracking status is updated within 24 hours of shipment dispatch.`);
+    router.push(`/profile/orders/${order.orderId}/track`);
   };
 
   // Clean formatted currency
