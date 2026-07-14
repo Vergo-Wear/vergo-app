@@ -60,7 +60,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const prefill = localStorage.getItem("vergo_login_prefill");
+      const prefill = sessionStorage.getItem("vergo_login_prefill");
       if (prefill && prefill !== "checkout") {
         setFormData((prev) => ({ ...prev, emailOrMobile: prefill }));
       }
@@ -147,10 +147,10 @@ export default function LoginPage() {
           }
 
           // Save auth info to local storage
-          localStorage.setItem("vergo_is_logged_in", "true");
-          localStorage.setItem("vergo_access_token", session.access_token);
-          localStorage.setItem("vergo_refresh_token", session.refresh_token || "");
-          localStorage.setItem(
+          sessionStorage.setItem("vergo_is_logged_in", "true");
+          sessionStorage.setItem("vergo_access_token", session.access_token);
+          sessionStorage.setItem("vergo_refresh_token", session.refresh_token || "");
+          sessionStorage.setItem(
             "vergo_user",
             JSON.stringify({
               id: session.user.id,
@@ -166,8 +166,8 @@ export default function LoginPage() {
 
           setMessage({ text: "Signed in successfully with Google! Redirecting...", type: "success" });
 
-          const redirectPath = localStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
-          localStorage.removeItem("vergo_login_prefill");
+          const redirectPath = sessionStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
+          sessionStorage.removeItem("vergo_login_prefill");
 
           setTimeout(() => {
             router.push(redirectPath);
@@ -243,10 +243,10 @@ export default function LoginPage() {
       }
 
       // Save auth info to local storage
-      localStorage.setItem("vergo_is_logged_in", "true");
-      localStorage.setItem("vergo_access_token", oauthSession.access_token);
-      localStorage.setItem("vergo_refresh_token", oauthSession.refresh_token || "");
-      localStorage.setItem(
+      sessionStorage.setItem("vergo_is_logged_in", "true");
+      sessionStorage.setItem("vergo_access_token", oauthSession.access_token);
+      sessionStorage.setItem("vergo_refresh_token", oauthSession.refresh_token || "");
+      sessionStorage.setItem(
         "vergo_user",
         JSON.stringify({
           id: oauthSession.user.id,
@@ -262,8 +262,8 @@ export default function LoginPage() {
 
       setMessage({ text: "Profile completed successfully! Redirecting...", type: "success" });
 
-      const redirectPath = localStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
-      localStorage.removeItem("vergo_login_prefill");
+      const redirectPath = sessionStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
+      sessionStorage.removeItem("vergo_login_prefill");
 
       setTimeout(() => {
         router.push(redirectPath);
@@ -455,10 +455,10 @@ export default function LoginPage() {
       }
 
       // Step 5: Store authentication details in localStorage
-      localStorage.setItem("vergo_is_logged_in", "true");
-      localStorage.setItem("vergo_access_token", signinData.accessToken);
-      localStorage.setItem("vergo_refresh_token", signinData.refreshToken);
-      localStorage.setItem(
+      sessionStorage.setItem("vergo_is_logged_in", "true");
+      sessionStorage.setItem("vergo_access_token", signinData.accessToken);
+      sessionStorage.setItem("vergo_refresh_token", signinData.refreshToken);
+      sessionStorage.setItem(
         "vergo_user",
         JSON.stringify({
           id: userId,
@@ -478,8 +478,8 @@ export default function LoginPage() {
       // Step 6: Redirect to the role-specific page
       setTimeout(() => {
         if (userRole === "Customer") {
-          const redirectPath = localStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
-          localStorage.removeItem("vergo_login_prefill");
+          const redirectPath = sessionStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
+          sessionStorage.removeItem("vergo_login_prefill");
           router.push(redirectPath);
         } else if (userRole === "Employee") {
           router.push("/employee");

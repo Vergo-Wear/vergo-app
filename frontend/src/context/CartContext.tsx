@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { type Product } from "@/data/product";
+import { logoutExpiredSession } from "@/lib/authenticated-fetch";
 
 export interface CartItem {
   product: Product;
@@ -18,6 +19,7 @@ export interface CartItem {
 
 interface CartContextType {
   cart: CartItem[];
+  isLoaded: boolean;
   addToCart: (product: Product, size: string, quantity?: number, color?: string) => void;
   removeFromCart: (productId: string, size: string) => void;
   updateQuantity: (productId: string, size: string, quantity: number) => void;
@@ -74,9 +76,9 @@ function mergeCarts(primary: CartItem[], incoming: CartItem[]): CartItem[] {
 }
 
 function getCustomerSession() {
-  const isLoggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
-  const token = localStorage.getItem("vergo_access_token");
-  const rawUser = localStorage.getItem("vergo_user");
+  const isLoggedIn = sessionStorage.getItem("vergo_is_logged_in") === "true";
+  const token = sessionStorage.getItem("vergo_access_token");
+  const rawUser = sessionStorage.getItem("vergo_user");
   if (!isLoggedIn || !token || !rawUser) return null;
 
   try {
@@ -98,7 +100,7 @@ async function requestCart(token: string, init?: RequestInit) {
   });
   let response = await send(token);
   if (response.status === 401) {
-    const refreshToken = localStorage.getItem("vergo_refresh_token");
+    const refreshToken = sessionStorage.getItem("vergo_refresh_token");
     if (refreshToken) {
       const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
         method: "POST",
@@ -110,17 +112,14 @@ async function requestCart(token: string, init?: RequestInit) {
           accessToken: string;
           refreshToken: string;
         };
-        localStorage.setItem("vergo_access_token", refreshed.accessToken);
-        localStorage.setItem("vergo_refresh_token", refreshed.refreshToken);
+        sessionStorage.setItem("vergo_access_token", refreshed.accessToken);
+        sessionStorage.setItem("vergo_refresh_token", refreshed.refreshToken);
         response = await send(refreshed.accessToken);
       }
     }
   }
   if (response.status === 401) {
-    localStorage.removeItem("vergo_user");
-    localStorage.removeItem("vergo_is_logged_in");
-    localStorage.removeItem("vergo_access_token");
-    localStorage.removeItem("vergo_refresh_token");
+    logoutExpiredSession();
   }
   if (!response.ok) {
     throw new Error(`Cart request failed with status ${response.status}.`);
@@ -165,7 +164,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const result = await requestCart(session.token);
-        tokenRef.current = localStorage.getItem("vergo_access_token");
+        tokenRef.current = sessionStorage.getItem("vergo_access_token");
         const databaseCart = Array.isArray(result.items)
           ? result.items.filter(isCartItem)
           : [];
@@ -293,6 +292,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     <CartContext.Provider
       value={{
         cart,
+        isLoaded,
         addToCart,
         removeFromCart,
         updateQuantity,

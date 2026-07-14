@@ -59,12 +59,33 @@ model Customer {
   defaultShippingAddress String?   @map("default_shipping_address")
   createdAt              DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  profile Profiles? @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  orders  Orders[]
-  cart    Cart?
-  reviews Review[]
+  profile   Profiles?     @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  orders    Orders[]
+  cart      Cart?
+  reviews   Review[]
+  addresses UserAddress[]
 
   @@map("customer")
+  @@schema("public")
+}
+
+model UserAddress {
+  addressId    String    @id @default(dbgenerated("gen_random_uuid()")) @map("address_id") @db.Uuid
+  customerId   String    @map("customer_id") @db.Uuid
+  receiverName String    @map("receiver_name")
+  phone        String
+  addressLine1 String    @map("address_line_1")
+  addressLine2 String?   @map("address_line_2")
+  city         String
+  district     String
+  postalCode   String?   @map("postal_code")
+  isPrimary    Boolean?  @default(false) @map("is_primary")
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime? @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  customer Customer @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
+
+  @@map("user_addresses")
   @@schema("public")
 }
 
@@ -257,13 +278,15 @@ model OrderItem {
 }
 
 model OrderCustomerDetails {
-  detailId     String @id @default(dbgenerated("gen_random_uuid()")) @map("detail_id") @db.Uuid
-  orderId      String @unique @map("order_id") @db.Uuid
-  firstName    String @map("first_name")
-  lastName     String @map("last_name")
+  detailId     String    @id @default(dbgenerated("gen_random_uuid()")) @map("detail_id") @db.Uuid
+  orderId      String    @unique @map("order_id") @db.Uuid
+  customerId   String?   @map("customer_id") @db.Uuid
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
   email        String
   phone        String
-  customerType String @map("customer_type")
+  customerType String    @map("customer_type")
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 
   order Orders @relation(fields: [orderId], references: [orderId])
 
@@ -272,16 +295,17 @@ model OrderCustomerDetails {
 }
 
 model OrderShippingDetails {
-  shippingId   String  @id @default(dbgenerated("gen_random_uuid()")) @map("shipping_id") @db.Uuid
-  orderId      String  @unique @map("order_id") @db.Uuid
-  receiverName String  @map("receiver_name")
+  shippingId   String    @id @default(dbgenerated("gen_random_uuid()")) @map("shipping_id") @db.Uuid
+  orderId      String    @unique @map("order_id") @db.Uuid
+  receiverName String    @map("receiver_name")
   phone        String
-  addressLine1 String  @map("address_line_1")
-  addressLine2 String? @map("address_line_2")
+  addressLine1 String    @map("address_line_1")
+  addressLine2 String?   @map("address_line_2")
   city         String
   district     String
-  postalCode   String? @map("postal_code")
-  deliveryNote String? @map("delivery_note")
+  postalCode   String?   @map("postal_code")
+  deliveryNote String?   @map("delivery_note")
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
 
   order Orders @relation(fields: [orderId], references: [orderId])
 

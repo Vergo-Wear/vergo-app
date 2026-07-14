@@ -4,6 +4,9 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
+import { hasCompletedContact, hasCompletedShipping } from "@/lib/checkout-progress";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { useGuestCheckoutGuard } from "@/hooks/useGuestCheckoutGuard";
 import "@/styles/checkout.css";
 
 // Standard Sri Lankan Districts list plus Figma custom "Tech District"
@@ -36,9 +39,29 @@ const DISTRICTS = [
   "Vavuniya",
 ];
 
+// Saved address record returned by GET /addresses/mine
+interface SavedAddress {
+  addressId: string;
+  receiverName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string | null;
+  city: string;
+  district: string;
+  postalCode?: string | null;
+  isPrimary?: boolean | null;
+}
+
+interface CustomerProfile {
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+}
+
 export default function ShippingPage() {
   const router = useRouter();
-  const { cart, cartSubtotal, formatLkr } = useCart();
+  const { cart, cartSubtotal, formatLkr, isLoaded: isCartLoaded } = useCart();
+  useGuestCheckoutGuard(cart.length, isCartLoaded);
 
   // User auth state
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -54,31 +77,57 @@ export default function ShippingPage() {
   const [postalCode, setPostalCode] = useState("");
   const [deliveryNote, setDeliveryNote] = useState("");
 
+  // Saved address book (registered customers only)
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+
   // Logic flags
-  const [usePrimary, setUsePrimary] = useState(false);
   const [setAsPrimary, setSetAsPrimary] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [shippingComplete, setShippingComplete] = useState(false);
+
+  useEffect(() => {
+    if (!hasCompletedContact()) {
+      router.replace("/checkout");
+      return;
+    }
+    setShippingComplete(hasCompletedShipping());
+  }, [router]);
 
   // Delivery calculation state
   const [baseShipping, setBaseShipping] = useState<number | null>(null);
   const [regionalSurcharge, setRegionalSurcharge] = useState<number | null>(null);
   const [totalDeliveryFee, setTotalDeliveryFee] = useState<number | null>(null);
 
+  // Fill the form from a saved address and lock the fields to it
+  const applySavedAddress = (address: SavedAddress) => {
+    setSelectedAddressId(address.addressId);
+    setReceiverName(address.receiverName);
+    setReceiverPhone(address.phone);
+    setAddressLine1(address.addressLine1);
+    setAddressLine2(address.addressLine2 || "");
+    setCity(address.city);
+    setDistrict(address.district);
+    setPostalCode(address.postalCode || "");
+    setSetAsPrimary(false);
+    setErrors({});
+  };
+
   // Load auth status and contact details from checkout step 1
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
+      const loggedIn = sessionStorage.getItem("vergo_is_logged_in") === "true";
       setIsLoggedIn(loggedIn);
 
       if (loggedIn) {
-        const storedUser = localStorage.getItem("vergo_user");
+        const storedUser = sessionStorage.getItem("vergo_user");
         if (storedUser) {
           try {
             const parsedUser = JSON.parse(storedUser);
             setUserProfile(parsedUser);
-            
+
             // By default, pre-fill receiver name with logged-in user name
             if (parsedUser.name) {
               setReceiverName(parsedUser.name);
@@ -90,6 +139,46 @@ export default function ShippingPage() {
             console.error("Error parsing user profile details:", e);
           }
         }
+
+        // Refresh account contact details from the database. Some login paths
+        // do not include the customer's phone number in vergo_user.
+        const token = sessionStorage.getItem("vergo_access_token");
+        if (token) {
+          void authenticatedFetch("/customers/me", { cache: "no-store" })
+            .then(async (response) => {
+              if (!response?.ok) return null;
+              return response.json() as Promise<CustomerProfile>;
+            })
+            .then((profile) => {
+              if (!profile) return;
+              const accountUser = {
+                name: `${profile.firstName} ${profile.lastName}`.trim(),
+                phone: profile.phone || "",
+              };
+              setUserProfile(accountUser);
+              setReceiverName((current) => current || accountUser.name);
+              setReceiverPhone((current) => current || accountUser.phone);
+            })
+            .catch(() => undefined);
+        }
+
+        // Load the customer's saved address book and auto-select the primary
+        const loadSavedAddresses = async () => {
+          if (!token) return;
+          try {
+            const response = await authenticatedFetch("/addresses/mine");
+            if (!response?.ok) return;
+            const addresses: SavedAddress[] = await response.json();
+            setSavedAddresses(addresses);
+            const primary = addresses.find((a) => a.isPrimary);
+            if (primary) {
+              applySavedAddress(primary);
+            }
+          } catch (e) {
+            console.error("Failed to load saved addresses:", e);
+          }
+        };
+        void loadSavedAddresses();
       } else {
         // For guest, we can pre-fill name/phone from the checkout step 1 details if they exist
         const contactStr = localStorage.getItem("vergo_checkout_contact");
@@ -139,32 +228,20 @@ export default function ShippingPage() {
     setTotalDeliveryFee(base + surcharge);
   }, [district]);
 
-  // Handle "Use Primary Address" Toggle Action
-  const handlePrimaryAddressToggle = (checked: boolean) => {
-    setUsePrimary(checked);
-    if (checked) {
-      setReceiverName(userProfile?.name || "");
-      setReceiverPhone(userProfile?.phone || "");
-      setAddressLine1(userProfile?.defaultShippingAddress || "");
-      setAddressLine2("");
-      setCity("");
-      setDistrict("");
-      setPostalCode("");
-      setDeliveryNote("");
-      setSetAsPrimary(false); // No need to check "Set as primary" since we're using it
-      
-      // Clear errors
-      setErrors({});
-    } else {
-      // Clear the address fields but retain name/phone
-      setAddressLine1("");
-      setAddressLine2("");
-      setCity("");
-      setDistrict("");
-      setPostalCode("");
-      setDeliveryNote("");
-    }
+  // Switch back to entering a completely new address
+  const handleUseNewAddress = () => {
+    setSelectedAddressId(null);
+    setReceiverName(userProfile?.name || "");
+    setReceiverPhone(userProfile?.phone || "");
+    setAddressLine1("");
+    setAddressLine2("");
+    setCity("");
+    setDistrict("");
+    setPostalCode("");
+    setErrors({});
   };
+
+  const usingSavedAddress = selectedAddressId !== null;
 
   const handleInputChange = (field: string, value: string) => {
     if (field === "receiverName") setReceiverName(value);
@@ -228,6 +305,12 @@ export default function ShippingPage() {
       newErrors.district = "Please select a valid Sri Lankan district";
     }
 
+    if (!postalCode.trim()) {
+      newErrors.postalCode = "Postal code is required";
+    } else if (!/^\d{5}$/.test(postalCode.trim())) {
+      newErrors.postalCode = "Enter a valid 5-digit Sri Lankan postal code";
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -236,7 +319,9 @@ export default function ShippingPage() {
     setErrors({});
     setIsSubmitting(true);
 
-    // Prepare data for order_shipping_details
+    // Prepare data for order_shipping_details. New addresses entered by
+    // registered customers are saved to their address book by the backend
+    // inside the order transaction; guests never persist addresses.
     const shippingDetails = {
       receiverName,
       receiverPhone,
@@ -244,30 +329,19 @@ export default function ShippingPage() {
       addressLine2,
       city,
       district,
-      postalCode: postalCode.trim() || undefined,
+      postalCode: postalCode.trim(),
       deliveryNote: deliveryNote.trim() || undefined,
       deliveryFee: totalDeliveryFee || 0,
       baseShipping: baseShipping || 0,
       regionalSurcharge: regionalSurcharge || 0,
+      savedAddressId: usingSavedAddress ? selectedAddressId : undefined,
+      saveAddress: isLoggedIn && !usingSavedAddress,
+      setAsPrimary: isLoggedIn && !usingSavedAddress && setAsPrimary,
     };
 
     // Save details to localStorage
     localStorage.setItem("vergo_checkout_shipping", JSON.stringify(shippingDetails));
-
-    // Overwrite logged-in customer's default address explicitly if checkbox is checked
-    if (isLoggedIn && setAsPrimary && !usePrimary) {
-      const storedUserStr = localStorage.getItem("vergo_user");
-      if (storedUserStr) {
-        try {
-          const user = JSON.parse(storedUserStr);
-          // Set primary address string representation
-          user.defaultShippingAddress = `${addressLine1}${addressLine2 ? ", " + addressLine2 : ""}, ${city}, ${district}`;
-          localStorage.setItem("vergo_user", JSON.stringify(user));
-        } catch (err) {
-          console.error("Failed to update primary address in local storage:", err);
-        }
-      }
-    }
+    setShippingComplete(true);
 
     setTimeout(() => {
       setIsSubmitting(false);
@@ -287,20 +361,20 @@ export default function ShippingPage() {
     <div className="checkout-wrapper">
       {/* Progress Steps */}
       <div className="checkout-progress">
-        <div className="step-item completed-step">
+        <button type="button" className="step-item completed-step" onClick={() => router.push("/checkout")}>
           <span className="step-circle">1</span>
           <span className="step-label">Details</span>
-        </div>
+        </button>
         <div className="progress-line"></div>
-        <div className="step-item active-green">
+        <button type="button" className="step-item active-green" onClick={() => router.push("/checkout/shipping")} aria-current="step">
           <span className="step-circle">2</span>
           <span className="step-label">Shipping</span>
-        </div>
+        </button>
         <div className="progress-line"></div>
-        <div className="step-item">
+        <button type="button" className="step-item" disabled={!shippingComplete} onClick={() => router.push("/checkout/payment")}>
           <span className="step-circle">3</span>
           <span className="step-label">Payment</span>
-        </div>
+        </button>
       </div>
 
       {/* Main Container */}
@@ -312,43 +386,100 @@ export default function ShippingPage() {
             Configure your delivery destination and optimization route parameters.
           </p>
 
-          {/* Member Section: Use Primary Address Toggle */}
-          {isLoggedIn && (
-            <div className="address-toggle-card">
-              <div className="address-toggle-info">
-                <div className="address-toggle-icon-box">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="2"
-                    stroke="currentColor"
-                    width={20}
-                    height={20}
+          {/* Member Section: Saved Address Book */}
+          {isLoggedIn && savedAddresses.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {savedAddresses.map((address) => {
+                const isSelected = selectedAddressId === address.addressId;
+                return (
+                  <button
+                    key={address.addressId}
+                    type="button"
+                    className="address-toggle-card"
+                    onClick={() => applySavedAddress(address)}
+                    style={{
+                      cursor: "pointer",
+                      textAlign: "left",
+                      width: "100%",
+                      border: isSelected
+                        ? "1px solid #00FF9D"
+                        : "1px solid rgba(255, 255, 255, 0.08)",
+                    }}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
-                    />
-                  </svg>
+                    <div className="address-toggle-info">
+                      <div className="address-toggle-icon-box">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth="2"
+                          stroke="currentColor"
+                          width={20}
+                          height={20}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
+                          />
+                        </svg>
+                      </div>
+                      <div className="address-toggle-text">
+                        <span className="address-toggle-title">
+                          {address.receiverName}
+                          {address.isPrimary ? " · Primary" : ""}
+                        </span>
+                        <span className="address-toggle-subtitle">
+                          {address.addressLine1}
+                          {address.addressLine2 ? `, ${address.addressLine2}` : ""}, {address.city}, {address.district}
+                        </span>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <span style={{ color: "#00FF9D", fontWeight: 700, fontSize: "13px" }}>✓</span>
+                    )}
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                className="address-toggle-card"
+                onClick={handleUseNewAddress}
+                style={{
+                  cursor: "pointer",
+                  textAlign: "left",
+                  width: "100%",
+                  border: !usingSavedAddress
+                    ? "1px solid #00FF9D"
+                    : "1px dashed rgba(255, 255, 255, 0.15)",
+                }}
+              >
+                <div className="address-toggle-info">
+                  <div className="address-toggle-icon-box">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="2"
+                      stroke="currentColor"
+                      width={20}
+                      height={20}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                  </div>
+                  <div className="address-toggle-text">
+                    <span className="address-toggle-title">Use a new address</span>
+                    <span className="address-toggle-subtitle">
+                      Enter a different shipping destination below
+                    </span>
+                  </div>
                 </div>
-                <div className="address-toggle-text">
-                  <span className="address-toggle-title">Use Primary Address</span>
-                  <span className="address-toggle-subtitle">
-                    124 Industrial Way, Tech District, SF
-                  </span>
-                </div>
-              </div>
-              <label className="switch-container">
-                <input
-                  type="checkbox"
-                  className="switch-input"
-                  checked={usePrimary}
-                  onChange={(e) => handlePrimaryAddressToggle(e.target.checked)}
-                />
-                <span className="switch-slider"></span>
-              </label>
+                {!usingSavedAddress && (
+                  <span style={{ color: "#00FF9D", fontWeight: 700, fontSize: "13px" }}>✓</span>
+                )}
+              </button>
             </div>
           )}
 
@@ -363,8 +494,9 @@ export default function ShippingPage() {
                   id="receiverName"
                   type="text"
                   placeholder="Full Name"
-                  disabled={usePrimary}
+                  disabled={usingSavedAddress}
                   className={`form-input ${errors.receiverName ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.receiverName)}
                   value={receiverName}
                   onChange={(e) => handleInputChange("receiverName", e.target.value)}
                 />
@@ -381,8 +513,9 @@ export default function ShippingPage() {
                   id="receiverPhone"
                   type="tel"
                   placeholder="+1 (555) 000-0000"
-                  disabled={usePrimary}
+                  disabled={usingSavedAddress}
                   className={`form-input ${errors.receiverPhone ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.receiverPhone)}
                   value={receiverPhone}
                   onChange={(e) => handleInputChange("receiverPhone", e.target.value)}
                 />
@@ -401,8 +534,9 @@ export default function ShippingPage() {
                 id="addressLine1"
                 type="text"
                 placeholder="Street address, P.O. box, company name"
-                disabled={usePrimary}
+                disabled={usingSavedAddress}
                 className={`form-input ${errors.addressLine1 ? "input-error" : ""}`}
+                aria-invalid={Boolean(errors.addressLine1)}
                 value={addressLine1}
                 onChange={(e) => handleInputChange("addressLine1", e.target.value)}
               />
@@ -420,7 +554,7 @@ export default function ShippingPage() {
                 id="addressLine2"
                 type="text"
                 placeholder="Apartment, suite, unit, building, floor, etc."
-                disabled={usePrimary}
+                disabled={usingSavedAddress}
                 className="form-input"
                 value={addressLine2}
                 onChange={(e) => handleInputChange("addressLine2", e.target.value)}
@@ -437,8 +571,9 @@ export default function ShippingPage() {
                   id="city"
                   type="text"
                   placeholder="City"
-                  disabled={usePrimary}
+                  disabled={usingSavedAddress}
                   className={`form-input ${errors.city ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.city)}
                   value={city}
                   onChange={(e) => handleInputChange("city", e.target.value)}
                 />
@@ -451,8 +586,9 @@ export default function ShippingPage() {
                 </label>
                 <select
                   id="district"
-                  disabled={usePrimary}
-                  className={`form-select district-select ${errors.district ? "input-error" : ""} ${!district ? "placeholder-color" : ""}`}
+                  disabled={usingSavedAddress}
+                  className={`form-input form-select district-select ${errors.district ? "input-error" : ""} ${!district ? "placeholder-color" : ""}`}
+                  aria-invalid={Boolean(errors.district)}
                   value={district}
                   onChange={(e) => handleInputChange("district", e.target.value)}
                 >
@@ -473,17 +609,21 @@ export default function ShippingPage() {
             <div className="form-row-half">
               <div className="form-group">
                 <label className="form-label" htmlFor="postalCode">
-                  Postal Code (Optional)
+                  Postal Code
                 </label>
                 <input
                   id="postalCode"
                   type="text"
                   placeholder="e.g. 10100"
-                  disabled={usePrimary}
-                  className="form-input"
+                  disabled={usingSavedAddress}
+                  className={`form-input ${errors.postalCode ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.postalCode)}
                   value={postalCode}
                   onChange={(e) => handleInputChange("postalCode", e.target.value)}
                 />
+                {errors.postalCode && (
+                  <span className="error-message">{errors.postalCode}</span>
+                )}
               </div>
 
               <div className="form-group">
@@ -493,7 +633,7 @@ export default function ShippingPage() {
                 <textarea
                   id="deliveryNote"
                   placeholder="Notes for courier (e.g. gate codes, directions)"
-                  disabled={usePrimary}
+                  disabled={usingSavedAddress}
                   className="form-textarea"
                   value={deliveryNote}
                   onChange={(e) => handleInputChange("deliveryNote", e.target.value)}
@@ -502,7 +642,7 @@ export default function ShippingPage() {
             </div>
 
             {/* Member Section: Save Address Option */}
-            {isLoggedIn && !usePrimary && (
+            {isLoggedIn && !usingSavedAddress && (
               <div style={{ marginTop: "8px" }}>
                 <label className="checkbox-container">
                   <input
@@ -512,7 +652,7 @@ export default function ShippingPage() {
                     onChange={(e) => setSetAsPrimary(e.target.checked)}
                   />
                   <span className="checkbox-custom"></span>
-                  Set as primary address
+                  Set this as my primary shipping address
                 </label>
               </div>
             )}
@@ -594,12 +734,14 @@ export default function ShippingPage() {
             </div>
 
             {/* Proceed to Payment Button */}
-            <div className="submit-btn-container" style={{ marginTop: "24px" }}>
+            <div className="submit-btn-container checkout-actions" style={{ marginTop: "24px" }}>
+              <button type="button" className="checkout-back-btn" onClick={() => router.push("/checkout")}>
+                Back
+              </button>
               <button
                 type="button"
                 disabled={isSubmitting || !district}
                 className="submit-btn"
-                style={{ width: "100%", justifyContent: "center" }}
                 onClick={handleSubmit}
               >
                 {isSubmitting ? (

@@ -46,12 +46,15 @@ before querying it via Prisma.
 - **`cart_item`** — `cart_item_id` (PK), `cart_id` (FK), `variant_id` (FK → `product_variant`), `quantity` (default 1)
 - **`orders`** — `order_id` (PK), `customer_id` (FK, nullable), `employee_id` (FK, nullable), `branch_id` (FK, nullable), `order_date`, `total_amount`, `payment_method`, `shipping_address`, `order_status` (CHECK enum: `Draft`, `Pending Payment`, `Pending Verification`, `Ready to Process`, `Claimed by Employee`, `Preparing`, `Ready`, `Sent for Delivery`, `Completed`, `Cancelled`, `Rejected`, `Expired`; default `'pending'` — note the default is not itself a valid enum value), `product_total` (default 0), `delivery_fee` (default 0), `cod_amount` (default 0)
 - **`order_item`** — `order_item_id` (PK), `order_id` (FK), `variant_id` (FK → `product_variant`), `quantity`, `unit_price`, `subtotal`
-- **`order_customer_details`** — `detail_id` (PK), `order_id` (FK, unique — 1:1), `first_name`, `last_name`, `email`, `phone`, `customer_type` (CHECK: `registered` | `guest`)
-- **`order_shipping_details`** — `shipping_id` (PK), `order_id` (FK, unique — 1:1), `receiver_name`, `phone`, `address_line_1`, `address_line_2`, `city`, `district`, `postal_code`, `delivery_note`
+- **`order_customer_details`** — `detail_id` (PK), `order_id` (FK, unique — 1:1), `customer_id` (uuid, nullable — null for guests; plain column, deliberately no FK so the snapshot never depends on profile tables), `first_name`, `last_name`, `email`, `phone`, `customer_type` (CHECK: `registered` | `guest`), `created_at`
+  - **Immutable checkout snapshot** — written once inside the order transaction, never updated when the customer later edits their profile. Order history/admin views must read this, not `customer`.
+- **`order_shipping_details`** — `shipping_id` (PK), `order_id` (FK, unique — 1:1), `receiver_name`, `phone`, `address_line_1`, `address_line_2`, `city`, `district`, `postal_code`, `delivery_note`, `created_at`
+  - **Immutable checkout snapshot** — the selected address (saved or newly entered) is copied here at checkout; never read `user_addresses` for historical orders.
 - **`payment_proofs`** — `proof_id` (PK), `order_id` (FK), `receipt_url`, `uploaded_at`, `expires_at` (not null), `status` (CHECK: `Pending Upload`, `Pending Verification`, `Approved`, `Rejected`, `Expired`; default `'Pending Upload'`), `admin_notes`
 - **`delivery`** — `delivery_id` (PK), `order_id` (FK), `assigned_employee_id` (FK → `employee`), `delivery_status` (default `'pending'`), `delivered_at`
 - **`delivery_fee_rules`** — `rule_id` (PK), `district` (unique, not null), `fee_amount`
-- **`user_addresses`** — `address_id` (PK), `customer_id` (FK, not null), `receiver_name`, `phone`, `address_line_1`, `address_line_2`, `city`, `district`, `postal_code`, `is_primary` (default false)
+- **`user_addresses`** — `address_id` (PK), `customer_id` (FK, not null), `receiver_name`, `phone`, `address_line_1`, `address_line_2`, `city`, `district`, `postal_code`, `is_primary` (default false), `created_at`, `updated_at`
+  - Saved address book for **registered customers only** — guest checkout addresses are never inserted here. A partial unique index (`user_addresses_one_primary_per_customer`, see `user-addresses.sql`) enforces at most one `is_primary = true` row per customer.
 - **`notification`** — `notification_id` (PK), `customer_id` (FK, nullable), `order_id` (FK, nullable), `message`, `type`, `sent_at`, `status` (default `'sent'`)
 
 ## Procurement

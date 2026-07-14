@@ -4,10 +4,23 @@ import { useState, useMemo, useRef, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import ProductCard from "@/components/ProductCard/ProductCard";
-import { useProducts } from "@/hooks/useProducts";
+import { useProductsState } from "@/hooks/useProducts";
+
+function CollectionLoader() {
+  return (
+    <div className="product-detail-loading" role="status" aria-live="polite">
+      <div className="product-loading-mark" aria-hidden="true">
+        <span className="product-loading-ring" />
+        <span className="product-loading-v">V</span>
+      </div>
+      <p className="product-loading-title">CURATING THE COLLECTION</p>
+      <p className="product-loading-copy">Loading the latest products...</p>
+    </div>
+  );
+}
 
 function CollectionContent() {
-  const products = useProducts();
+  const { products, isLoading } = useProductsState();
   const searchParams = useSearchParams();
   const router = useRouter();
   const searchQuery = searchParams.get("search") || "";
@@ -267,6 +280,8 @@ function CollectionContent() {
     selectedPriceRanges.length > 0 ||
     selectedAvailability.length > 0 ||
     !!searchQuery;
+
+  if (isLoading) return <CollectionLoader />;
 
   return (
     <main className="collection-page-container">
@@ -684,11 +699,7 @@ function CollectionContent() {
 
 export default function CollectionPage() {
   return (
-    <Suspense fallback={
-      <div className="collection-page-wrapper" style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "50vh" }}>
-        <span style={{ fontSize: "1.2rem", color: "#8e8e93", letterSpacing: "0.1em" }}>LOADING COLLECTION...</span>
-      </div>
-    }>
+    <Suspense fallback={<CollectionLoader />}>
       <CollectionContent />
     </Suspense>
   );

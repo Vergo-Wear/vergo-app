@@ -165,10 +165,10 @@ export default function RegisterPage() {
           displayName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0].toUpperCase() || "Vergo User";
         }
 
-        localStorage.setItem("vergo_is_logged_in", "true");
-        localStorage.setItem("vergo_access_token", session.access_token);
-        localStorage.setItem("vergo_refresh_token", session.refresh_token || "");
-        localStorage.setItem("vergo_user", JSON.stringify({
+        sessionStorage.setItem("vergo_is_logged_in", "true");
+        sessionStorage.setItem("vergo_access_token", session.access_token);
+        sessionStorage.setItem("vergo_refresh_token", session.refresh_token || "");
+        sessionStorage.setItem("vergo_user", JSON.stringify({
           id: session.user.id,
           name: displayName,
           email: session.user.email,
@@ -258,10 +258,10 @@ export default function RegisterPage() {
         throw new Error(data.message || "Failed to complete profile.");
       }
 
-      localStorage.setItem("vergo_is_logged_in", "true");
-      localStorage.setItem("vergo_access_token", oauthSession.access_token);
-      localStorage.setItem("vergo_refresh_token", oauthSession.refresh_token || "");
-      localStorage.setItem("vergo_user", JSON.stringify({
+      sessionStorage.setItem("vergo_is_logged_in", "true");
+      sessionStorage.setItem("vergo_access_token", oauthSession.access_token);
+      sessionStorage.setItem("vergo_refresh_token", oauthSession.refresh_token || "");
+      sessionStorage.setItem("vergo_user", JSON.stringify({
         id: oauthSession.user.id,
         name: displayName,
         email: oauthSession.user.email,
@@ -394,12 +394,12 @@ export default function RegisterPage() {
       }
 
       // 3. Store tokens and profile information in localStorage
-      localStorage.setItem("vergo_is_logged_in", "true");
-      localStorage.setItem("vergo_access_token", signinData.accessToken);
-      localStorage.setItem("vergo_refresh_token", signinData.refreshToken);
+      sessionStorage.setItem("vergo_is_logged_in", "true");
+      sessionStorage.setItem("vergo_access_token", signinData.accessToken);
+      sessionStorage.setItem("vergo_refresh_token", signinData.refreshToken);
       const profileRes = await fetch(`${apiUrl}/customers/profile/${signinData.user.id}`);
       const databaseProfile = profileRes.ok ? await profileRes.json() : {};
-      localStorage.setItem(
+      sessionStorage.setItem(
         "vergo_user",
         JSON.stringify({
           id: signinData.user.id,

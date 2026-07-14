@@ -22,6 +22,8 @@ export function createSupabaseClient(): SupabaseClient | null {
         detectSessionInUrl: false,
         persistSession: true,
         autoRefreshToken: true,
+        storage:
+          typeof window !== "undefined" ? window.sessionStorage : undefined,
       },
     });
   }

@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
+import { hasCompletedContact, hasCompletedShipping } from "@/lib/checkout-progress";
+import { useGuestCheckoutGuard } from "@/hooks/useGuestCheckoutGuard";
 import "@/styles/checkout.css";
 
 interface ContactInfo {
@@ -23,6 +25,9 @@ interface ShippingInfo {
   postalCode?: string;
   deliveryNote?: string;
   deliveryFee?: number;
+  savedAddressId?: string;
+  saveAddress?: boolean;
+  setAsPrimary?: boolean;
 }
 
 interface UserProfile {
@@ -32,7 +37,16 @@ interface UserProfile {
 
 export default function PaymentPage() {
   const router = useRouter();
-  const { cart, cartSubtotal, clearCart, formatLkr } = useCart();
+
+  useEffect(() => {
+    if (!hasCompletedContact()) {
+      router.replace("/checkout");
+    } else if (!hasCompletedShipping()) {
+      router.replace("/checkout/shipping");
+    }
+  }, [router]);
+  const { cart, cartSubtotal, clearCart, formatLkr, isLoaded: isCartLoaded } = useCart();
+  useGuestCheckoutGuard(cart.length, isCartLoaded);
 
   // Local storage details
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
@@ -50,13 +64,13 @@ export default function PaymentPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const forcedGuest = localStorage.getItem("vergo_checkout_as_guest") === "true";
-      const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true" && !forcedGuest;
+      const loggedIn = sessionStorage.getItem("vergo_is_logged_in") === "true" && !forcedGuest;
       setIsLoggedIn(loggedIn);
       setPaymentMethod(loggedIn ? "bank_transfer" : "cod");
 
       const storedContact = localStorage.getItem("vergo_checkout_contact");
       const storedShipping = localStorage.getItem("vergo_checkout_shipping");
-      const storedUser = localStorage.getItem("vergo_user");
+      const storedUser = sessionStorage.getItem("vergo_user");
 
       if (storedUser) {
         try {
@@ -106,6 +120,17 @@ export default function PaymentPage() {
         postalCode: shippingInfo?.postalCode || "",
         deliveryNote: shippingInfo?.deliveryNote || "",
       },
+      // Saved-address handling (registered customers only; guests never
+      // send these, so guest addresses are never persisted)
+      ...(isLoggedIn && shippingInfo?.savedAddressId
+        ? { savedAddressId: shippingInfo.savedAddressId }
+        : {}),
+      ...(isLoggedIn && !shippingInfo?.savedAddressId
+        ? {
+            saveAddress: shippingInfo?.saveAddress ?? false,
+            setAsPrimary: shippingInfo?.setAsPrimary ?? false,
+          }
+        : {}),
       items: itemsToDisplay.map((item) => ({
         variantId: item.product.variants.find(
           (variant) =>
@@ -122,7 +147,7 @@ export default function PaymentPage() {
         setSubmitError("A selected product option is no longer available. Please update your cart.");
         return;
       }
-      const token = isLoggedIn ? localStorage.getItem("vergo_access_token") : null;
+      const token = isLoggedIn ? sessionStorage.getItem("vergo_access_token") : null;
       const response = await fetch(`${apiUrl}/orders`, {
         method: "POST",
         headers: {
@@ -172,20 +197,20 @@ export default function PaymentPage() {
     <div className="checkout-wrapper">
       {/* Progress Steps */}
       <div className="checkout-progress">
-        <div className="step-item completed-step">
+        <button type="button" className="step-item completed-step" onClick={() => router.push("/checkout")}>
           <span className="step-circle">1</span>
           <span className="step-label">Details</span>
-        </div>
+        </button>
         <div className="progress-line"></div>
-        <div className="step-item completed-step">
+        <button type="button" className="step-item completed-step" onClick={() => router.push("/checkout/shipping")}>
           <span className="step-circle">2</span>
           <span className="step-label">Shipping</span>
-        </div>
+        </button>
         <div className="progress-line"></div>
-        <div className="step-item active-green">
+        <button type="button" className="step-item active-green" onClick={() => router.push("/checkout/payment")} aria-current="step">
           <span className="step-circle">3</span>
           <span className="step-label">Payment</span>
-        </div>
+        </button>
       </div>
 
       {/* Main Container */}
@@ -453,12 +478,14 @@ export default function PaymentPage() {
             )}
 
             {/* Place Order Button */}
-            <div className="submit-btn-container" style={{ marginTop: "24px" }}>
+            <div className="submit-btn-container checkout-actions" style={{ marginTop: "24px" }}>
+              <button type="button" className="checkout-back-btn" onClick={() => router.push("/checkout/shipping")}>
+                Back
+              </button>
               <button
                 type="button"
                 disabled={isSubmitting}
                 className="submit-btn"
-                style={{ width: "100%", justifyContent: "center" }}
                 onClick={handlePlaceOrder}
               >
                 {isSubmitting ? "Processing..." : "Place Order"}

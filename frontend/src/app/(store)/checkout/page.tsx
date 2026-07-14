@@ -4,11 +4,22 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
+import { hasCompletedContact, hasCompletedShipping } from "@/lib/checkout-progress";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { useGuestCheckoutGuard } from "@/hooks/useGuestCheckoutGuard";
 import "@/styles/checkout.css";
+
+interface CustomerProfile {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cart, cartSubtotal, formatLkr } = useCart();
+  const { cart, cartSubtotal, formatLkr, isLoaded: isCartLoaded } = useCart();
+  useGuestCheckoutGuard(cart.length, isCartLoaded);
 
   // Form states
   const [firstName, setFirstName] = useState("");
@@ -19,26 +30,45 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
+  const [contactComplete, setContactComplete] = useState(false);
+  const [shippingComplete, setShippingComplete] = useState(false);
 
-  // Pre-fill user information if logged in
+  // Pre-fill from cached auth data immediately, then refresh from the
+  // customer record because OAuth login data does not always include a phone.
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedUserStr = localStorage.getItem("vergo_user");
-      const storedLoggedIn = localStorage.getItem("vergo_is_logged_in");
-      if (storedLoggedIn === "true" && storedUserStr) {
-        try {
-          const user = JSON.parse(storedUserStr);
-          if (user.email) setEmail(user.email);
-          if (user.name) {
-            const parts = user.name.split(" ");
-            setFirstName(parts[0] || "");
-            setLastName(parts.slice(1).join(" ") || "");
-          }
-        } catch (e) {
-          console.error("Error pre-filling user details:", e);
+    setContactComplete(hasCompletedContact());
+    setShippingComplete(hasCompletedShipping());
+    if (sessionStorage.getItem("vergo_is_logged_in") !== "true") return;
+
+    const storedUserStr = sessionStorage.getItem("vergo_user");
+    if (storedUserStr) {
+      try {
+        const user = JSON.parse(storedUserStr);
+        if (user.email) setEmail(user.email);
+        if (user.phone) setPhone(user.phone);
+        if (user.name) {
+          const parts = user.name.trim().split(/\s+/);
+          setFirstName(parts[0] || "");
+          setLastName(parts.slice(1).join(" ") || "");
         }
+      } catch (e) {
+        console.error("Error pre-filling cached user details:", e);
       }
     }
+
+    void authenticatedFetch("/customers/me", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response?.ok) return null;
+        return response.json() as Promise<CustomerProfile>;
+      })
+      .then((profile) => {
+        if (!profile) return;
+        setFirstName(profile.firstName || "");
+        setLastName(profile.lastName || "");
+        setEmail(profile.email || "");
+        setPhone(profile.phone || "");
+      })
+      .catch(() => undefined);
   }, []);
 
   // Helper to parse LKR price string to number, e.g. "LKR 36,500.00" -> 36500
@@ -52,37 +82,61 @@ export default function CheckoutPage() {
   const itemsToDisplay = cart;
   const subtotalLkr = cartSubtotal;
 
+  const validateContactField = (field: string, value: string) => {
+    const trimmed = value.trim();
+    if (field === "firstName") {
+      if (!trimmed) return "First Name is required.";
+      if (trimmed.length < 2) return "First Name must be at least 2 characters.";
+      if (!/^[A-Za-z\s]+$/.test(trimmed)) return "First Name can only contain letters and spaces.";
+    }
+    if (field === "lastName") {
+      if (!trimmed) return "Last Name is required.";
+      if (!/^[A-Za-z\s]+$/.test(trimmed)) return "Last Name can only contain letters and spaces.";
+    }
+    if (field === "email") {
+      if (!trimmed) return "Email is required.";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return "Invalid email address.";
+    }
+    if (field === "phone") {
+      const cleanPhone = value.replace(/[\s-()]/g, "");
+      if (!trimmed) return "Mobile number is required.";
+      if (!/^(?:\+94|0)?7[0-9]{8}$/.test(cleanPhone)) {
+        return "Invalid Sri Lankan mobile number (e.g. 0771234567).";
+      }
+    }
+    return "";
+  };
+
   const handleInputChange = (field: string, value: string) => {
     if (field === "firstName") setFirstName(value);
     if (field === "lastName") setLastName(value);
     if (field === "email") setEmail(value);
     if (field === "phone") setPhone(value);
 
-    if (errors[field]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    }
+    setErrors((prev) => ({
+      ...prev,
+      [field]: value.trim().length > 1 ? validateContactField(field, value) : "",
+    }));
   };
 
   const handleContinueAsGuest = () => {
     setShowPopup(false);
-    localStorage.setItem("vergo_is_logged_in", "false");
+    sessionStorage.setItem("vergo_is_logged_in", "false");
     localStorage.setItem("vergo_checkout_as_guest", "true");
     proceedWithSubmission();
   };
 
   const proceedWithSubmission = () => {
     setIsSubmitting(true);
+    const normalizedPhone = phone.replace(/[\s-()]/g, "");
     localStorage.setItem(
       "vergo_checkout_contact",
-      JSON.stringify({ firstName, lastName, email, phone })
+      JSON.stringify({ firstName, lastName, email, phone: normalizedPhone })
     );
+    setContactComplete(true);
 
-    if (localStorage.getItem("vergo_is_logged_in") !== "true") {
-      localStorage.setItem("vergo_is_logged_in", "false");
+    if (sessionStorage.getItem("vergo_is_logged_in") !== "true") {
+      sessionStorage.setItem("vergo_is_logged_in", "false");
     } else {
       localStorage.removeItem("vergo_checkout_as_guest");
     }
@@ -100,50 +154,14 @@ export default function CheckoutPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
-    const newErrors: Record<string, string> = {};
-    const nameRegex = /^[a-zA-Z\s\-'\.]+$/;
+    const newErrors: Record<string, string> = {
+      firstName: validateContactField("firstName", firstName),
+      lastName: validateContactField("lastName", lastName),
+      email: validateContactField("email", email),
+      phone: validateContactField("phone", phone),
+    };
 
-    // First Name validation
-    if (!firstName.trim()) {
-      newErrors.firstName = "First name is required";
-    } else if (firstName.trim().length < 2) {
-      newErrors.firstName = "First name must be at least 2 characters";
-    } else if (firstName.trim().length > 50) {
-      newErrors.firstName = "First name cannot exceed 50 characters";
-    } else if (!nameRegex.test(firstName.trim())) {
-      newErrors.firstName = "First name must contain only letters and standard name characters";
-    }
-
-    // Last Name validation
-    if (!lastName.trim()) {
-      newErrors.lastName = "Last name is required";
-    } else if (lastName.trim().length < 2) {
-      newErrors.lastName = "Last name must be at least 2 characters";
-    } else if (lastName.trim().length > 50) {
-      newErrors.lastName = "Last name cannot exceed 50 characters";
-    } else if (!nameRegex.test(lastName.trim())) {
-      newErrors.lastName = "Last name must contain only letters and standard name characters";
-    }
-
-    // Email validation
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!email.trim()) {
-      newErrors.email = "Email address is required";
-    } else if (!emailRegex.test(email.trim())) {
-      newErrors.email = "Please enter a valid email address";
-    }
-
-    // Phone validation
-    const phoneRegex = /^\+?[0-9\s\-()]+$/;
-    const cleanPhoneDigits = phone.replace(/\D/g, "");
-    if (!phone.trim()) {
-      newErrors.phone = "Phone number is required";
-    } else if (!phoneRegex.test(phone.trim()) || cleanPhoneDigits.length < 9 || cleanPhoneDigits.length > 15) {
-      newErrors.phone = "Please enter a valid phone number (9 to 15 digits)";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
+    if (Object.values(newErrors).some(Boolean)) {
       setErrors(newErrors);
       return;
     }
@@ -151,7 +169,7 @@ export default function CheckoutPage() {
     setErrors({});
 
     // If the customer is already logged in, do not check email/phone existence or show popup.
-    if (localStorage.getItem("vergo_is_logged_in") === "true") {
+    if (sessionStorage.getItem("vergo_is_logged_in") === "true") {
       proceedWithSubmission();
       return;
     }
@@ -165,11 +183,32 @@ export default function CheckoutPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, phone }),
+        body: JSON.stringify({ email, phone: phone.replace(/[\s-()]/g, "") }),
       });
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        if (response.status === 400) {
+          const validation = (await response.json().catch(() => null)) as {
+            message?: string | string[];
+          } | null;
+          const messages = Array.isArray(validation?.message)
+            ? validation.message
+            : validation?.message
+              ? [validation.message]
+              : [];
+          const phoneMessage = messages.find((message) =>
+            message.toLowerCase().includes("phone"),
+          );
+          setErrors((current) => ({
+            ...current,
+            phone:
+              phoneMessage ||
+              "Enter a valid 10-digit Sri Lankan mobile number (e.g. 0715423156).",
+          }));
+          setIsSubmitting(false);
+          return;
+        }
+        throw new Error(`Contact check failed with status ${response.status}.`);
       }
 
       const { emailExists, phoneExists } = await response.json();
@@ -195,20 +234,20 @@ export default function CheckoutPage() {
     <div className="checkout-wrapper">
       {/* Progress Steps */}
       <div className="checkout-progress">
-        <div className="step-item active">
+        <button type="button" className="step-item active-green" onClick={() => router.push("/checkout")} aria-current="step">
           <span className="step-circle">1</span>
           <span className="step-label">Details</span>
-        </div>
+        </button>
         <div className="progress-line"></div>
-        <div className="step-item">
+        <button type="button" className="step-item" disabled={!contactComplete} onClick={() => router.push("/checkout/shipping")}>
           <span className="step-circle">2</span>
           <span className="step-label">Shipping</span>
-        </div>
+        </button>
         <div className="progress-line"></div>
-        <div className="step-item">
+        <button type="button" className="step-item" disabled={!contactComplete || !shippingComplete} onClick={() => router.push("/checkout/payment")}>
           <span className="step-circle">3</span>
           <span className="step-label">Payment</span>
-        </div>
+        </button>
       </div>
 
       {/* Main Container */}
@@ -230,8 +269,9 @@ export default function CheckoutPage() {
                 <input
                   id="firstName"
                   type="text"
-                  placeholder="e.g. Julian"
+                  placeholder="e.g. Nimal"
                   className={`form-input ${errors.firstName ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.firstName)}
                   value={firstName}
                   onChange={(e) => handleInputChange("firstName", e.target.value)}
                 />
@@ -247,8 +287,9 @@ export default function CheckoutPage() {
                 <input
                   id="lastName"
                   type="text"
-                  placeholder="e.g. Verso"
+                  placeholder="e.g. Perera"
                   className={`form-input ${errors.lastName ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.lastName)}
                   value={lastName}
                   onChange={(e) => handleInputChange("lastName", e.target.value)}
                 />
@@ -267,8 +308,9 @@ export default function CheckoutPage() {
                 <input
                   id="email"
                   type="email"
-                  placeholder="name@domain.com"
+                  placeholder="e.g. nimal.perera@gmail.com"
                   className={`form-input form-input-email ${errors.email ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.email)}
                   value={email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
                 />
@@ -300,8 +342,9 @@ export default function CheckoutPage() {
               <input
                 id="phone"
                 type="tel"
-                placeholder="+1 (555) 000-0000"
+                placeholder="e.g. 0771234567"
                 className={`form-input ${errors.phone ? "input-error" : ""}`}
+                aria-invalid={Boolean(errors.phone)}
                 value={phone}
                 onChange={(e) => handleInputChange("phone", e.target.value)}
               />
@@ -309,7 +352,10 @@ export default function CheckoutPage() {
             </div>
 
             {/* Continue Button */}
-            <div className="submit-btn-container">
+            <div className="submit-btn-container checkout-actions">
+              <button type="button" className="checkout-back-btn" onClick={() => router.push("/cart")}>
+                Back to Cart
+              </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
@@ -532,7 +578,7 @@ export default function CheckoutPage() {
                 type="button"
                 className="exist-customer-primary-btn"
                 onClick={() => {
-                  localStorage.setItem("vergo_login_prefill", email);
+                  sessionStorage.setItem("vergo_login_prefill", email);
                   localStorage.removeItem("vergo_checkout_as_guest");
                   router.push("/auth/login");
                 }}

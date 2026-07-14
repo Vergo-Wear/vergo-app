@@ -270,7 +270,7 @@ export default function ProductFeedback({ productId, autoOpenForm }: ProductFeed
       return;
     }
 
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
     if (!token) {
       setFormError("Please sign in as a customer to submit a review.");
       return;
