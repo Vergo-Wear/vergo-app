@@ -193,6 +193,17 @@ export default function PaymentPage() {
   const deliveryFee = shippingInfo?.deliveryFee || 0;
   const grandTotalLkr = subtotalLkr + deliveryFee;
 
+  if (orderId && paymentMethod === "bank_transfer" && isLoggedIn) {
+    return (
+      <BankTransferFlow
+        orderId={orderId}
+        grandTotalLkr={grandTotalLkr}
+        formatLkr={formatLkr}
+        onClose={handleFinishCheckout}
+      />
+    );
+  }
+
   return (
     <div className="checkout-wrapper">
       {/* Progress Steps */}
@@ -534,6 +545,772 @@ export default function PaymentPage() {
                 Back to Homepage
               </button>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface BankTransferFlowProps {
+  orderId: string;
+  grandTotalLkr: number;
+  formatLkr: (val: number) => string;
+  onClose: () => void;
+}
+
+function BankTransferFlow({
+  orderId,
+  grandTotalLkr,
+  formatLkr,
+  onClose,
+}: BankTransferFlowProps) {
+  const [step, setStep] = useState(1);
+  const [timeLeft, setTimeLeft] = useState(14400); // 4 hours in seconds
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // File states
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+
+  // Cancellation states
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelSuccess, setCancelSuccess] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const copyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    if (e.dataTransfer.files) {
+      if (e.dataTransfer.files.length > 1) {
+        setUploadError("Only one receipt file can be uploaded.");
+        setSelectedFile(null);
+        return;
+      }
+      if (e.dataTransfer.files[0]) {
+        validateAndSetFile(e.dataTransfer.files[0]);
+      }
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadError(null);
+    setUploadSuccess(null);
+    if (e.target.files) {
+      if (e.target.files.length > 1) {
+        setUploadError("Only one receipt file can be uploaded.");
+        setSelectedFile(null);
+        return;
+      }
+      if (e.target.files[0]) {
+        validateAndSetFile(e.target.files[0]);
+      }
+    }
+  };
+
+  const validateAndSetFile = (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("File size exceeds 5MB limit.");
+      setSelectedFile(null);
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const isAllowedExt = ["jpg", "jpeg", "png", "pdf"].includes(fileExtension || "");
+    
+    if (!allowedTypes.includes(file.type) && !isAllowedExt) {
+      setUploadError("Format rejected. Please choose a JPG, PNG, or PDF.");
+      setSelectedFile(null);
+      return;
+    }
+
+    setSelectedFile(file);
+  };
+
+  const handleUploadSubmit = async () => {
+    if (!selectedFile) return;
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const token = sessionStorage.getItem("vergo_access_token");
+
+    try {
+      const res = await fetch(`${apiUrl}/orders/${orderId}/payment-proof`, {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Proof receipt upload failed.");
+      }
+
+      setUploadSuccess("Bank transfer receipt submitted successfully. Awaiting verification.");
+      setSelectedFile(null);
+    } catch (err: any) {
+      setUploadError(err.message || "Upload failed. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!confirm("Are you sure you want to cancel this order?")) return;
+    setIsCancelling(true);
+    setCancelError(null);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const token = sessionStorage.getItem("vergo_access_token");
+
+    try {
+      const res = await fetch(`${apiUrl}/orders/mine/${orderId}/cancel`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Cancellation failed.");
+      }
+
+      setCancelSuccess(true);
+    } catch (err: any) {
+      setCancelError(err.message || "Cancellation failed. Please contact support.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  if (cancelSuccess) {
+    return (
+      <div 
+        className="bank-transfer-container" 
+        style={{
+          maxWidth: "600px",
+          margin: "80px auto",
+          backgroundColor: "#0d0d0e",
+          borderRadius: "12px",
+          border: "1px solid rgba(255,255,255,0.05)",
+          padding: "40px",
+          textAlign: "center"
+        }}
+      >
+        <div style={{ color: "#EA4335", marginBottom: "24px", display: "flex", justifyContent: "center" }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+        </div>
+        <h2 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "16px", letterSpacing: "0.02em" }}>Order Cancelled</h2>
+        <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", marginBottom: "32px", lineHeight: "1.6" }}>
+          Your order has been successfully cancelled and the reserved stock has been released.
+        </p>
+        <button onClick={onClose} className="bt-btn-primary" style={{ maxWidth: "240px", margin: "0 auto" }}>
+          Return to Homepage
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bank-transfer-container" style={{ maxWidth: "680px", width: "100%", margin: "64px auto", padding: "0 24px" }}>
+      <style>{`
+        .bt-card {
+          background-color: #0d0d0e;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 24px;
+        }
+        .bt-detail-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 14px 0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .bt-detail-row:last-child {
+          border-bottom: none;
+        }
+        .bt-detail-label {
+          font-size: 13px;
+          color: rgba(255, 255, 255, 0.4);
+          font-weight: 500;
+        }
+        .bt-detail-value {
+          font-size: 14px;
+          color: #ffffff;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .bt-copy-btn {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          color: rgba(255, 255, 255, 0.3);
+          padding: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+          transition: all 0.2s ease;
+        }
+        .bt-copy-btn:hover {
+          color: #00FF9D;
+          background-color: rgba(0, 255, 157, 0.05);
+        }
+        .bt-btn-primary {
+          width: 100%;
+          background-color: #00FF9D;
+          color: #000000;
+          border: none;
+          border-radius: 8px;
+          padding: 16px;
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          box-shadow: 0 4px 20px rgba(0, 255, 157, 0.15);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .bt-btn-primary:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 24px rgba(0, 255, 157, 0.25);
+          background-color: #00e58c;
+        }
+        .bt-btn-primary:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+        .bt-btn-secondary {
+          width: 100%;
+          background-color: transparent;
+          color: #ffffff;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
+          padding: 16px;
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        .bt-btn-secondary:hover:not(:disabled) {
+          border-color: #ffffff;
+          background-color: rgba(255, 255, 255, 0.02);
+        }
+        .bt-dropzone {
+          border: 1.5px dashed rgba(255, 255, 255, 0.15);
+          background-color: #050506;
+          border-radius: 12px;
+          padding: 40px 24px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          margin-top: 8px;
+        }
+        .bt-dropzone:hover {
+          border-color: #00FF9D;
+          background-color: rgba(0, 255, 157, 0.01);
+        }
+        .bt-dropzone.active {
+          border-color: #00FF9D;
+          background-color: rgba(0, 255, 157, 0.03);
+        }
+      `}</style>
+
+      {step === 1 ? (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {/* Hourglass Icon */}
+          <div 
+            style={{
+              width: "72px",
+              height: "72px",
+              borderRadius: "50%",
+              border: "1.5px solid #00FF9D",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 24px auto",
+              color: "#00FF9D",
+              boxShadow: "0 0 20px rgba(0, 255, 157, 0.1)"
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32">
+              <path d="M5 2h14" />
+              <path d="M5 22h14" />
+              <path d="M19 2v4c0 4-4 6-4 6s4 2 4 6v4" />
+              <path d="M5 2v4c0 4 4 6 4 6s-4 2-4 6v4" />
+            </svg>
+          </div>
+
+          {/* Title and description */}
+          <h1 style={{ fontSize: "32px", fontWeight: "800", textTransform: "uppercase", textAlign: "center", letterSpacing: "0.05em", marginBottom: "8px", fontFamily: "'Oswald', sans-serif", color: "#ffffff" }}>
+            Order Placed
+          </h1>
+          <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.6)", textAlign: "center", marginBottom: "32px", lineHeight: "1.5" }}>
+            Your order <strong>#{orderId}</strong> is currently pending bank transfer verification.
+          </p>
+
+          {/* Time remaining countdown banner */}
+          <div 
+            className="bt-card" 
+            style={{
+              borderTop: "3px solid #00FF9D",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "32px",
+              padding: "24px 32px"
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "12px", fontWeight: "800", color: "#00FF9D", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>
+                Time remaining to upload proof
+              </div>
+              <div style={{ fontSize: "36px", fontWeight: "700", color: "#ffffff", fontFamily: "monospace" }}>
+                {formatTime(timeLeft)}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="36" height="36">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Details split columns */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "24px", marginBottom: "32px" }}>
+            <div className="bt-card">
+              <div style={{ fontSize: "13px", fontWeight: "800", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                </svg>
+                Bank Details
+              </div>
+              
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Bank Name</span>
+                <span className="bt-detail-value">VERGO SL - CENTRAL BANK</span>
+              </div>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Account No.</span>
+                <span className="bt-detail-value">
+                  1234 - 5678 - 9012
+                  <button className="bt-copy-btn" onClick={() => copyToClipboard("1234-5678-9012", "acc")}>
+                    {copiedField === "acc" ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                </span>
+              </div>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Reference</span>
+                <span className="bt-detail-value">
+                  {orderId}
+                  <button className="bt-copy-btn" onClick={() => copyToClipboard(orderId, "ref")}>
+                    {copiedField === "ref" ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                </span>
+              </div>
+
+              <button 
+                type="button" 
+                style={{ 
+                  background: "transparent", 
+                  border: "none", 
+                  color: "#00FF9D", 
+                  fontSize: "13px", 
+                  fontWeight: "700", 
+                  textTransform: "uppercase", 
+                  letterSpacing: "0.05em", 
+                  cursor: "pointer", 
+                  padding: "0", 
+                  marginTop: "16px" 
+                }}
+                onClick={() => {
+                  copyToClipboard("Bank: VERGO SL - CENTRAL BANK\nAccount: 1234-5678-9012\nReference: " + orderId, "all");
+                  alert("Account details copied to clipboard!");
+                }}
+              >
+                Copy Account Details
+              </button>
+            </div>
+
+            <div className="bt-card" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <div style={{ fontSize: "13px", fontWeight: "800", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "16px" }}>
+                Transfer Amount
+              </div>
+              <div style={{ fontSize: "32px", fontWeight: "800", color: "#ffffff", marginBottom: "4px" }}>
+                {formatLkr(grandTotalLkr)}
+              </div>
+              <div style={{ fontSize: "12px", fontWeight: "700", color: "rgba(255,255,255,0.3)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                Total includes tax & shipping
+              </div>
+            </div>
+          </div>
+
+          {cancelError && (
+            <div style={{ color: "#EA4335", backgroundColor: "rgba(234, 67, 53, 0.08)", border: "1px solid rgba(234, 67, 53, 0.2)", padding: "12px", borderRadius: "8px", fontSize: "12px", marginBottom: "20px", textAlign: "center" }}>
+              ⚠️ {cancelError}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <button 
+              type="button" 
+              className="bt-btn-primary" 
+              onClick={() => setStep(2)}
+              style={{ padding: "18px" }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Upload Payment Proof
+            </button>
+            <button 
+              type="button" 
+              className="bt-btn-secondary" 
+              disabled={isCancelling}
+              onClick={handleCancelOrder}
+              style={{ padding: "18px" }}
+            >
+              {isCancelling ? "Cancelling Order..." : "Cancel Order"}
+            </button>
+          </div>
+
+          <div style={{ textAlign: "center", marginTop: "32px", fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+            Having trouble? <a href="/about" style={{ color: "#00FF9D", textDecoration: "underline" }}>Contact Support</a>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {/* Hourglass Icon */}
+          <div 
+            style={{
+              width: "72px",
+              height: "72px",
+              borderRadius: "50%",
+              border: "1.5px solid #00FF9D",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 24px auto",
+              color: "#00FF9D",
+              boxShadow: "0 0 20px rgba(0, 255, 157, 0.1)"
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32">
+              <path d="M5 2h14" />
+              <path d="M5 22h14" />
+              <path d="M19 2v4c0 4-4 6-4 6s4 2 4 6v4" />
+              <path d="M5 2v4c0 4 4 6 4 6s-4 2-4 6v4" />
+            </svg>
+          </div>
+
+          <h1 style={{ fontSize: "32px", fontWeight: "800", textTransform: "uppercase", textAlign: "center", letterSpacing: "0.05em", marginBottom: "8px", fontFamily: "'Oswald', sans-serif", color: "#ffffff" }}>
+            Pending Bank Transfer
+          </h1>
+          <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.6)", textAlign: "center", marginBottom: "32px", lineHeight: "1.5" }}>
+            Your order <strong>#{orderId}</strong> is on hold. Please complete the bank transfer within 4 hours to secure your items.
+          </p>
+
+          {/* Time Window Notice */}
+          <div 
+            style={{
+              backgroundColor: "rgba(241, 196, 15, 0.08)",
+              border: "1px solid rgba(241, 196, 15, 0.25)",
+              borderRadius: "8px",
+              padding: "16px",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "12px",
+              marginBottom: "32px"
+            }}
+          >
+            <div style={{ color: "#F1C40F", marginTop: "2px", display: "flex", alignItems: "center" }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </div>
+            <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.8)", margin: "0", lineHeight: "1.5", fontWeight: "500" }}>
+              Stock is only held for a limited 4-hour window. Orders without proof of payment after this period will be automatically cancelled.
+            </p>
+          </div>
+
+          {/* Next Steps card */}
+          <div className="bt-card" style={{ marginBottom: "32px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "12px", marginBottom: "16px" }}>
+              <span style={{ fontSize: "14px", fontWeight: "800", color: "#00FF9D", letterSpacing: "0.1em" }}>NEXT STEPS</span>
+              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", fontWeight: "700" }}>Step 1 of 2</span>
+            </div>
+            <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", margin: "0 0 20px 0", lineHeight: "1.6" }}>
+              Please transfer the total amount to the following bank account and upload a clear screenshot of the transaction receipt.
+            </p>
+
+            <div style={{ backgroundColor: "#050506", padding: "8px 16px", borderRadius: "8px" }}>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Bank Name</span>
+                <span className="bt-detail-value">VERGO SL - CENTRAL BANK</span>
+              </div>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Account No.</span>
+                <span className="bt-detail-value">
+                  1234 - 5678 - 9012
+                  <button className="bt-copy-btn" onClick={() => copyToClipboard("1234-5678-9012", "acc")}>
+                    {copiedField === "acc" ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                </span>
+              </div>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Payment Reference</span>
+                <span className="bt-detail-value">
+                  {orderId}
+                  <button className="bt-copy-btn" onClick={() => copyToClipboard(orderId, "ref")}>
+                    {copiedField === "ref" ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                </span>
+              </div>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Total Amount</span>
+                <span className="bt-detail-value" style={{ color: "#00FF9D", fontSize: "15px" }}>{formatLkr(grandTotalLkr)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload Receipt Area */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "24px" }}>
+            <span style={{ fontSize: "12px", fontWeight: "800", color: "rgba(255, 255, 255, 0.4)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+              Upload Receipt
+            </span>
+            <input 
+              type="file" 
+              accept="image/jpeg,image/png,application/pdf"
+              id="bt-file-picker"
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+            />
+            <div 
+              className={`bt-dropzone ${dragActive ? "active" : ""}`}
+              onDragEnter={handleDrag}
+              onDragOver={handleDrag}
+              onDragLeave={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById("bt-file-picker")?.click()}
+            >
+              <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <div style={{ fontSize: "14px", fontWeight: "600", color: "#ffffff" }}>
+                Drag & drop receipt here
+              </div>
+              <div style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)" }}>
+                PNG, JPG or PDF up to 5MB
+              </div>
+              <button 
+                type="button"
+                className="bt-copy-btn"
+                style={{ 
+                  backgroundColor: "#121214", 
+                  color: "#ffffff", 
+                  border: "1px solid rgba(255, 255, 255, 0.08)", 
+                  borderRadius: "6px", 
+                  padding: "8px 16px", 
+                  fontSize: "13px", 
+                  fontWeight: "700",
+                  marginTop: "8px"
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  document.getElementById("bt-file-picker")?.click();
+                }}
+              >
+                Browse Files
+              </button>
+            </div>
+
+            {selectedFile && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(255,255,255,0.02)", padding: "12px 16px", borderRadius: "8px", marginTop: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <div>
+                    <div style={{ fontSize: "13px", color: "#ffffff", fontWeight: "600", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {selectedFile.name}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+                      {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  type="button" 
+                  style={{ background: "transparent", border: "none", color: "#EA4335", cursor: "pointer", fontSize: "13px", fontWeight: "600" }}
+                  onClick={() => setSelectedFile(null)}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+
+            {uploadError && (
+              <div style={{ color: "#EA4335", fontSize: "12px", fontWeight: "600", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                {uploadError}
+              </div>
+            )}
+
+            {uploadSuccess && (
+              <div style={{ color: "#00FF9D", fontSize: "13px", fontWeight: "600", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                {uploadSuccess}
+              </div>
+            )}
+          </div>
+
+          {/* Submit buttons */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <button 
+              type="button" 
+              className="bt-btn-primary" 
+              disabled={!selectedFile || isUploading || !!uploadSuccess}
+              onClick={handleUploadSubmit}
+              style={{ padding: "18px" }}
+            >
+              {isUploading ? "Uploading receipt..." : "Submit Payment Proof"}
+            </button>
+            <button 
+              type="button" 
+              className="bt-btn-secondary" 
+              disabled={isUploading}
+              onClick={onClose}
+              style={{ padding: "18px" }}
+            >
+              {uploadSuccess ? "Back to Homepage" : "Back"}
+            </button>
           </div>
         </div>
       )}

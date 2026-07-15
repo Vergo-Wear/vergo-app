@@ -343,6 +343,16 @@ export class OrdersService {
         },
       });
 
+      if (isBankTransfer) {
+        await tx.paymentProofs.create({
+          data: {
+            orderId: order.orderId,
+            status: 'Pending Upload',
+            expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000),
+          },
+        });
+      }
+
       // 6. Create Order Items and link to order_id and variant_id
       for (const item of itemsToCreate) {
         await tx.orderItem.create({
@@ -426,15 +436,31 @@ export class OrdersService {
     const receiptUrl = signed.signedUrl;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    await this.prisma.paymentProofs.create({
-      data: {
-        orderId,
-        receiptUrl,
-        uploadedAt: new Date(),
-        expiresAt,
-        status: 'Pending Verification',
-      },
+    const existingProof = await this.prisma.paymentProofs.findFirst({
+      where: { orderId },
+      orderBy: { expiresAt: 'desc' },
     });
+
+    if (existingProof) {
+      await this.prisma.paymentProofs.update({
+        where: { proofId: existingProof.proofId },
+        data: {
+          receiptUrl,
+          uploadedAt: new Date(),
+          status: 'Pending Verification',
+        },
+      });
+    } else {
+      await this.prisma.paymentProofs.create({
+        data: {
+          orderId,
+          receiptUrl,
+          uploadedAt: new Date(),
+          expiresAt,
+          status: 'Pending Verification',
+        },
+      });
+    }
 
     return await this.prisma.orders.update({
       where: { orderId },

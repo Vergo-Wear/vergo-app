@@ -15,6 +15,11 @@ describe('OrdersService', () => {
     create: jest.fn(),
     updateMany: jest.fn(),
   };
+  const paymentProofsDelegate = {
+    create: jest.fn(),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+  };
 
   const prisma = {
     customer: customerDelegate,
@@ -24,6 +29,7 @@ describe('OrdersService', () => {
     orderCustomerDetails: orderCustomerDetailsDelegate,
     orderShippingDetails: orderShippingDetailsDelegate,
     userAddress: userAddressDelegate,
+    paymentProofs: paymentProofsDelegate,
     // Execute the callback against the same mocked delegates so the whole
     // "transaction" shares state; a thrown error rejects like a rollback.
     $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
