@@ -18,6 +18,7 @@ export default async function AboutHero() {
           fill
           sizes="100vw"
           className="object-cover"
+          loading="eager"
           priority
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/80 flex items-center">
