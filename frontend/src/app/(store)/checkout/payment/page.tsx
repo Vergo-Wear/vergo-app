@@ -887,6 +887,44 @@ function BankTransferFlow({
           border-color: #00FF9D;
           background-color: rgba(0, 255, 157, 0.03);
         }
+        .bt-warning-banner {
+          background-color: #F1C40F;
+          border: 1.5px solid #F1C40F;
+          border-radius: 10px;
+          padding: 18px;
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+          margin-bottom: 32px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 4px 15px rgba(241, 196, 15, 0.15);
+          cursor: default;
+        }
+        .bt-warning-banner:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 10px 28px rgba(241, 196, 15, 0.35);
+          background-color: #F39C12;
+          border-color: #F39C12;
+        }
+        .bt-warning-text {
+          font-size: 14px;
+          color: #050506 !important;
+          margin: 0;
+          line-height: 1.5;
+          font-weight: 700;
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          transition: color 0.3s ease;
+        }
+        .bt-warning-icon {
+          color: #050506 !important;
+          margin-top: 2px;
+          display: flex;
+          align-items: center;
+          transition: transform 0.3s ease;
+        }
+        .bt-warning-banner:hover .bt-warning-icon {
+          transform: scale(1.1);
+        }
       `}</style>
 
       {step === 1 ? (
@@ -1107,26 +1145,15 @@ function BankTransferFlow({
           </p>
 
           {/* Time Window Notice */}
-          <div 
-            style={{
-              backgroundColor: "rgba(241, 196, 15, 0.08)",
-              border: "1px solid rgba(241, 196, 15, 0.25)",
-              borderRadius: "8px",
-              padding: "16px",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "12px",
-              marginBottom: "32px"
-            }}
-          >
-            <div style={{ color: "#F1C40F", marginTop: "2px", display: "flex", alignItems: "center" }}>
+          <div className="bt-warning-banner">
+            <div className="bt-warning-icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                 <line x1="12" y1="9" x2="12" y2="13" />
                 <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
             </div>
-            <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.8)", margin: "0", lineHeight: "1.5", fontWeight: "500" }}>
+            <p className="bt-warning-text">
               Stock is only held for a limited 4-hour window. Orders without proof of payment after this period will be automatically cancelled.
             </p>
           </div>
