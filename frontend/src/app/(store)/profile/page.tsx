@@ -35,14 +35,34 @@ const SRI_LANKAN_DISTRICTS = [
   "Puttalam", "Ratnapura", "Trincomalee", "Vavuniya"
 ];
 
+// Validation Helper Functions
+const validatePhone = (p: string) => /^(?:\+94|0)?[1-9][0-9]{8}$/.test(p);
+const validatePostalCode = (pc: string) => /^\d{5}$/.test(pc);
+const validateName = (n: string) => n.trim().length >= 2;
+const validateLine1 = (l: string) => l.trim().length >= 3;
+const validateCity = (c: string) => c.trim().length >= 2;
+
 export default function ProfilePage() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [draft, setDraft] = useState<CustomerProfile | null>(null);
   const [activeModal, setActiveModal] = useState<"profile" | "address" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [addresses, setAddresses] = useState<UserAddress[]>([]);
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Address form draft state
   const [addressDraft, setAddressDraft] = useState({
@@ -101,7 +121,6 @@ export default function ProfilePage() {
   const openModal = (modal: "profile" | "address") => {
     if (!profile) return;
     setDraft({ ...profile });
-    setMessage(null);
     setActiveModal(modal);
   };
 
@@ -110,11 +129,19 @@ export default function ProfilePage() {
     const token = sessionStorage.getItem("vergo_access_token");
     if (!token || !draft) return;
 
+    // Field Length Validations
+    if (!validateName(draft.firstName)) {
+      showToast("First name must be at least 2 characters.", "error");
+      return;
+    }
+    if (!validateName(draft.lastName)) {
+      showToast("Last name must be at least 2 characters.", "error");
+      return;
+    }
+
     setIsSaving(true);
-    setMessage(null);
     try {
       // Restrict access: Only PATCH first name and last name.
-      // Phone number and Email cannot be modified via profile page.
       const response = await fetch(`${API_URL}/customers/me`, {
         method: "PATCH",
         headers: {
@@ -143,9 +170,9 @@ export default function ProfilePage() {
         window.dispatchEvent(new Event("vergo-auth-change"));
       }
       setActiveModal(null);
-      setMessage("Profile updated successfully.");
-    } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Unable to save your profile.");
+      showToast("Profile updated successfully.", "success");
+    } catch (reason: any) {
+      showToast(reason.message || "Unable to save your profile.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -156,8 +183,29 @@ export default function ProfilePage() {
     const token = sessionStorage.getItem("vergo_access_token");
     if (!token) return;
 
+    // Field Validations
+    if (!validateName(addressDraft.receiverName)) {
+      showToast("Receiver name must be at least 2 characters.", "error");
+      return;
+    }
+    if (!validatePhone(addressDraft.phone)) {
+      showToast("Please enter a valid Sri Lankan phone number (e.g. 0771234567).", "error");
+      return;
+    }
+    if (!validateLine1(addressDraft.addressLine1)) {
+      showToast("Address Line 1 must be at least 3 characters.", "error");
+      return;
+    }
+    if (!validateCity(addressDraft.city)) {
+      showToast("City name must be at least 2 characters.", "error");
+      return;
+    }
+    if (!validatePostalCode(addressDraft.postalCode)) {
+      showToast("Postal code must be a valid 5-digit Sri Lankan postal code.", "error");
+      return;
+    }
+
     setIsSaving(true);
-    setMessage(null);
     try {
       const response = await fetch(`${API_URL}/addresses/mine`, {
         method: "POST",
@@ -205,9 +253,9 @@ export default function ProfilePage() {
         postalCode: "",
         isPrimary: false
       });
-      setMessage("New address added successfully.");
+      showToast("New address added successfully.", "success");
     } catch (reason: any) {
-      alert(reason.message);
+      showToast(reason.message || "Unable to save address.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -234,9 +282,9 @@ export default function ProfilePage() {
         const profileData = await profileRes.json();
         setProfile(profileData);
       }
-      setMessage("Default shipping address updated successfully.");
+      showToast("Default shipping address updated successfully.", "success");
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Failed to make default address.", "error");
     }
   };
 
@@ -262,9 +310,9 @@ export default function ProfilePage() {
         const profileData = await profileRes.json();
         setProfile(profileData);
       }
-      setMessage("Address deleted successfully.");
+      showToast("Address deleted successfully.", "success");
     } catch (err: any) {
-      alert(err.message);
+      showToast(err.message || "Failed to delete address.", "error");
     }
   };
 
@@ -276,6 +324,17 @@ export default function ProfilePage() {
     return <main className="profile-page-wrapper"><div className="profile-container"><div className="profile-card"><p className="no-address-message">LOADING PROFILE...</p></div></div></main>;
   }
 
+  // Address dynamic validations (if length > 1)
+  const isAddressNameInvalid = addressDraft.receiverName.length > 1 && !validateName(addressDraft.receiverName);
+  const isAddressPhoneInvalid = addressDraft.phone.length > 1 && !validatePhone(addressDraft.phone);
+  const isAddressLine1Invalid = addressDraft.addressLine1.length > 1 && !validateLine1(addressDraft.addressLine1);
+  const isAddressCityInvalid = addressDraft.city.length > 1 && !validateCity(addressDraft.city);
+  const isAddressPostalInvalid = addressDraft.postalCode.length > 1 && !validatePostalCode(addressDraft.postalCode);
+
+  // Profile dynamic validations (if length > 1)
+  const isProfileFirstInvalid = draft && draft.firstName.length > 1 && !validateName(draft.firstName);
+  const isProfileLastInvalid = draft && draft.lastName.length > 1 && !validateName(draft.lastName);
+
   return (
     <main className="profile-page-wrapper">
       <div className="profile-container">
@@ -283,8 +342,6 @@ export default function ProfilePage() {
           <h1 className="profile-title">PROFILE</h1>
           <Link href="/profile/orders" className="order-history-btn">ORDER HISTORY</Link>
         </header>
-
-        {message && <p className="profile-status-message" role="status">{message}</p>}
 
         <section className="profile-card" aria-labelledby="profile-details-title">
           <div className="addresses-header-row">
@@ -366,11 +423,30 @@ export default function ProfilePage() {
               <form className="modal-form" onSubmit={saveProfile}>
                 <label className="profile-field-group">
                   <span className="profile-field-label">FIRST NAME</span>
-                  <input className="modal-input-field" value={draft.firstName} onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} required autoFocus />
+                  <input 
+                    className="modal-input-field" 
+                    value={draft.firstName} 
+                    onChange={(event) => setDraft({ ...draft, firstName: event.target.value })} 
+                    style={{
+                      borderColor: isProfileFirstInvalid ? "#ff4d4d" : undefined,
+                      boxShadow: isProfileFirstInvalid ? "0 0 0 1px #ff4d4d" : undefined
+                    }}
+                    required 
+                    autoFocus 
+                  />
                 </label>
                 <label className="profile-field-group">
                   <span className="profile-field-label">LAST NAME</span>
-                  <input className="modal-input-field" value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} required />
+                  <input 
+                    className="modal-input-field" 
+                    value={draft.lastName} 
+                    onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} 
+                    style={{
+                      borderColor: isProfileLastInvalid ? "#ff4d4d" : undefined,
+                      boxShadow: isProfileLastInvalid ? "0 0 0 1px #ff4d4d" : undefined
+                    }}
+                    required 
+                  />
                 </label>
                 
                 {/* Information Callout clarifying restrictions */}
@@ -389,15 +465,46 @@ export default function ProfilePage() {
               <form className="modal-form" onSubmit={handleAddAddress}>
                 <label className="profile-field-group">
                   <span className="profile-field-label">RECEIVER NAME</span>
-                  <input className="modal-input-field" value={addressDraft.receiverName} onChange={(e) => setAddressDraft({ ...addressDraft, receiverName: e.target.value })} placeholder="e.g. Alexander Mercer" required autoFocus />
+                  <input 
+                    className="modal-input-field" 
+                    value={addressDraft.receiverName} 
+                    onChange={(e) => setAddressDraft({ ...addressDraft, receiverName: e.target.value })} 
+                    placeholder="e.g. Alexander Mercer" 
+                    style={{
+                      borderColor: isAddressNameInvalid ? "#ff4d4d" : undefined,
+                      boxShadow: isAddressNameInvalid ? "0 0 0 1px #ff4d4d" : undefined
+                    }}
+                    required 
+                    autoFocus 
+                  />
                 </label>
                 <label className="profile-field-group">
                   <span className="profile-field-label">PHONE NUMBER</span>
-                  <input className="modal-input-field" value={addressDraft.phone} onChange={(e) => setAddressDraft({ ...addressDraft, phone: e.target.value })} placeholder="e.g. 0771234567" required />
+                  <input 
+                    className="modal-input-field" 
+                    value={addressDraft.phone} 
+                    onChange={(e) => setAddressDraft({ ...addressDraft, phone: e.target.value })} 
+                    placeholder="e.g. 0771234567" 
+                    style={{
+                      borderColor: isAddressPhoneInvalid ? "#ff4d4d" : undefined,
+                      boxShadow: isAddressPhoneInvalid ? "0 0 0 1px #ff4d4d" : undefined
+                    }}
+                    required 
+                  />
                 </label>
                 <label className="profile-field-group">
                   <span className="profile-field-label">ADDRESS LINE 1</span>
-                  <input className="modal-input-field" value={addressDraft.addressLine1} onChange={(e) => setAddressDraft({ ...addressDraft, addressLine1: e.target.value })} placeholder="e.g. 42 Technical District" required />
+                  <input 
+                    className="modal-input-field" 
+                    value={addressDraft.addressLine1} 
+                    onChange={(e) => setAddressDraft({ ...addressDraft, addressLine1: e.target.value })} 
+                    placeholder="e.g. 42 Technical District" 
+                    style={{
+                      borderColor: isAddressLine1Invalid ? "#ff4d4d" : undefined,
+                      boxShadow: isAddressLine1Invalid ? "0 0 0 1px #ff4d4d" : undefined
+                    }}
+                    required 
+                  />
                 </label>
                 <label className="profile-field-group">
                   <span className="profile-field-label">ADDRESS LINE 2 (OPTIONAL)</span>
@@ -405,7 +512,17 @@ export default function ProfilePage() {
                 </label>
                 <label className="profile-field-group">
                   <span className="profile-field-label">CITY</span>
-                  <input className="modal-input-field" value={addressDraft.city} onChange={(e) => setAddressDraft({ ...addressDraft, city: e.target.value })} placeholder="e.g. Colombo" required />
+                  <input 
+                    className="modal-input-field" 
+                    value={addressDraft.city} 
+                    onChange={(e) => setAddressDraft({ ...addressDraft, city: e.target.value })} 
+                    placeholder="e.g. Colombo" 
+                    style={{
+                      borderColor: isAddressCityInvalid ? "#ff4d4d" : undefined,
+                      boxShadow: isAddressCityInvalid ? "0 0 0 1px #ff4d4d" : undefined
+                    }}
+                    required 
+                  />
                 </label>
                 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
@@ -425,7 +542,17 @@ export default function ProfilePage() {
                   </label>
                   <label className="profile-field-group">
                     <span className="profile-field-label">POSTAL CODE</span>
-                    <input className="modal-input-field" value={addressDraft.postalCode} onChange={(e) => setAddressDraft({ ...addressDraft, postalCode: e.target.value })} placeholder="e.g. 00200" required />
+                    <input 
+                      className="modal-input-field" 
+                      value={addressDraft.postalCode} 
+                      onChange={(e) => setAddressDraft({ ...addressDraft, postalCode: e.target.value })} 
+                      placeholder="e.g. 00200" 
+                      style={{
+                        borderColor: isAddressPostalInvalid ? "#ff4d4d" : undefined,
+                        boxShadow: isAddressPostalInvalid ? "0 0 0 1px #ff4d4d" : undefined
+                      }}
+                      required 
+                    />
                   </label>
                 </div>
 
@@ -441,6 +568,45 @@ export default function ProfilePage() {
               </form>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Premium Toast Notification System */}
+      {toast && (
+        <div 
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            backgroundColor: toast.type === "success" ? "rgba(0, 255, 157, 0.15)" : "rgba(255, 77, 77, 0.15)",
+            border: toast.type === "success" ? "1px solid rgba(0, 255, 157, 0.3)" : "1px solid rgba(255, 77, 77, 0.3)",
+            color: toast.type === "success" ? "#00FF9D" : "#ff4d4d",
+            padding: "16px 24px",
+            borderRadius: "8px",
+            boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
+            backdropFilter: "blur(8px)",
+            zIndex: 10000,
+            fontFamily: "'Inter', sans-serif",
+            fontSize: "13px",
+            fontWeight: "600",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            animation: "slideIn 0.3s ease-out forwards"
+          }}
+        >
+          {toast.type === "success" ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          )}
+          <span>{toast.message}</span>
         </div>
       )}
     </main>
