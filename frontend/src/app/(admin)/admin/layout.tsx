@@ -56,6 +56,41 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [destNode, setDestNode] = useState("");
   const [transferAmount, setTransferAmount] = useState(1);
 
+  // Profile logout toggle state & dynamic user details state
+  const [showLogoutMenu, setShowLogoutMenu] = useState(false);
+  const [adminUser, setAdminUser] = useState<{ name: string; role: string } | null>(null);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("vergo_user");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setAdminUser({
+          name: parsed.name || "Marcus V.",
+          role: parsed.role || "Operations Lead",
+        });
+      } catch (err) {
+        // Fallback
+      }
+    }
+  }, []);
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("vergo_access_token");
+    sessionStorage.removeItem("vergo_user");
+    sessionStorage.removeItem("vergo_refresh_token");
+    window.location.href = "/auth/login";
+  };
+
+  const displayName = adminUser?.name || "Marcus V.";
+  const displayRole = adminUser?.role || "Operations Lead";
+  const initials = displayName
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   // Get unique SKUs and nodes for dropdowns
   const uniqueSkus = Array.from(new Set(inventory.map((item) => item.sku)));
   const allNodes = ["NODE_LA_01", "NODE_NY_04", "NODE_TK_01", "NODE_LDN_02", "NODE_PAR_01", "NODE_NY_02"];
@@ -218,13 +253,39 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* User profile at the bottom */}
-        <div className="p-4 border-t border-[rgba(255,255,255,0.06)] flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-[#f3d9c9] text-black font-semibold flex items-center justify-center text-sm shadow-md">
-            MV
-          </div>
-          <div className="overflow-hidden">
-            <div className="text-xs font-bold text-white truncate">Marcus V.</div>
-            <div className="text-[10px] text-[#8e8e93] tracking-wide truncate">Operations Lead</div>
+        <div className="relative p-4 border-t border-[rgba(255,255,255,0.06)]">
+          {showLogoutMenu && (
+            <div className="absolute bottom-[calc(100%-8px)] left-4 right-4 bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded shadow-2xl p-1 mb-2 z-50 animate-slide-in">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left rounded text-red-400 hover:text-white hover:bg-red-950/20 transition-all font-bold uppercase text-[9px] tracking-wider cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>LOG OUT</span>
+              </button>
+            </div>
+          )}
+
+          <div
+            onClick={() => setShowLogoutMenu(!showLogoutMenu)}
+            className="flex items-center justify-between p-1.5 rounded-md hover:bg-white/5 cursor-pointer transition-all select-none gap-2"
+          >
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-9 h-9 rounded-full bg-[#f3d9c9] text-black font-extrabold flex items-center justify-center text-xs shadow-md flex-shrink-0">
+                {initials}
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-white truncate">{displayName}</div>
+                <div className="text-[9px] text-[#8e8e93] tracking-wide truncate uppercase font-semibold">{displayRole}</div>
+              </div>
+            </div>
+            <div className="text-[#8e8e93] flex-shrink-0">
+              <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showLogoutMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+              </svg>
+            </div>
           </div>
         </div>
       </aside>
