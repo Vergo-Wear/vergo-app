@@ -105,7 +105,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   color: #ffffff;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .profile-field-value.email-value {
@@ -676,5 +676,25 @@
   }
   .profile-field-value {
     font-size: 1.05rem;
+  }
+}
+
+/* Address item hover controls */
+.address-item .make-default-btn {
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.address-item:hover .make-default-btn {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Enforce visibility on touch screens where hover states are unavailable */
+@media (max-width: 1024px) {
+  .address-item .make-default-btn {
+    opacity: 1;
+    visibility: visible;
   }
 }
