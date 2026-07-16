@@ -200,6 +200,10 @@ export default function PaymentPage() {
         grandTotalLkr={grandTotalLkr}
         formatLkr={formatLkr}
         onClose={handleFinishCheckout}
+        onBackToPaymentSelection={() => {
+          setOrderId(null);
+          setShowOrderCompletedModal(false);
+        }}
       />
     );
   }
@@ -557,6 +561,7 @@ interface BankTransferFlowProps {
   grandTotalLkr: number;
   formatLkr: (val: number) => string;
   onClose: () => void;
+  onBackToPaymentSelection?: () => void;
 }
 
 function BankTransferFlow({
@@ -564,6 +569,7 @@ function BankTransferFlow({
   grandTotalLkr,
   formatLkr,
   onClose,
+  onBackToPaymentSelection,
 }: BankTransferFlowProps) {
   const [step, setStep] = useState(1);
   const [timeLeft, setTimeLeft] = useState(14400); // 4 hours in seconds
@@ -581,6 +587,20 @@ function BankTransferFlow({
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelSuccess, setCancelSuccess] = useState(false);
 
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -597,6 +617,14 @@ function BankTransferFlow({
   const copyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(fieldName);
+    showToast(
+      fieldName === "acc" 
+        ? "Account number copied to clipboard!" 
+        : fieldName === "ref" 
+        ? "Payment reference copied to clipboard!" 
+        : "Account details copied to clipboard!", 
+      "success"
+    );
     setTimeout(() => setCopiedField(null), 2000);
   };
 
@@ -701,7 +729,6 @@ function BankTransferFlow({
   };
 
   const handleCancelOrder = async () => {
-    if (!confirm("Are you sure you want to cancel this order?")) return;
     setIsCancelling(true);
     setCancelError(null);
 
@@ -736,6 +763,29 @@ function BankTransferFlow({
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const renderCountdownBanner = () => {
+    return (
+      <div 
+        className="bt-card bt-countdown-banner"
+      >
+        <div>
+          <div style={{ fontSize: "12px", fontWeight: "800", color: "#00FF9D", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>
+            Time remaining to upload proof
+          </div>
+          <div style={{ fontSize: "36px", fontWeight: "700", color: "#ffffff", fontFamily: "monospace" }}>
+            {formatTime(timeLeft)}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="36" height="36">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+        </div>
+      </div>
+    );
   };
 
   if (cancelSuccess) {
@@ -865,6 +915,30 @@ function BankTransferFlow({
           border-color: #ffffff;
           background-color: rgba(255, 255, 255, 0.02);
         }
+        .bt-btn-cancel {
+          flex: 1;
+          background-color: transparent;
+          color: #EA4335;
+          border: 1px solid rgba(234, 67, 53, 0.4);
+          border-radius: 8px;
+          padding: 18px;
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        .bt-btn-cancel:hover:not(:disabled) {
+          border-color: #EA4335;
+          background-color: rgba(234, 67, 53, 0.08);
+          color: #ff5c4d;
+        }
+        .bt-btn-cancel:active:not(:disabled) {
+          background-color: #EA4335;
+          border-color: #EA4335;
+          color: #ffffff;
+        }
         .bt-dropzone {
           border: 1.5px dashed rgba(255, 255, 255, 0.15);
           background-color: #050506;
@@ -961,35 +1035,10 @@ function BankTransferFlow({
           </p>
 
           {/* Time remaining countdown banner */}
-          <div 
-            className="bt-card" 
-            style={{
-              borderTop: "3px solid #00FF9D",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: "32px",
-              padding: "24px 32px"
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "12px", fontWeight: "800", color: "#00FF9D", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>
-                Time remaining to upload proof
-              </div>
-              <div style={{ fontSize: "36px", fontWeight: "700", color: "#ffffff", fontFamily: "monospace" }}>
-                {formatTime(timeLeft)}
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center" }}>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="36" height="36">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-            </div>
-          </div>
+          {renderCountdownBanner()}
 
           {/* Details split columns */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "24px", marginBottom: "32px" }}>
+          <div className="bt-split-grid">
             <div className="bt-card">
               <div style={{ fontSize: "13px", fontWeight: "800", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1021,23 +1070,37 @@ function BankTransferFlow({
                   </button>
                 </span>
               </div>
-              <div className="bt-detail-row">
-                <span className="bt-detail-label">Reference</span>
-                <span className="bt-detail-value">
-                  {orderId}
-                  <button className="bt-copy-btn" onClick={() => copyToClipboard(orderId, "ref")}>
+              {/* Enhanced Single-Line Monospace Reference Panel */}
+              <div style={{ 
+                marginTop: "16px", 
+                padding: "12px 16px", 
+                backgroundColor: "rgba(255, 255, 255, 0.02)", 
+                borderRadius: "8px", 
+                border: "1px solid rgba(255, 255, 255, 0.05)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px"
+              }}>
+                <span style={{ fontSize: "11px", fontWeight: "700", color: "rgba(255, 255, 255, 0.4)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Payment Reference
+                </span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                  <span style={{ fontFamily: "monospace", fontSize: "13.5px", color: "#00FF9D", fontWeight: "700", letterSpacing: "normal", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {orderId}
+                  </span>
+                  <button className="bt-copy-btn" onClick={() => copyToClipboard(orderId, "ref")} style={{ flexShrink: 0, marginLeft: "12px" }} title="Copy Reference">
                     {copiedField === "ref" ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
                     )}
                   </button>
-                </span>
+                </div>
               </div>
 
               <button 
@@ -1056,22 +1119,35 @@ function BankTransferFlow({
                 }}
                 onClick={() => {
                   copyToClipboard("Bank: VERGO SL - CENTRAL BANK\nAccount: 1234-5678-9012\nReference: " + orderId, "all");
-                  alert("Account details copied to clipboard!");
                 }}
               >
                 Copy Account Details
               </button>
-            </div>
-
-            <div className="bt-card" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              <div style={{ fontSize: "13px", fontWeight: "800", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "16px" }}>
+            </div>            <div className="bt-card" style={{ 
+              display: "flex", 
+              flexDirection: "column", 
+              justifyContent: "center",
+              border: "1px solid rgba(0, 255, 157, 0.15)",
+              background: "linear-gradient(135deg, rgba(0, 255, 157, 0.02) 0%, rgba(13, 13, 14, 1) 100%)",
+              position: "relative",
+              overflow: "hidden"
+            }}>
+              {/* Subtle top indicator */}
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", backgroundColor: "#00FF9D" }}></div>
+              
+              <div style={{ fontSize: "12px", fontWeight: "800", color: "#00FF9D", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <line x1="12" y1="10" x2="12" y2="14" />
+                  <line x1="8" y1="12" x2="16" y2="12" />
+                </svg>
                 Transfer Amount
               </div>
-              <div style={{ fontSize: "32px", fontWeight: "800", color: "#ffffff", marginBottom: "4px" }}>
+              <div style={{ fontSize: "36px", fontWeight: "800", color: "#ffffff", marginBottom: "6px", fontFamily: "'Oswald', sans-serif" }}>
                 {formatLkr(grandTotalLkr)}
               </div>
-              <div style={{ fontSize: "12px", fontWeight: "700", color: "rgba(255,255,255,0.3)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                Total includes tax & shipping
+              <div style={{ fontSize: "11px", fontWeight: "600", color: "rgba(255,255,255,0.35)", letterSpacing: "0.05em", textTransform: "uppercase", lineHeight: "1.4" }}>
+                Total amount includes standard delivery fee and tax.
               </div>
             </div>
           </div>
@@ -1091,21 +1167,30 @@ function BankTransferFlow({
               style={{ padding: "18px" }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <path d="M21 15v4a2 2 0 0 1-2-2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
               Upload Payment Proof
             </button>
-            <button 
-              type="button" 
-              className="bt-btn-secondary" 
-              disabled={isCancelling}
-              onClick={handleCancelOrder}
-              style={{ padding: "18px" }}
-            >
-              {isCancelling ? "Cancelling Order..." : "Cancel Order"}
-            </button>
+            <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+              <button 
+                type="button" 
+                className="bt-btn-secondary" 
+                onClick={() => onBackToPaymentSelection?.()}
+                style={{ flex: 1, padding: "18px" }}
+              >
+                Back
+              </button>
+              <button 
+                type="button" 
+                className="bt-btn-cancel" 
+                disabled={isCancelling}
+                onClick={handleCancelOrder}
+              >
+                {isCancelling ? "Cancelling..." : "Cancel Order"}
+              </button>
+            </div>
           </div>
 
           <div style={{ textAlign: "center", marginTop: "32px", fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
@@ -1143,6 +1228,9 @@ function BankTransferFlow({
           <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.6)", textAlign: "center", marginBottom: "32px", lineHeight: "1.5" }}>
             Your order <strong>#{orderId}</strong> is on hold. Please complete the bank transfer within 4 hours to secure your items.
           </p>
+
+          {/* Time remaining countdown banner */}
+          {renderCountdownBanner()}
 
           {/* Time Window Notice */}
           <div className="bt-warning-banner">
@@ -1191,23 +1279,38 @@ function BankTransferFlow({
                   </button>
                 </span>
               </div>
-              <div className="bt-detail-row">
-                <span className="bt-detail-label">Payment Reference</span>
-                <span className="bt-detail-value">
-                  {orderId}
-                  <button className="bt-copy-btn" onClick={() => copyToClipboard(orderId, "ref")}>
+              {/* Enhanced Single-Line Monospace Reference Panel */}
+              <div style={{ 
+                marginTop: "12px", 
+                marginBottom: "12px",
+                padding: "10px 14px", 
+                backgroundColor: "rgba(255, 255, 255, 0.02)", 
+                borderRadius: "8px", 
+                border: "1px solid rgba(255, 255, 255, 0.05)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px"
+              }}>
+                <span style={{ fontSize: "11px", fontWeight: "700", color: "rgba(255, 255, 255, 0.4)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Payment Reference
+                </span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                  <span style={{ fontFamily: "monospace", fontSize: "13.5px", color: "#00FF9D", fontWeight: "700", letterSpacing: "normal", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {orderId}
+                  </span>
+                  <button className="bt-copy-btn" onClick={() => copyToClipboard(orderId, "ref")} style={{ flexShrink: 0, marginLeft: "12px" }} title="Copy Reference">
                     {copiedField === "ref" ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
                     )}
                   </button>
-                </span>
+                </div>
               </div>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Total Amount</span>
@@ -1333,11 +1436,41 @@ function BankTransferFlow({
               type="button" 
               className="bt-btn-secondary" 
               disabled={isUploading}
-              onClick={onClose}
+              onClick={uploadSuccess ? onClose : () => setStep(1)}
               style={{ padding: "18px" }}
             >
               {uploadSuccess ? "Back to Homepage" : "Back"}
             </button>
+          </div>
+        </div>
+      )}
+
+
+
+      {/* Custom Toast Notification */}
+      {toast && (
+        <div className={`toast-notification toast-${toast.type}`}>
+          <div className="toast-content">
+            {toast.type === "success" && (
+              <svg className="toast-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+            {toast.type === "error" && (
+              <svg className="toast-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            )}
+            {toast.type === "info" && (
+              <svg className="toast-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+            )}
+            <span>{toast.message}</span>
           </div>
         </div>
       )}
