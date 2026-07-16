@@ -111,8 +111,7 @@
 .profile-field-value.email-value {
   text-decoration: underline;
   text-underline-offset: 4px;
-  text-transform: none; /* keep email standard case or lowercase as preferred, figma is uppercase */
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 
 .profile-edit-trigger {
