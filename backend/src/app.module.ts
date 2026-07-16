@@ -14,6 +14,8 @@ import { CartModule } from './cart/cart.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { AdminModule } from './admin/admin.module';
 import { AddressesModule } from './addresses/addresses.module';
+import { EmailModule } from './email/email.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { AddressesModule } from './addresses/addresses.module';
     ReviewsModule,
     AdminModule,
     AddressesModule,
+    EmailModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -46,7 +46,6 @@ export class SupabaseAuthGuard implements CanActivate {
     const supabaseKey =
       this.configService.getOrThrow<string>('SUPABASE_ANON_KEY');
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     this.supabase = createClient(supabaseUrl, supabaseKey);
   }
 

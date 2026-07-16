@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import "@/styles/profile.css";
+import "@/styles/notifications.css";
 
 interface CustomerProfile {
   customerId: string;
@@ -52,6 +53,23 @@ export default function ProfilePage() {
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  // Unread customer notification count shown on the NOTIFICATIONS button
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem("vergo_access_token");
+    if (!token) return;
+    fetch(`${API_URL}/notifications/unread-count`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { count: number } | null) => {
+        if (data) setUnreadCount(data.count);
+      })
+      .catch(() => {});
+  }, []);
 
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ message, type });
@@ -340,7 +358,13 @@ export default function ProfilePage() {
       <div className="profile-container">
         <header className="profile-header">
           <h1 className="profile-title">PROFILE</h1>
-          <Link href="/profile/orders" className="order-history-btn">ORDER HISTORY</Link>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+            <Link href="/profile/notifications" className="order-history-btn">
+              NOTIFICATIONS
+              {unreadCount > 0 && <span className="notifications-count-badge">{unreadCount}</span>}
+            </Link>
+            <Link href="/profile/orders" className="order-history-btn">ORDER HISTORY</Link>
+          </div>
         </header>
 
         <section className="profile-card" aria-labelledby="profile-details-title">

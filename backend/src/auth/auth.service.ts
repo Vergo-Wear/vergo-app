@@ -329,22 +329,41 @@ export class AuthService {
   async googleSignin(accessToken: string) {
     let user;
     try {
-      if (accessToken.startsWith("mock-")) {
-        user = { id: "mock-google-user-id", email: "google-customer@example.com" };
+      if (accessToken.startsWith('mock-')) {
+        user = {
+          id: 'mock-google-user-id',
+          email: 'google-customer@example.com',
+        };
       } else {
-        const { data: { user: supabaseUser }, error } = await this.supabaseService.client.auth.getUser(accessToken);
-        if (error || !supabaseUser) throw error || new Error("No user returned");
+        const {
+          data: { user: supabaseUser },
+          error,
+        } = await this.supabaseService.client.auth.getUser(accessToken);
+        if (error || !supabaseUser)
+          throw error || new Error('No user returned');
         user = supabaseUser;
       }
     } catch (err: any) {
-      const errMsg = err.message || "";
-      const isNetworkError = errMsg.includes("fetch") || errMsg.includes("connect") || errMsg.includes("timeout") || errMsg.includes("network") || errMsg.includes("Failed to fetch");
-      if (isNetworkError || accessToken.startsWith("mock-")) {
-        this.logger.warn(`Supabase auth getUser failed due to network. Falling back to mock verified user.`);
-        user = { id: "mock-google-user-id", email: "google-customer@example.com" };
+      const errMsg = err.message || '';
+      const isNetworkError =
+        errMsg.includes('fetch') ||
+        errMsg.includes('connect') ||
+        errMsg.includes('timeout') ||
+        errMsg.includes('network') ||
+        errMsg.includes('Failed to fetch');
+      if (isNetworkError || accessToken.startsWith('mock-')) {
+        this.logger.warn(
+          `Supabase auth getUser failed due to network. Falling back to mock verified user.`,
+        );
+        user = {
+          id: 'mock-google-user-id',
+          email: 'google-customer@example.com',
+        };
       } else {
         this.logger.warn(`Google signin token validation failed: ${errMsg}`);
-        throw new UnauthorizedException('Invalid or expired Google access token.');
+        throw new UnauthorizedException(
+          'Invalid or expired Google access token.',
+        );
       }
     }
 
@@ -359,9 +378,17 @@ export class AuthService {
       });
       isOnboarded = !!(profile && profile.roleId !== null);
     } catch (dbErr: any) {
-      const errMsg = dbErr.message || "";
-      if (errMsg.includes("reach database") || dbErr.code === "P1001" || dbErr.code === "P2021" || errMsg.includes("PrismaClientInitializationError") || errMsg.includes("connect")) {
-        this.logger.warn(`Database connection failed in googleSignin. Processing in offline mock mode.`);
+      const errMsg = dbErr.message || '';
+      if (
+        errMsg.includes('reach database') ||
+        dbErr.code === 'P1001' ||
+        dbErr.code === 'P2021' ||
+        errMsg.includes('PrismaClientInitializationError') ||
+        errMsg.includes('connect')
+      ) {
+        this.logger.warn(
+          `Database connection failed in googleSignin. Processing in offline mock mode.`,
+        );
         isOnboarded = false;
       } else {
         throw dbErr;
@@ -393,7 +420,9 @@ export class AuthService {
         where: { profileId: userId },
         select: { customerId: true, firstName: true, lastName: true },
       });
-    } catch (dbErr) {}
+    } catch {
+      // Database unavailable — continue with customer = null.
+    }
 
     this.logger.log(
       `Google signin: returning customer logged in (ID: ${userId})`,
@@ -412,9 +441,9 @@ export class AuthService {
         status: profile?.status || 'active',
       },
       customer: {
-        customerId: customer?.customerId || "mock-customer-uuid-1234",
-        firstName: customer?.firstName || "Google",
-        lastName: customer?.lastName || "Customer",
+        customerId: customer?.customerId || 'mock-customer-uuid-1234',
+        firstName: customer?.firstName || 'Google',
+        lastName: customer?.lastName || 'Customer',
       },
     };
   }
@@ -438,22 +467,43 @@ export class AuthService {
 
     let user;
     try {
-      if (accessToken.startsWith("mock-")) {
-        user = { id: "mock-google-user-id", email: "google-customer@example.com" };
+      if (accessToken.startsWith('mock-')) {
+        user = {
+          id: 'mock-google-user-id',
+          email: 'google-customer@example.com',
+        };
       } else {
-        const { data: { user: supabaseUser }, error } = await this.supabaseService.client.auth.getUser(accessToken);
-        if (error || !supabaseUser) throw error || new Error("No user returned");
+        const {
+          data: { user: supabaseUser },
+          error,
+        } = await this.supabaseService.client.auth.getUser(accessToken);
+        if (error || !supabaseUser)
+          throw error || new Error('No user returned');
         user = supabaseUser;
       }
     } catch (err: any) {
-      const errMsg = err.message || "";
-      const isNetworkError = errMsg.includes("fetch") || errMsg.includes("connect") || errMsg.includes("timeout") || errMsg.includes("network") || errMsg.includes("Failed to fetch");
-      if (isNetworkError || accessToken.startsWith("mock-")) {
-        this.logger.warn(`Supabase auth getUser failed due to network. Falling back to mock verified user.`);
-        user = { id: "mock-google-user-id", email: "google-customer@example.com" };
+      const errMsg = err.message || '';
+      const isNetworkError =
+        errMsg.includes('fetch') ||
+        errMsg.includes('connect') ||
+        errMsg.includes('timeout') ||
+        errMsg.includes('network') ||
+        errMsg.includes('Failed to fetch');
+      if (isNetworkError || accessToken.startsWith('mock-')) {
+        this.logger.warn(
+          `Supabase auth getUser failed due to network. Falling back to mock verified user.`,
+        );
+        user = {
+          id: 'mock-google-user-id',
+          email: 'google-customer@example.com',
+        };
       } else {
-        this.logger.warn(`googleCompleteProfile: token validation failed: ${errMsg}`);
-        throw new UnauthorizedException('Invalid or expired Google access token.');
+        this.logger.warn(
+          `googleCompleteProfile: token validation failed: ${errMsg}`,
+        );
+        throw new UnauthorizedException(
+          'Invalid or expired Google access token.',
+        );
       }
     }
 
@@ -467,19 +517,35 @@ export class AuthService {
         where: { id: userId },
       });
       if (existingProfile && existingProfile.roleId !== null) {
-        throw new ConflictException('A profile already exists for this account.');
+        throw new ConflictException(
+          'A profile already exists for this account.',
+        );
       }
     } catch (dbErr: any) {
-      const errMsg = dbErr.message || "";
-      if (errMsg.includes("reach database") || dbErr.code === "P1001" || dbErr.code === "P2021" || errMsg.includes("PrismaClientInitializationError") || errMsg.includes("connect")) {
-        this.logger.warn(`Database connection failed in googleCompleteProfile check. Ignoring check.`);
+      const errMsg = dbErr.message || '';
+      if (
+        errMsg.includes('reach database') ||
+        dbErr.code === 'P1001' ||
+        dbErr.code === 'P2021' ||
+        errMsg.includes('PrismaClientInitializationError') ||
+        errMsg.includes('connect')
+      ) {
+        this.logger.warn(
+          `Database connection failed in googleCompleteProfile check. Ignoring check.`,
+        );
       } else {
         throw dbErr;
       }
     }
 
     // 3. Username — generate unique if not supplied by frontend
-    const resolvedUsername = username ? username.trim() : await this.generateUniqueUsername(null, firstName.trim(), lastName.trim());
+    const resolvedUsername = username
+      ? username.trim()
+      : await this.generateUniqueUsername(
+          null,
+          firstName.trim(),
+          lastName.trim(),
+        );
 
     // 4. Normalize phone: strip leading 0, prepend +94
     const resolvedPhone = phone
@@ -500,9 +566,17 @@ export class AuthService {
           );
         }
       } catch (dbErr: any) {
-        const errMsg = dbErr.message || "";
-        if (errMsg.includes("reach database") || dbErr.code === "P1001" || dbErr.code === "P2021" || errMsg.includes("PrismaClientInitializationError") || errMsg.includes("connect")) {
-          this.logger.warn(`Database connection failed in phone check. Ignoring check.`);
+        const errMsg = dbErr.message || '';
+        if (
+          errMsg.includes('reach database') ||
+          dbErr.code === 'P1001' ||
+          dbErr.code === 'P2021' ||
+          errMsg.includes('PrismaClientInitializationError') ||
+          errMsg.includes('connect')
+        ) {
+          this.logger.warn(
+            `Database connection failed in phone check. Ignoring check.`,
+          );
         } else {
           throw dbErr;
         }
@@ -515,11 +589,13 @@ export class AuthService {
       customerRole = await this.prisma.role.findFirst({
         where: { roleName: { equals: 'Customer', mode: 'insensitive' } },
       });
-    } catch (dbErr: any) {}
+    } catch {
+      // Database unavailable — the fallback role below is used instead.
+    }
 
     if (!customerRole) {
       // Fallback Customer Role definition if database is down
-      customerRole = { roleId: "mock-customer-role-uuid" };
+      customerRole = { roleId: 'mock-customer-role-uuid' };
     }
 
     // 6. Create profile and customer in a single transaction
@@ -591,10 +667,18 @@ export class AuthService {
         },
       };
     } catch (dbErr: any) {
-      const errMsg = dbErr.message || "";
-      if (errMsg.includes("reach database") || dbErr.code === "P1001" || dbErr.code === "P2021" || errMsg.includes("PrismaClientInitializationError") || errMsg.includes("connect")) {
-        this.logger.warn(`Database connection failed in googleCompleteProfile transaction. Processing in offline mock mode.`);
-        
+      const errMsg = dbErr.message || '';
+      if (
+        errMsg.includes('reach database') ||
+        dbErr.code === 'P1001' ||
+        dbErr.code === 'P2021' ||
+        errMsg.includes('PrismaClientInitializationError') ||
+        errMsg.includes('connect')
+      ) {
+        this.logger.warn(
+          `Database connection failed in googleCompleteProfile transaction. Processing in offline mock mode.`,
+        );
+
         return {
           message: 'Profile created successfully (Offline simulation)',
           user: {
@@ -608,11 +692,11 @@ export class AuthService {
             status: 'active',
           },
           customer: {
-            customerId: "mock-customer-uuid-1234",
+            customerId: 'mock-customer-uuid-1234',
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             email,
-            phone: resolvedPhone || "0771234567",
+            phone: resolvedPhone || '0771234567',
           },
         };
       }
