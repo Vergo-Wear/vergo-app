@@ -121,7 +121,7 @@ export class OrdersController {
             message: 'Proof upload size must be under 5MB.',
           }),
           new FileTypeValidator({
-            fileType: /(jpg|jpeg|png|webp|pdf)$/i,
+            fileType: /(jpg|jpeg|png|pdf)$/i,
           }),
         ],
       }),
