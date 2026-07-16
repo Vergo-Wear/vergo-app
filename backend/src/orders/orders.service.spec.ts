@@ -14,8 +14,10 @@ describe('OrdersService', () => {
   };
   const employeeDelegate = { findFirst: jest.fn() };
   const paymentProofsDelegate = {
+    create: jest.fn(),
     findFirst: jest.fn(),
     findMany: jest.fn(),
+    update: jest.fn(),
     updateMany: jest.fn(),
   };
   const orderItemDelegate = { create: jest.fn() };

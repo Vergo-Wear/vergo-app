@@ -475,6 +475,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
+      if (isBankTransfer) {
+        await tx.paymentProofs.create({
+          data: {
+            orderId: order.orderId,
+            status: 'Pending Upload',
+            expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000),
+          },
+        });
+      }
+
       // 6. Create Order Items and link to order_id and variant_id
       for (const item of itemsToCreate) {
         await tx.orderItem.create({
@@ -558,22 +568,37 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     const receiptUrl = signed.signedUrl;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // A fresh upload replaces any still-pending proof for this order, so
-    // stale proofs can never expire later and wrongly notify the customer.
-    await this.prisma.paymentProofs.updateMany({
-      where: { orderId, status: { in: PENDING_PROOF_STATUSES } },
-      data: { status: 'Superseded' },
+    // Checkout pre-creates the proof row for bank transfers, so a fresh
+    // upload updates that row in place. expiresAt is refreshed so the new
+    // receipt gets its own verification window — a stale expiry would let
+    // the expiry sweep wrongly expire a just-uploaded receipt and notify
+    // the customer.
+    const existingProof = await this.prisma.paymentProofs.findFirst({
+      where: { orderId },
+      orderBy: { expiresAt: 'desc' },
     });
 
-    await this.prisma.paymentProofs.create({
-      data: {
-        orderId,
-        receiptUrl,
-        uploadedAt: new Date(),
-        expiresAt,
-        status: 'Pending Verification',
-      },
-    });
+    if (existingProof) {
+      await this.prisma.paymentProofs.update({
+        where: { proofId: existingProof.proofId },
+        data: {
+          receiptUrl,
+          uploadedAt: new Date(),
+          expiresAt,
+          status: 'Pending Verification',
+        },
+      });
+    } else {
+      await this.prisma.paymentProofs.create({
+        data: {
+          orderId,
+          receiptUrl,
+          uploadedAt: new Date(),
+          expiresAt,
+          status: 'Pending Verification',
+        },
+      });
+    }
 
     return await this.prisma.orders.update({
       where: { orderId },
