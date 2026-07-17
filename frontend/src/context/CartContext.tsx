@@ -21,8 +21,8 @@ interface CartContextType {
   cart: CartItem[];
   isLoaded: boolean;
   addToCart: (product: Product, size: string, quantity?: number, color?: string) => void;
-  removeFromCart: (productId: string, size: string) => void;
-  updateQuantity: (productId: string, size: string, quantity: number) => void;
+  removeFromCart: (productId: string, size: string, color?: string) => void;
+  updateQuantity: (productId: string, size: string, quantity: number, color?: string) => void;
   clearCart: () => void;
   cartCount: number;
   cartSubtotal: number;
@@ -51,7 +51,9 @@ function readCart(value: string | null): CartItem[] {
   if (!value) return [];
   try {
     const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter(isCartItem) : [];
+    // mergeCarts collapses entries with the same product/size/colour, so a
+    // stored cart with duplicates is repaired on load.
+    return Array.isArray(parsed) ? mergeCarts([], parsed.filter(isCartItem)) : [];
   } catch {
     return [];
   }
@@ -166,7 +168,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const result = await requestCart(session.token);
         tokenRef.current = sessionStorage.getItem("vergo_access_token");
         const databaseCart = Array.isArray(result.items)
-          ? result.items.filter(isCartItem)
+          ? mergeCarts([], result.items.filter(isCartItem))
           : [];
         const nextCart = mergeCarts(databaseCart, guestCart);
 
@@ -252,22 +254,34 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const removeFromCart = (productId: string, size: string) => {
+  const removeFromCart = (productId: string, size: string, color?: string) => {
     setCart((previous) =>
       previous.filter(
-        (item) => !(item.product.id === productId && item.size === size),
+        (item) =>
+          !(
+            item.product.id === productId &&
+            item.size === size &&
+            item.color === color
+          ),
       ),
     );
   };
 
-  const updateQuantity = (productId: string, size: string, quantity: number) => {
+  const updateQuantity = (
+    productId: string,
+    size: string,
+    quantity: number,
+    color?: string,
+  ) => {
     if (quantity <= 0) {
-      removeFromCart(productId, size);
+      removeFromCart(productId, size, color);
       return;
     }
     setCart((previous) =>
       previous.map((item) =>
-        item.product.id === productId && item.size === size
+        item.product.id === productId &&
+        item.size === size &&
+        item.color === color
           ? { ...item, quantity: Math.min(99, quantity) }
           : item,
       ),

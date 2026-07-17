@@ -332,25 +332,36 @@ export default function OrderDetailsPage({
     setUploadError(null);
 
     const formData = new FormData();
-    formData.append("file", selectedFile);
+    formData.append("receipt", selectedFile);
+
+    const token = sessionStorage.getItem("vergo_access_token");
 
     try {
-      const res = await fetch(`${API_URL}/orders/${orderId}/payment-proof`, {
-        method: "POST",
+      const res = await fetch(`${API_URL}/payment-proofs/${orderId}/upload`, {
+        method: "PATCH",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: formData,
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || "Proof receipt upload failed.");
+        const errMsg = Array.isArray(data.message)
+          ? data.message.join(" ")
+          : data.message;
+        throw new Error(errMsg || "Proof receipt upload failed.");
       }
 
       setUploadSuccess(
-        "Bank transfer receipt submitted successfully. Awaiting verification.",
+        `Bank transfer receipt submitted successfully. Payment status: ${
+          data.status || "Pending Verification"
+        }.`,
       );
       setSelectedFile(null);
 
-      // Reload order details
+      // Reload order details so the backend-reported status is displayed
       loadOrder();
     } catch (err: any) {
       setUploadError(err.message || "Proof receipt upload failed.");
@@ -717,9 +728,11 @@ export default function OrderDetailsPage({
         </div>
 
         {/* Upload proof receipt card for Bank Transfer orders */}
+        {/* Only one receipt submission is allowed, so the upload card is
+            shown only while the proof is still awaiting its first upload */}
         {order.paymentMethod === "bank_transfer" &&
           (payStatusLower === "pending payment" ||
-            payStatusLower === "rejected") && (
+            payStatusLower === "pending upload") && (
             <div
               style={{
                 backgroundColor: "#0d0d0e",

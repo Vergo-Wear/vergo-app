@@ -7,17 +7,23 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, SRI_LANKAN_DISTRICTS } from './dto/create-order.dto';
 import { Prisma } from '@prisma/client';
-import { SupabaseService } from '../auth/supabase.service';
 import { AddressesService } from '../addresses/addresses.service';
+import { PaymentProofStatus } from '../common/enums/payment-proof-status.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { READY_STATUS } from './dto/update-order-status.dto';
 import { ReviewPaymentProofDto } from './dto/review-payment-proof.dto';
 
+const DEFAULT_PAYMENT_PROOF_EXPIRY_HOURS = 4;
+
 /** Payment proof statuses that are still awaiting an outcome. */
-const PENDING_PROOF_STATUSES = ['Pending Upload', 'Pending Verification'];
+const PENDING_PROOF_STATUSES = [
+  PaymentProofStatus.PENDING_UPLOAD as string,
+  PaymentProofStatus.PENDING_VERIFICATION as string,
+];
 
 const EMPLOYEE_PROCESSING_STATUSES = [
   'Ready to Process',
@@ -77,9 +83,19 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly supabase: SupabaseService,
+    private readonly configService: ConfigService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  /** Hours a bank-transfer customer has to upload their receipt. */
+  private paymentProofExpiryHours(): number {
+    const configured = Number(
+      this.configService.get<string>('PAYMENT_PROOF_EXPIRY_HOURS'),
+    );
+    return Number.isFinite(configured) && configured > 0
+      ? configured
+      : DEFAULT_PAYMENT_PROOF_EXPIRY_HOURS;
+  }
 
   /** Periodically expires overdue payment proofs (no queue infra exists yet). */
   onModuleInit() {
@@ -695,12 +711,17 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
+      // Bank transfer orders always get exactly one payment proof record,
+      // created in the same transaction so an order can never exist
+      // without one. COD orders never get a proof record.
       if (isBankTransfer) {
         await tx.paymentProofs.create({
           data: {
             orderId: order.orderId,
-            status: 'Pending Upload',
-            expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000),
+            status: PaymentProofStatus.PENDING_UPLOAD,
+            expiresAt: new Date(
+              Date.now() + this.paymentProofExpiryHours() * 60 * 60 * 1000,
+            ),
           },
         });
       }
@@ -748,83 +769,6 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       });
 
       return order;
-    });
-  }
-
-  async uploadPaymentProof(
-    orderId: string,
-    file: { originalname: string; mimetype: string; buffer: Buffer },
-  ) {
-    const order = await this.prisma.orders.findUnique({
-      where: { orderId },
-    });
-
-    if (!order) {
-      throw new BadRequestException(`Order with ID ${orderId} not found.`);
-    }
-
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const storagePath = `${orderId}/${Date.now()}-${safeName}`;
-    const { error: uploadError } = await this.supabase.adminClient.storage
-      .from('payment-proofs')
-      .upload(storagePath, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
-    if (uploadError) {
-      throw new BadRequestException(
-        `Payment proof storage failed: ${uploadError.message}`,
-      );
-    }
-    const { data: signed, error: signedError } =
-      await this.supabase.adminClient.storage
-        .from('payment-proofs')
-        .createSignedUrl(storagePath, 24 * 60 * 60);
-    if (signedError) {
-      throw new BadRequestException(
-        `Payment proof URL creation failed: ${signedError.message}`,
-      );
-    }
-    const receiptUrl = signed.signedUrl;
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    // Checkout pre-creates the proof row for bank transfers, so a fresh
-    // upload updates that row in place. expiresAt is refreshed so the new
-    // receipt gets its own verification window — a stale expiry would let
-    // the expiry sweep wrongly expire a just-uploaded receipt and notify
-    // the customer.
-    const existingProof = await this.prisma.paymentProofs.findFirst({
-      where: { orderId },
-      orderBy: { expiresAt: 'desc' },
-    });
-
-    if (existingProof) {
-      await this.prisma.paymentProofs.update({
-        where: { proofId: existingProof.proofId },
-        data: {
-          receiptUrl,
-          uploadedAt: new Date(),
-          expiresAt,
-          status: 'Pending Verification',
-        },
-      });
-    } else {
-      await this.prisma.paymentProofs.create({
-        data: {
-          orderId,
-          receiptUrl,
-          uploadedAt: new Date(),
-          expiresAt,
-          status: 'Pending Verification',
-        },
-      });
-    }
-
-    return await this.prisma.orders.update({
-      where: { orderId },
-      data: {
-        orderStatus: 'Pending Verification',
-      },
     });
   }
 }

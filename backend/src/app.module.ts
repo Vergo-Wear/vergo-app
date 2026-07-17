@@ -14,6 +14,8 @@ import { CartModule } from './cart/cart.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { AdminModule } from './admin/admin.module';
 import { AddressesModule } from './addresses/addresses.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { PaymentProofModule } from './payment-proof/payment-proof.module';
 import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CustomizationModule } from './customization/customization.module';
@@ -35,6 +37,8 @@ import { CustomizationModule } from './customization/customization.module';
     ReviewsModule,
     AdminModule,
     AddressesModule,
+    CloudinaryModule,
+    PaymentProofModule,
     EmailModule,
     NotificationsModule,
     CustomizationModule,
