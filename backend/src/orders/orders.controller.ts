@@ -22,6 +22,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { ReviewPaymentProofDto } from './dto/review-payment-proof.dto';
 import type { RequestUser } from '../auth/guards/supabase-auth.guard';
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { OptionalSupabaseAuthGuard } from '../auth/guards/optional-supabase-auth.guard';
@@ -92,6 +93,24 @@ export class OrdersController {
       orderId,
       dto.status,
     );
+  }
+
+  @Patch('manage/:id/payment-proofs/:proofId/review')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin', 'Employee')
+  reviewPaymentProof(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
+    @Param('proofId', new ParseUUIDPipe({ version: '4' })) proofId: string,
+    @Body() dto: ReviewPaymentProofDto,
+  ) {
+    return this.ordersService.reviewPaymentProof(orderId, proofId, dto);
+  }
+
+  @Post('manage/payment-proofs/expire')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin', 'Employee')
+  expireOverduePaymentProofs() {
+    return this.ordersService.expireOverduePaymentProofs();
   }
 
   @Post()

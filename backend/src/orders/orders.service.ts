@@ -4,12 +4,23 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, SRI_LANKAN_DISTRICTS } from './dto/create-order.dto';
 import { Prisma } from '@prisma/client';
 import { SupabaseService } from '../auth/supabase.service';
 import { AddressesService } from '../addresses/addresses.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { READY_STATUS } from './dto/update-order-status.dto';
+import { ReviewPaymentProofDto } from './dto/review-payment-proof.dto';
+
+/** Payment proof statuses that are still awaiting an outcome. */
+const PENDING_PROOF_STATUSES = ['Pending Upload', 'Pending Verification'];
+
+/** How often overdue payment proofs are swept and expired (1 hour). */
+const PROOF_EXPIRY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 /** Address fields snapshotted into order_shipping_details */
 interface ShippingSnapshot {
@@ -23,13 +34,29 @@ interface ShippingSnapshot {
 }
 
 @Injectable()
-export class OrdersService {
+export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OrdersService.name);
+  private expirySweepTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly supabase: SupabaseService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** Periodically expires overdue payment proofs (no queue infra exists yet). */
+  onModuleInit() {
+    const sweep = () =>
+      void this.expireOverduePaymentProofs().catch((error) =>
+        this.logger.error('Payment proof expiry sweep failed', error),
+      );
+    sweep();
+    this.expirySweepTimer = setInterval(sweep, PROOF_EXPIRY_SWEEP_INTERVAL_MS);
+  }
+
+  onModuleDestroy() {
+    if (this.expirySweepTimer) clearInterval(this.expirySweepTimer);
+  }
 
   private readonly orderInclude = {
     orderItems: {
@@ -75,20 +102,25 @@ export class OrdersService {
   async cancelCustomerOrder(profileId: string, orderId: string) {
     try {
       const order = await this.findCustomerOrder(profileId, orderId);
-      
+
       // 1. Block cancellation if an employee has already claimed it
       if (order.employeeId) {
         throw new ForbiddenException(
-          "This order has already been claimed by an employee and cannot be cancelled."
+          'This order has already been claimed by an employee and cannot be cancelled.',
         );
       }
 
       // 2. Only allow cancellation in initial stages
-      const status = order.orderStatus?.toLowerCase() || "";
-      const allowedCancelStatuses = ['draft', 'pending payment', 'pending verification', 'ready to process'];
+      const status = order.orderStatus?.toLowerCase() || '';
+      const allowedCancelStatuses = [
+        'draft',
+        'pending payment',
+        'pending verification',
+        'ready to process',
+      ];
       if (!allowedCancelStatuses.includes(status)) {
         throw new ForbiddenException(
-          `An order in "${order.orderStatus}" status cannot be cancelled.`
+          `An order in "${order.orderStatus}" status cannot be cancelled.`,
         );
       }
 
@@ -102,18 +134,21 @@ export class OrdersService {
         // Release stock: decrease reservedQuantity and increase quantity
         for (const item of order.orderItems) {
           if (!item.variantId) continue;
-          
+
           const inventoryRow = await tx.inventory.findFirst({
             where: {
               variantId: item.variantId,
               ...(order.branchId ? { branchId: order.branchId } : {}),
             },
           });
-          
+
           if (inventoryRow) {
-            const newReserved = Math.max(0, (inventoryRow.reservedQuantity || 0) - item.quantity);
+            const newReserved = Math.max(
+              0,
+              (inventoryRow.reservedQuantity || 0) - item.quantity,
+            );
             const newQuantity = (inventoryRow.quantity || 0) + item.quantity;
-            
+
             await tx.inventory.update({
               where: { inventoryId: inventoryRow.inventoryId },
               data: {
@@ -128,16 +163,18 @@ export class OrdersService {
         return updatedOrder;
       });
     } catch (err: any) {
-      const errMsg = err.message || "";
-      const isConnectionError = 
+      const errMsg = err.message || '';
+      const isConnectionError =
         errMsg.includes("Can't reach database") ||
-        err.code === "P1001" ||
-        err.code === "P2021" ||
-        errMsg.includes("PrismaClientInitializationError") ||
-        errMsg.includes("connect");
+        err.code === 'P1001' ||
+        err.code === 'P2021' ||
+        errMsg.includes('PrismaClientInitializationError') ||
+        errMsg.includes('connect');
 
       if (isConnectionError) {
-        this.logger.warn(`Database connection failed in cancelCustomerOrder. Simulating local cancel success.`);
+        this.logger.warn(
+          `Database connection failed in cancelCustomerOrder. Simulating local cancel success.`,
+        );
         return {
           orderId: orderId,
           orderStatus: 'Cancelled',
@@ -184,11 +221,106 @@ export class OrdersService {
       if (!employee) throw new NotFoundException('Employee profile not found.');
       employeeId = employee.employeeId;
     }
-    return this.prisma.orders.update({
+    const updated = await this.prisma.orders.update({
       where: { orderId },
       data: { orderStatus: status, employeeId },
       include: this.orderInclude,
     });
+
+    // Notify the customer only after the READY status has been saved, and
+    // only when the status actually changed (READY -> READY is a no-op).
+    if (status === READY_STATUS && order.orderStatus !== READY_STATUS) {
+      await this.notifications.notifyOrderReady(orderId);
+    }
+
+    return updated;
+  }
+
+  /**
+   * Employee/Admin review of a bank transfer payment proof. Rejection moves
+   * the order back to 'Pending Payment' and notifies the customer (in-app +
+   * email). A proof already in the requested status is left untouched so the
+   * same rejection can never notify the customer twice.
+   */
+  async reviewPaymentProof(
+    orderId: string,
+    proofId: string,
+    dto: ReviewPaymentProofDto,
+  ) {
+    const proof = await this.prisma.paymentProofs.findFirst({
+      where: { proofId, orderId },
+    });
+    if (!proof) throw new NotFoundException('Payment proof not found.');
+
+    // Atomic transition guard: only rows not already in the target status
+    // are updated, so concurrent duplicate reviews produce count = 0.
+    const transition = await this.prisma.paymentProofs.updateMany({
+      where: { proofId, status: { not: dto.status } },
+      data: { status: dto.status, adminNotes: dto.adminNotes ?? null },
+    });
+    if (transition.count === 0) {
+      return this.prisma.paymentProofs.findFirst({ where: { proofId } });
+    }
+
+    if (dto.status === 'Rejected') {
+      // The customer must upload a new receipt, so reopen the payment step.
+      await this.prisma.orders.update({
+        where: { orderId },
+        data: { orderStatus: 'Pending Payment' },
+      });
+      await this.notifications.notifyPaymentRejected(orderId, dto.adminNotes);
+    } else if (dto.status === 'Approved') {
+      await this.prisma.orders.update({
+        where: { orderId },
+        data: { orderStatus: 'Ready to Pick' },
+      });
+    }
+
+    return this.prisma.paymentProofs.findFirst({ where: { proofId } });
+  }
+
+  /**
+   * Expires payment proofs whose expiry timestamp has passed while still
+   * pending, reopens the payment step on the affected orders, and notifies
+   * each customer (in-app + email). Runs on an interval and can also be
+   * triggered manually from the admin API. Each proof transitions to
+   * 'Expired' exactly once, so notifications are never duplicated.
+   */
+  async expireOverduePaymentProofs() {
+    const overdue = await this.prisma.paymentProofs.findMany({
+      where: {
+        status: { in: PENDING_PROOF_STATUSES },
+        expiresAt: { lt: new Date() },
+      },
+    });
+
+    let expired = 0;
+    for (const proof of overdue) {
+      // Atomic transition guard against concurrent sweeps/reviews.
+      const transition = await this.prisma.paymentProofs.updateMany({
+        where: {
+          proofId: proof.proofId,
+          status: { in: PENDING_PROOF_STATUSES },
+        },
+        data: { status: 'Expired' },
+      });
+      if (transition.count === 0) continue;
+      expired += 1;
+
+      await this.prisma.orders.updateMany({
+        where: {
+          orderId: proof.orderId,
+          orderStatus: { in: ['Pending Payment', 'Pending Verification'] },
+        },
+        data: { orderStatus: 'Pending Payment' },
+      });
+      await this.notifications.notifyPaymentExpired(proof.orderId);
+    }
+
+    if (expired > 0) {
+      this.logger.log(`Expired ${expired} overdue payment proof(s).`);
+    }
+    return { expired };
   }
 
   async create(createOrderDto: CreateOrderDto, profileId?: string) {
@@ -436,6 +568,11 @@ export class OrdersService {
     const receiptUrl = signed.signedUrl;
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+    // Checkout pre-creates the proof row for bank transfers, so a fresh
+    // upload updates that row in place. expiresAt is refreshed so the new
+    // receipt gets its own verification window — a stale expiry would let
+    // the expiry sweep wrongly expire a just-uploaded receipt and notify
+    // the customer.
     const existingProof = await this.prisma.paymentProofs.findFirst({
       where: { orderId },
       orderBy: { expiresAt: 'desc' },
@@ -447,6 +584,7 @@ export class OrdersService {
         data: {
           receiptUrl,
           uploadedAt: new Date(),
+          expiresAt,
           status: 'Pending Verification',
         },
       });

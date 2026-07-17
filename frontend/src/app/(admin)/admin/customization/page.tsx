@@ -24,7 +24,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export default function CustomizationPage() {
   const { addNotification } = useAdmin();
-  
+
   const [settings, setSettings] = useState<CustomizationSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);

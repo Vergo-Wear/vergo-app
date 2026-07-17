@@ -6,7 +6,20 @@ import { CreateOrderDto } from './dto/create-order.dto';
 describe('OrdersService', () => {
   const customerDelegate = { findFirst: jest.fn() };
   const productVariantDelegate = { findUnique: jest.fn() };
-  const ordersDelegate = { create: jest.fn() };
+  const ordersDelegate = {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  };
+  const employeeDelegate = { findFirst: jest.fn() };
+  const paymentProofsDelegate = {
+    create: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  };
   const orderItemDelegate = { create: jest.fn() };
   const orderCustomerDetailsDelegate = { create: jest.fn() };
   const orderShippingDetailsDelegate = { create: jest.fn() };
@@ -15,26 +28,28 @@ describe('OrdersService', () => {
     create: jest.fn(),
     updateMany: jest.fn(),
   };
-  const paymentProofsDelegate = {
-    create: jest.fn(),
-    findFirst: jest.fn(),
-    update: jest.fn(),
-  };
 
   const prisma = {
     customer: customerDelegate,
     productVariant: productVariantDelegate,
     orders: ordersDelegate,
+    employee: employeeDelegate,
+    paymentProofs: paymentProofsDelegate,
     orderItem: orderItemDelegate,
     orderCustomerDetails: orderCustomerDetailsDelegate,
     orderShippingDetails: orderShippingDetailsDelegate,
     userAddress: userAddressDelegate,
-    paymentProofs: paymentProofsDelegate,
     // Execute the callback against the same mocked delegates so the whole
     // "transaction" shares state; a thrown error rejects like a rollback.
     $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
       callback(prisma),
     ),
+  };
+
+  const notifications = {
+    notifyOrderReady: jest.fn(),
+    notifyPaymentRejected: jest.fn(),
+    notifyPaymentExpired: jest.fn(),
   };
 
   let service: OrdersService;
@@ -76,7 +91,11 @@ describe('OrdersService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new OrdersService(prisma as never, {} as never);
+    service = new OrdersService(
+      prisma as never,
+      {} as never,
+      notifications as never,
+    );
 
     productVariantDelegate.findUnique.mockResolvedValue(variant);
     ordersDelegate.create.mockResolvedValue({ orderId });
@@ -286,6 +305,212 @@ describe('OrdersService', () => {
 
       await expect(service.create(baseDto())).rejects.toThrow('insert failed');
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('order ready notification', () => {
+    beforeEach(() => {
+      ordersDelegate.update.mockResolvedValue({
+        orderId,
+        orderStatus: 'Ready for Pickup',
+      });
+    });
+
+    it('notifies the customer after the status transitions to READY', async () => {
+      ordersDelegate.findUnique.mockResolvedValue({
+        orderId,
+        orderStatus: 'Preparing',
+        employeeId: 'emp-1',
+      });
+
+      await service.updateManagedStatus(
+        profileId,
+        'Admin',
+        orderId,
+        'Ready for Pickup',
+      );
+
+      expect(ordersDelegate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { orderId },
+          data: expect.objectContaining({ orderStatus: 'Ready for Pickup' }),
+        }),
+      );
+      expect(notifications.notifyOrderReady).toHaveBeenCalledTimes(1);
+      expect(notifications.notifyOrderReady).toHaveBeenCalledWith(orderId);
+    });
+
+    it('does not notify again when READY is re-saved as READY', async () => {
+      ordersDelegate.findUnique.mockResolvedValue({
+        orderId,
+        orderStatus: 'Ready for Pickup',
+        employeeId: 'emp-1',
+      });
+
+      await service.updateManagedStatus(
+        profileId,
+        'Admin',
+        orderId,
+        'Ready for Pickup',
+      );
+
+      expect(notifications.notifyOrderReady).not.toHaveBeenCalled();
+    });
+
+    it('does not notify for non-READY status changes', async () => {
+      ordersDelegate.findUnique.mockResolvedValue({
+        orderId,
+        orderStatus: 'Claimed',
+        employeeId: 'emp-1',
+      });
+      ordersDelegate.update.mockResolvedValue({
+        orderId,
+        orderStatus: 'Preparing',
+      });
+
+      await service.updateManagedStatus(
+        profileId,
+        'Admin',
+        orderId,
+        'Preparing',
+      );
+
+      expect(notifications.notifyOrderReady).not.toHaveBeenCalled();
+    });
+
+    it('does not notify when saving the READY status fails', async () => {
+      ordersDelegate.findUnique.mockResolvedValue({
+        orderId,
+        orderStatus: 'Preparing',
+        employeeId: 'emp-1',
+      });
+      ordersDelegate.update.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.updateManagedStatus(
+          profileId,
+          'Admin',
+          orderId,
+          'Ready for Pickup',
+        ),
+      ).rejects.toThrow('db down');
+      expect(notifications.notifyOrderReady).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('payment proof review and expiry', () => {
+    const proofId = 'a7c15c25-6f8a-4be3-9d41-2f8f1c7a6666';
+
+    describe('payment proof review', () => {
+      beforeEach(() => {
+        paymentProofsDelegate.findFirst.mockResolvedValue({
+          proofId,
+          orderId,
+          status: 'Pending Verification',
+        });
+        ordersDelegate.update.mockResolvedValue({ orderId });
+      });
+
+      it('rejecting a proof notifies the customer and reopens payment', async () => {
+        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
+
+        await service.reviewPaymentProof(orderId, proofId, {
+          status: 'Rejected',
+          adminNotes: 'Blurry receipt',
+        });
+
+        expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith({
+          where: { proofId, status: { not: 'Rejected' } },
+          data: { status: 'Rejected', adminNotes: 'Blurry receipt' },
+        });
+        expect(ordersDelegate.update).toHaveBeenCalledWith({
+          where: { orderId },
+          data: { orderStatus: 'Pending Payment' },
+        });
+        expect(notifications.notifyPaymentRejected).toHaveBeenCalledTimes(1);
+        expect(notifications.notifyPaymentRejected).toHaveBeenCalledWith(
+          orderId,
+          'Blurry receipt',
+        );
+      });
+
+      it('rejecting an already-rejected proof does not notify again', async () => {
+        paymentProofsDelegate.findFirst.mockResolvedValue({
+          proofId,
+          orderId,
+          status: 'Rejected',
+        });
+        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 0 });
+
+        await service.reviewPaymentProof(orderId, proofId, {
+          status: 'Rejected',
+        });
+
+        expect(notifications.notifyPaymentRejected).not.toHaveBeenCalled();
+        expect(ordersDelegate.update).not.toHaveBeenCalled();
+      });
+
+      it('approving a proof never sends a rejection notification', async () => {
+        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
+
+        await service.reviewPaymentProof(orderId, proofId, {
+          status: 'Approved',
+        });
+
+        expect(notifications.notifyPaymentRejected).not.toHaveBeenCalled();
+        expect(ordersDelegate.update).toHaveBeenCalledWith({
+          where: { orderId },
+          data: { orderStatus: 'Ready to Pick' },
+        });
+      });
+    });
+
+    describe('payment proof expiry', () => {
+      it('expires overdue proofs once and notifies each customer', async () => {
+        paymentProofsDelegate.findMany.mockResolvedValue([
+          { proofId, orderId, status: 'Pending Verification' },
+        ]);
+        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
+        ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
+
+        const result = await service.expireOverduePaymentProofs();
+
+        expect(result).toEqual({ expired: 1 });
+        expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith({
+          where: {
+            proofId,
+            status: { in: ['Pending Upload', 'Pending Verification'] },
+          },
+          data: { status: 'Expired' },
+        });
+        expect(notifications.notifyPaymentExpired).toHaveBeenCalledTimes(1);
+        expect(notifications.notifyPaymentExpired).toHaveBeenCalledWith(
+          orderId,
+        );
+      });
+
+      it('an already-expired proof is never expired or notified twice', async () => {
+        paymentProofsDelegate.findMany.mockResolvedValue([
+          { proofId, orderId, status: 'Pending Verification' },
+        ]);
+        // Simulates a concurrent sweep having already transitioned the proof.
+        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 0 });
+
+        const result = await service.expireOverduePaymentProofs();
+
+        expect(result).toEqual({ expired: 0 });
+        expect(notifications.notifyPaymentExpired).not.toHaveBeenCalled();
+      });
+
+      it('does nothing when no proofs are overdue', async () => {
+        paymentProofsDelegate.findMany.mockResolvedValue([]);
+
+        const result = await service.expireOverduePaymentProofs();
+
+        expect(result).toEqual({ expired: 0 });
+        expect(paymentProofsDelegate.updateMany).not.toHaveBeenCalled();
+        expect(notifications.notifyPaymentExpired).not.toHaveBeenCalled();
+      });
     });
   });
 });
