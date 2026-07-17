@@ -74,9 +74,12 @@ describe('OrdersService', () => {
       items: [{ variantId, quantity: 2 }],
     }) as CreateOrderDto;
 
+  const configService = { get: jest.fn() };
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new OrdersService(prisma as never, {} as never);
+    configService.get.mockReturnValue(undefined);
+    service = new OrdersService(prisma as never, configService as never);
 
     productVariantDelegate.findUnique.mockResolvedValue(variant);
     ordersDelegate.create.mockResolvedValue({ orderId });
@@ -249,6 +252,67 @@ describe('OrdersService', () => {
         data: expect.objectContaining({ isPrimary: true }),
       });
       expect(calls).toEqual(['demote', 'create']);
+    });
+  });
+
+  describe('payment proofs', () => {
+    beforeEach(() => {
+      customerDelegate.findFirst.mockResolvedValue({ customerId });
+      paymentProofsDelegate.create.mockResolvedValue({});
+    });
+
+    it('does not create a payment proof for COD orders', async () => {
+      await service.create(baseDto(), profileId);
+
+      expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
+      expect(ordersDelegate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ paymentMethod: 'cod' }),
+      });
+    });
+
+    it('creates a Pending Upload proof with an expiry for bank transfer orders', async () => {
+      const dto = baseDto();
+      dto.paymentMethod = 'bank_transfer';
+
+      await service.create(dto, profileId);
+
+      expect(paymentProofsDelegate.create).toHaveBeenCalledTimes(1);
+      expect(paymentProofsDelegate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          orderId,
+          status: 'Pending Upload',
+          expiresAt: expect.any(Date),
+        }),
+      });
+      const { expiresAt } = paymentProofsDelegate.create.mock.calls[0][0].data;
+      expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('honours PAYMENT_PROOF_EXPIRY_HOURS from configuration', async () => {
+      configService.get.mockReturnValue('12');
+      const dto = baseDto();
+      dto.paymentMethod = 'bank_transfer';
+
+      const before = Date.now();
+      await service.create(dto, profileId);
+
+      const { expiresAt } = paymentProofsDelegate.create.mock.calls[0][0].data;
+      const hours = (expiresAt.getTime() - before) / (60 * 60 * 1000);
+      expect(hours).toBeGreaterThan(11.9);
+      expect(hours).toBeLessThan(12.1);
+    });
+
+    it('rolls the order back when the proof insert fails', async () => {
+      paymentProofsDelegate.create.mockRejectedValue(
+        new Error('proof insert failed'),
+      );
+      const dto = baseDto();
+      dto.paymentMethod = 'bank_transfer';
+
+      await expect(service.create(dto, profileId)).rejects.toThrow(
+        'proof insert failed',
+      );
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
   });
 

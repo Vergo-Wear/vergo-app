@@ -5,11 +5,14 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, SRI_LANKAN_DISTRICTS } from './dto/create-order.dto';
 import { Prisma } from '@prisma/client';
-import { SupabaseService } from '../auth/supabase.service';
 import { AddressesService } from '../addresses/addresses.service';
+import { PaymentProofStatus } from '../common/enums/payment-proof-status.enum';
+
+const DEFAULT_PAYMENT_PROOF_EXPIRY_HOURS = 4;
 
 /** Address fields snapshotted into order_shipping_details */
 interface ShippingSnapshot {
@@ -28,8 +31,18 @@ export class OrdersService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly supabase: SupabaseService,
+    private readonly configService: ConfigService,
   ) {}
+
+  /** Hours a bank-transfer customer has to upload their receipt. */
+  private paymentProofExpiryHours(): number {
+    const configured = Number(
+      this.configService.get<string>('PAYMENT_PROOF_EXPIRY_HOURS'),
+    );
+    return Number.isFinite(configured) && configured > 0
+      ? configured
+      : DEFAULT_PAYMENT_PROOF_EXPIRY_HOURS;
+  }
 
   private readonly orderInclude = {
     orderItems: {
@@ -343,12 +356,17 @@ export class OrdersService {
         },
       });
 
+      // Bank transfer orders always get exactly one payment proof record,
+      // created in the same transaction so an order can never exist
+      // without one. COD orders never get a proof record.
       if (isBankTransfer) {
         await tx.paymentProofs.create({
           data: {
             orderId: order.orderId,
-            status: 'Pending Upload',
-            expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000),
+            status: PaymentProofStatus.PENDING_UPLOAD,
+            expiresAt: new Date(
+              Date.now() + this.paymentProofExpiryHours() * 60 * 60 * 1000,
+            ),
           },
         });
       }
@@ -396,77 +414,6 @@ export class OrdersService {
       });
 
       return order;
-    });
-  }
-
-  async uploadPaymentProof(
-    orderId: string,
-    file: { originalname: string; mimetype: string; buffer: Buffer },
-  ) {
-    const order = await this.prisma.orders.findUnique({
-      where: { orderId },
-    });
-
-    if (!order) {
-      throw new BadRequestException(`Order with ID ${orderId} not found.`);
-    }
-
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const storagePath = `${orderId}/${Date.now()}-${safeName}`;
-    const { error: uploadError } = await this.supabase.adminClient.storage
-      .from('payment-proofs')
-      .upload(storagePath, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
-    if (uploadError) {
-      throw new BadRequestException(
-        `Payment proof storage failed: ${uploadError.message}`,
-      );
-    }
-    const { data: signed, error: signedError } =
-      await this.supabase.adminClient.storage
-        .from('payment-proofs')
-        .createSignedUrl(storagePath, 24 * 60 * 60);
-    if (signedError) {
-      throw new BadRequestException(
-        `Payment proof URL creation failed: ${signedError.message}`,
-      );
-    }
-    const receiptUrl = signed.signedUrl;
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    const existingProof = await this.prisma.paymentProofs.findFirst({
-      where: { orderId },
-      orderBy: { expiresAt: 'desc' },
-    });
-
-    if (existingProof) {
-      await this.prisma.paymentProofs.update({
-        where: { proofId: existingProof.proofId },
-        data: {
-          receiptUrl,
-          uploadedAt: new Date(),
-          status: 'Pending Verification',
-        },
-      });
-    } else {
-      await this.prisma.paymentProofs.create({
-        data: {
-          orderId,
-          receiptUrl,
-          uploadedAt: new Date(),
-          expiresAt,
-          status: 'Pending Verification',
-        },
-      });
-    }
-
-    return await this.prisma.orders.update({
-      where: { orderId },
-      data: {
-        orderStatus: 'Pending Verification',
-      },
     });
   }
 }

@@ -131,11 +131,24 @@ export class CartService {
       cart ??= await tx.cart.create({ data: { customerId } });
       await tx.cartItem.deleteMany({ where: { cartId: cart.cartId } });
       if (dto.items.length) {
+        // Collapse duplicate variants into a single row so the cart can
+        // never hold two entries for the same product/size/colour.
+        const quantityByVariant = new Map<string, number>();
+        dto.items.forEach((item, index) => {
+          const variantId = variants[index];
+          quantityByVariant.set(
+            variantId,
+            Math.min(
+              99,
+              (quantityByVariant.get(variantId) ?? 0) + item.quantity,
+            ),
+          );
+        });
         await tx.cartItem.createMany({
-          data: dto.items.map((item, index) => ({
+          data: [...quantityByVariant].map(([variantId, quantity]) => ({
             cartId: cart!.cartId,
-            variantId: variants[index],
-            quantity: item.quantity,
+            variantId,
+            quantity,
           })),
         });
       }

@@ -3,19 +3,13 @@ import {
   Post,
   Body,
   Param,
-  UploadedFile,
-  UseInterceptors,
   ParseUUIDPipe,
-  ParseFilePipe,
-  MaxFileSizeValidator,
-  FileTypeValidator,
-  BadRequestException,
   Get,
   Patch,
   UseGuards,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { OrdersService } from './orders.service';
+import { PaymentProofService } from '../payment-proof/payment-proof.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -33,7 +27,10 @@ const CurrentIdentity = createParamDecorator(
 
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly paymentProofService: PaymentProofService,
+  ) {}
 
   @Get('mine')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
@@ -108,36 +105,13 @@ export class OrdersController {
     };
   }
 
-  @Post(':id/payment-proof')
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadPaymentProof(
-    @Param('id', new ParseUUIDPipe({ version: '4' }))
-    orderId: string,
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({
-            maxSize: 5 * 1024 * 1024,
-            message: 'Proof upload size must be under 5MB.',
-          }),
-          new FileTypeValidator({
-            fileType: /(jpg|jpeg|png|pdf)$/i,
-          }),
-        ],
-      }),
-    )
-    file: any,
+  @Get(':id/payment-proof')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Customer')
+  getPaymentProof(
+    @CurrentUser() profileId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
   ) {
-    if (!file) {
-      throw new BadRequestException('No payment proof receipt file uploaded.');
-    }
-
-    const order = await this.ordersService.uploadPaymentProof(orderId, file);
-
-    return {
-      success: true,
-      message: 'Payment proof uploaded successfully.',
-      order,
-    };
+    return this.paymentProofService.getForCustomerOrder(profileId, orderId);
   }
 }

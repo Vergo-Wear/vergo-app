@@ -14,6 +14,8 @@ import { CartModule } from './cart/cart.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { AdminModule } from './admin/admin.module';
 import { AddressesModule } from './addresses/addresses.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { PaymentProofModule } from './payment-proof/payment-proof.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { AddressesModule } from './addresses/addresses.module';
     ReviewsModule,
     AdminModule,
     AddressesModule,
+    CloudinaryModule,
+    PaymentProofModule,
   ],
   controllers: [AppController],
   providers: [AppService],

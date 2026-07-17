@@ -679,12 +679,12 @@ function BankTransferFlow({
       return;
     }
 
-    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    const isAllowedExt = ["jpg", "jpeg", "png", "pdf"].includes(fileExtension || "");
-    
+    const isAllowedExt = ["jpg", "jpeg", "png", "webp", "pdf"].includes(fileExtension || "");
+
     if (!allowedTypes.includes(file.type) && !isAllowedExt) {
-      setUploadError("Format rejected. Please choose a JPG, PNG, or PDF.");
+      setUploadError("Format rejected. Please choose a JPG, PNG, WEBP, or PDF.");
       setSelectedFile(null);
       return;
     }
@@ -699,14 +699,14 @@ function BankTransferFlow({
     setUploadSuccess(null);
 
     const formData = new FormData();
-    formData.append("file", selectedFile);
+    formData.append("receipt", selectedFile);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
     const token = sessionStorage.getItem("vergo_access_token");
 
     try {
-      const res = await fetch(`${apiUrl}/orders/${orderId}/payment-proof`, {
-        method: "POST",
+      const res = await fetch(`${apiUrl}/payment-proofs/${orderId}/upload`, {
+        method: "PATCH",
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
@@ -716,10 +716,13 @@ function BankTransferFlow({
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Proof receipt upload failed.");
+        const errMsg = Array.isArray(data.message) ? data.message.join(" ") : data.message;
+        throw new Error(errMsg || "Proof receipt upload failed.");
       }
 
-      setUploadSuccess("Bank transfer receipt submitted successfully. Awaiting verification.");
+      setUploadSuccess(
+        `Bank transfer receipt submitted successfully. Payment status: ${data.status || "Pending Verification"}.`,
+      );
       setSelectedFile(null);
     } catch (err: any) {
       setUploadError(err.message || "Upload failed. Please try again.");
@@ -1324,9 +1327,9 @@ function BankTransferFlow({
             <span style={{ fontSize: "12px", fontWeight: "800", color: "rgba(255, 255, 255, 0.4)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
               Upload Receipt
             </span>
-            <input 
-              type="file" 
-              accept="image/jpeg,image/png,application/pdf"
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
               id="bt-file-picker"
               style={{ display: "none" }}
               onChange={handleFileChange}
