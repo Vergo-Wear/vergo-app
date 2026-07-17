@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { createSupabaseClient } from "@/lib/supabase";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import "./navbar.css";
 
 export interface NavbarProps {
@@ -39,6 +40,8 @@ export default function Navbar({
 
   const [currentUser, setCurrentUser] = useState<NavbarProps["user"]>(user);
   const [loggedInState, setLoggedInState] = useState<boolean>(isLoggedIn);
+  const [isCustomer, setIsCustomer] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
@@ -51,12 +54,16 @@ export default function Navbar({
           const parsedUser = JSON.parse(storedUser);
           setCurrentUser(parsedUser);
           setLoggedInState(true);
+          setIsCustomer(
+            String(parsedUser.role || "").toLowerCase() === "customer",
+          );
         } catch (e) {
           console.error("Error parsing user data from localStorage:", e);
         }
       } else {
         setCurrentUser(user);
         setLoggedInState(isLoggedIn);
+        setIsCustomer(false);
       }
     };
 
@@ -74,6 +81,32 @@ export default function Navbar({
       window.removeEventListener("storage", handleAuthChange);
     };
   }, [user, isLoggedIn]);
+
+  // Unread notification count for the customer bell icon. Refreshes on
+  // auth changes and whenever a page announces notifications were read.
+  useEffect(() => {
+    if (!loggedInState || !isCustomer) {
+      setUnreadCount(0);
+      return;
+    }
+
+    let cancelled = false;
+    const loadUnreadCount = () => {
+      authenticatedFetch("/notifications/unread-count", { cache: "no-store" })
+        .then((response) => (response?.ok ? response.json() : null))
+        .then((data: { count: number } | null) => {
+          if (!cancelled && data) setUnreadCount(data.count);
+        })
+        .catch(() => {});
+    };
+
+    loadUnreadCount();
+    window.addEventListener("vergo-notifications-change", loadUnreadCount);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("vergo-notifications-change", loadUnreadCount);
+    };
+  }, [loggedInState, isCustomer]);
 
   useEffect(() => {
     if (!showDropdown) return;
@@ -137,6 +170,32 @@ export default function Navbar({
             </svg>
             <span className="cart-badge">{cartCount}</span>
           </Link>
+
+          {loggedInState && isCustomer && (
+            <Link
+              href="/profile/notifications"
+              className="icon-btn relative-btn"
+              aria-label="Notifications"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-6 h-6"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+                />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="cart-badge">{unreadCount}</span>
+              )}
+            </Link>
+          )}
 
           {loggedInState ? (
             <div className="user-profile-menu">
@@ -227,6 +286,16 @@ export default function Navbar({
           ))}
           {loggedInState ? (
             <>
+              {isCustomer && (
+                <li>
+                  <Link
+                    href="/profile/notifications"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    NOTIFICATIONS{unreadCount > 0 ? ` (${unreadCount})` : ""}
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link href="/profile" onClick={() => setIsOpen(false)}>
                   MY ACCOUNT

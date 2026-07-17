@@ -1,0 +1,134 @@
+/* Customer Notifications Page Styles */
+
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notification-card {
+  background: #111112;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.2s ease;
+}
+
+.notification-card.unread {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: #17171a;
+}
+
+.notification-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.notification-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.notification-read-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.notification-read-badge.unread {
+  background: #ffffff;
+  color: #050505;
+}
+
+.notification-read-badge.read {
+  background: rgba(255, 255, 255, 0.08);
+  color: #8e8e93;
+}
+
+.notification-message {
+  font-size: 0.9rem;
+  color: #d1d1d6;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.notification-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.notification-meta-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.75rem;
+  color: #8e8e93;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.notification-order-link {
+  color: #8e8e93;
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.notification-order-link:hover {
+  color: #ffffff;
+}
+
+.notification-mark-read-btn {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.notification-mark-read-btn:hover {
+  background: #ffffff;
+  color: #050505;
+}
+
+.notification-mark-read-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Unread count badge shown on the profile page notifications button */
+.notifications-count-badge {
+  background: #ff3b30;
+  color: #ffffff;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  margin-left: 8px;
+}

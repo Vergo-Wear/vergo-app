@@ -16,6 +16,8 @@ import { AdminModule } from './admin/admin.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { PaymentProofModule } from './payment-proof/payment-proof.module';
+import { EmailModule } from './email/email.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { CustomizationModule } from './customization/customization.module';
 
 @Module({
@@ -37,6 +39,8 @@ import { CustomizationModule } from './customization/customization.module';
     AddressesModule,
     CloudinaryModule,
     PaymentProofModule,
+    EmailModule,
+    NotificationsModule,
     CustomizationModule,
   ],
   controllers: [AppController],
