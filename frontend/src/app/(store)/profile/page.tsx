@@ -363,7 +363,11 @@ export default function ProfilePage() {
             {addresses.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 {addresses.map((addr) => (
-                  <div key={addr.addressId} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}>
+                  <div
+                    key={addr.addressId}
+                    className="address-item"
+                    style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)", paddingBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px" }}
+                  >
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: "700", color: "#ffffff", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
                         <span>{addr.receiverName}</span>
@@ -381,14 +385,13 @@ export default function ProfilePage() {
                       </div>
                     </div>
                     
-                    <div style={{ display: "flex", gap: "10px", flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
                       {!addr.isPrimary && (
                         <button 
                           type="button" 
                           onClick={() => handleMakePrimary(addr.addressId)}
-                          style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "#ffffff", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", cursor: "pointer", transition: "all 0.2s" }}
-                          onMouseEnter={(e) => e.currentTarget.style.borderColor = "#ffffff"}
-                          onMouseLeave={(e) => e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"}
+                          className="make-default-btn text-white"
+                          style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.15)", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", cursor: "pointer", transition: "all 0.2s" }}
                         >
                           MAKE DEFAULT
                         </button>
@@ -396,11 +399,12 @@ export default function ProfilePage() {
                       <button 
                         type="button" 
                         onClick={() => handleDeleteAddress(addr.addressId)}
-                        style={{ background: "transparent", border: "1px solid rgba(255, 77, 77, 0.2)", color: "#ff4d4d", padding: "4px 10px", borderRadius: "4px", fontSize: "11px", cursor: "pointer", transition: "all 0.2s" }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255, 77, 77, 0.05)"}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                        title="Delete Address"
+                        style={{ background: "transparent", border: "none", padding: "6px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                       >
-                        DELETE
+                        <svg className="w-4 h-4 text-red-500 hover:text-red-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -576,7 +580,7 @@ export default function ProfilePage() {
         <div 
           style={{
             position: "fixed",
-            bottom: "24px",
+            top: "24px",
             right: "24px",
             backgroundColor: toast.type === "success" ? "rgba(0, 255, 157, 0.15)" : "rgba(255, 77, 77, 0.15)",
             border: toast.type === "success" ? "1px solid rgba(0, 255, 157, 0.3)" : "1px solid rgba(255, 77, 77, 0.3)",

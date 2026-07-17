@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { PaymentProofModule } from './payment-proof/payment-proof.module';
+import { CustomizationModule } from './customization/customization.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PaymentProofModule } from './payment-proof/payment-proof.module';
     AddressesModule,
     CloudinaryModule,
     PaymentProofModule,
+    CustomizationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
