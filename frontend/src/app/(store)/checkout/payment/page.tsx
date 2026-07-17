@@ -582,6 +582,18 @@ interface BankTransferFlowProps {
   onBackToPaymentSelection?: () => void;
 }
 
+interface BankDetails {
+  bankName: string;
+  bankBranch: string;
+  bankAccountNumber: string;
+}
+
+const defaultBankDetails: BankDetails = {
+  bankName: "VERGO SL - CENTRAL BANK",
+  bankBranch: "Main Branch",
+  bankAccountNumber: "1234 - 5678 - 9012",
+};
+
 function BankTransferFlow({
   orderId,
   grandTotalLkr,
@@ -590,7 +602,13 @@ function BankTransferFlow({
   onBackToPaymentSelection,
 }: BankTransferFlowProps) {
   const [step, setStep] = useState(1);
-  const [timeLeft, setTimeLeft] = useState(14400); // 4 hours in seconds
+  const [proofExpiresAt, setProofExpiresAt] = useState(
+    () => Date.now() + 15 * 60 * 1000,
+  );
+  const [timeLeft, setTimeLeft] = useState(15 * 60);
+  const [proofStatus, setProofStatus] = useState<string | null>(null);
+  const [showExpiredModal, setShowExpiredModal] = useState(false);
+  const [bankDetails, setBankDetails] = useState<BankDetails>(defaultBankDetails);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // File states
@@ -622,17 +640,68 @@ function BankTransferFlow({
   }, [toast]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const token = sessionStorage.getItem("vergo_access_token");
+
+    void fetch(`${apiUrl}/orders/${orderId}/payment-proof`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const proof = await response.json();
+        const expiresAt = new Date(
+          proof.reservationExpiresAt ?? proof.expiresAt,
+        ).getTime();
+        if (!Number.isNaN(expiresAt)) setProofExpiresAt(expiresAt);
+        setProofStatus(proof.status ?? null);
+        if (String(proof.status).toLowerCase() === "expired") {
+          setShowExpiredModal(true);
         }
-        return prev - 1;
+      })
+      .catch(() => {
+        // Keep the 15-minute fallback visible if the proof lookup is unavailable.
       });
-    }, 1000);
-    return () => clearInterval(timer);
+  }, [orderId]);
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    void fetch(`${apiUrl}/customization`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const customization = await response.json();
+        setBankDetails({
+          bankName: customization.bankName || defaultBankDetails.bankName,
+          bankBranch: customization.bankBranch || defaultBankDetails.bankBranch,
+          bankAccountNumber:
+            customization.bankAccountNumber || defaultBankDetails.bankAccountNumber,
+        });
+      })
+      .catch(() => {
+        // The default details remain visible if customization is unavailable.
+      });
   }, []);
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      setTimeLeft(Math.max(0, Math.ceil((proofExpiresAt - Date.now()) / 1000)));
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [proofExpiresAt]);
+
+  const isProofAwaitingUpload =
+    !proofStatus || proofStatus.toLowerCase() === "pending upload";
+  const isProofExpired =
+    proofStatus?.toLowerCase() === "expired" ||
+    (isProofAwaitingUpload && timeLeft === 0);
+
+  useEffect(() => {
+    if (isProofExpired && !uploadSuccess) {
+      setSelectedFile(null);
+      setShowExpiredModal(true);
+    }
+  }, [isProofExpired, uploadSuccess]);
 
   const copyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
@@ -651,6 +720,7 @@ function BankTransferFlow({
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isProofExpired) return;
     if (e.type === "dragenter" || e.type === "dragover") {
       setDragActive(true);
     } else if (e.type === "dragleave") {
@@ -662,6 +732,7 @@ function BankTransferFlow({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
+    if (isProofExpired) return;
     setUploadError(null);
     setUploadSuccess(null);
 
@@ -678,6 +749,7 @@ function BankTransferFlow({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isProofExpired) return;
     setUploadError(null);
     setUploadSuccess(null);
     if (e.target.files) {
@@ -693,6 +765,7 @@ function BankTransferFlow({
   };
 
   const validateAndSetFile = (file: File) => {
+    if (isProofExpired) return;
     if (file.size > 5 * 1024 * 1024) {
       setUploadError("File size exceeds 5MB limit.");
       setSelectedFile(null);
@@ -714,6 +787,10 @@ function BankTransferFlow({
 
   const handleUploadSubmit = async () => {
     if (!selectedFile) return;
+    if (isProofExpired) {
+      setShowExpiredModal(true);
+      return;
+    }
     setIsUploading(true);
     setUploadError(null);
     setUploadSuccess(null);
@@ -737,6 +814,10 @@ function BankTransferFlow({
 
       if (!res.ok) {
         const errMsg = Array.isArray(data.message) ? data.message.join(" ") : data.message;
+        if (String(errMsg).toLowerCase().includes("expired")) {
+          setProofStatus("Expired");
+          setShowExpiredModal(true);
+        }
         throw new Error(errMsg || "Proof receipt upload failed.");
       }
 
@@ -801,7 +882,7 @@ function BankTransferFlow({
             Time remaining to upload proof
           </div>
           <div style={{ fontSize: "36px", fontWeight: "700", color: "#ffffff", fontFamily: "monospace" }}>
-            {formatTime(timeLeft)}
+            {timeLeft > 0 ? formatTime(timeLeft) : "EXPIRED"}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center" }}>
@@ -1076,13 +1157,17 @@ function BankTransferFlow({
               
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Bank Name</span>
-                <span className="bt-detail-value">VERGO SL - CENTRAL BANK</span>
+                <span className="bt-detail-value">{bankDetails.bankName}</span>
+              </div>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Branch</span>
+                <span className="bt-detail-value">{bankDetails.bankBranch}</span>
               </div>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Account No.</span>
                 <span className="bt-detail-value">
-                  1234 - 5678 - 9012
-                  <button className="bt-copy-btn" onClick={() => copyToClipboard("1234-5678-9012", "acc")}>
+                  {bankDetails.bankAccountNumber}
+                  <button className="bt-copy-btn" onClick={() => copyToClipboard(bankDetails.bankAccountNumber, "acc")}>
                     {copiedField === "acc" ? (
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
@@ -1144,7 +1229,7 @@ function BankTransferFlow({
                   marginTop: "16px" 
                 }}
                 onClick={() => {
-                  copyToClipboard("Bank: VERGO SL - CENTRAL BANK\nAccount: 1234-5678-9012\nReference: " + orderId, "all");
+                  copyToClipboard(`Bank: ${bankDetails.bankName}\nBranch: ${bankDetails.bankBranch}\nAccount: ${bankDetails.bankAccountNumber}\nReference: ${orderId}`, "all");
                 }}
               >
                 Copy Account Details
@@ -1252,7 +1337,7 @@ function BankTransferFlow({
             Pending Bank Transfer
           </h1>
           <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.6)", textAlign: "center", marginBottom: "32px", lineHeight: "1.5" }}>
-            Your order <strong>#{orderId}</strong> is on hold. Please complete the bank transfer within 4 hours to secure your items.
+            Your order <strong>#{orderId}</strong> is on hold. Please complete the bank transfer and upload your proof within 15 minutes to secure your items.
           </p>
 
           {/* Time remaining countdown banner */}
@@ -1285,13 +1370,17 @@ function BankTransferFlow({
             <div style={{ backgroundColor: "#050506", padding: "8px 16px", borderRadius: "8px" }}>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Bank Name</span>
-                <span className="bt-detail-value">VERGO SL - CENTRAL BANK</span>
+                <span className="bt-detail-value">{bankDetails.bankName}</span>
+              </div>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Branch</span>
+                <span className="bt-detail-value">{bankDetails.bankBranch}</span>
               </div>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Account No.</span>
                 <span className="bt-detail-value">
-                  1234 - 5678 - 9012
-                  <button className="bt-copy-btn" onClick={() => copyToClipboard("1234-5678-9012", "acc")}>
+                  {bankDetails.bankAccountNumber}
+                  <button className="bt-copy-btn" onClick={() => copyToClipboard(bankDetails.bankAccountNumber, "acc")}>
                     {copiedField === "acc" ? (
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
@@ -1355,15 +1444,18 @@ function BankTransferFlow({
               accept="image/jpeg,image/png,image/webp,application/pdf"
               id="bt-file-picker"
               style={{ display: "none" }}
+              disabled={isProofExpired}
               onChange={handleFileChange}
             />
-            <div 
+            <div
               className={`bt-dropzone ${dragActive ? "active" : ""}`}
-              onDragEnter={handleDrag}
-              onDragOver={handleDrag}
-              onDragLeave={handleDrag}
-              onDrop={handleDrop}
-              onClick={() => document.getElementById("bt-file-picker")?.click()}
+              onDragEnter={isProofExpired ? undefined : handleDrag}
+              onDragOver={isProofExpired ? undefined : handleDrag}
+              onDragLeave={isProofExpired ? undefined : handleDrag}
+              onDrop={isProofExpired ? undefined : handleDrop}
+              onClick={() => !isProofExpired && document.getElementById("bt-file-picker")?.click()}
+              aria-disabled={isProofExpired}
+              style={isProofExpired ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
             >
               <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
@@ -1393,8 +1485,11 @@ function BankTransferFlow({
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  document.getElementById("bt-file-picker")?.click();
+                  if (!isProofExpired) {
+                    document.getElementById("bt-file-picker")?.click();
+                  }
                 }}
+                disabled={isProofExpired}
               >
                 Browse Files
               </button>
@@ -1451,12 +1546,12 @@ function BankTransferFlow({
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             <button 
               type="button" 
-              className="bt-btn-primary" 
-              disabled={!selectedFile || isUploading || !!uploadSuccess}
+              className="bt-btn-primary"
+              disabled={!selectedFile || isUploading || !!uploadSuccess || isProofExpired}
               onClick={handleUploadSubmit}
               style={{ padding: "18px" }}
             >
-              {isUploading ? "Uploading receipt..." : "Submit Payment Proof"}
+              {isProofExpired ? "Payment Window Expired" : isUploading ? "Uploading receipt..." : "Submit Payment Proof"}
             </button>
             <button 
               type="button" 
@@ -1472,6 +1567,40 @@ function BankTransferFlow({
       )}
 
 
+
+      {showExpiredModal && (
+        <div className="modal-overlay" role="alertdialog" aria-modal="true" aria-labelledby="payment-expired-title">
+          <div className="modal-box">
+            <div className="modal-icon-container" style={{ color: "#EA4335" }}>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="modal-icon"
+                width={24}
+                height={24}
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <h3 id="payment-expired-title" className="modal-title">Payment Time Expired</h3>
+            <p className="modal-message">
+              The 15-minute window to upload your bank-transfer proof has ended. This order is expired and its reserved stock has been released.
+            </p>
+            <div className="modal-buttons-container">
+              <button type="button" className="modal-primary-btn" onClick={onClose}>
+                Go to Homepage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showReceiptSubmittedModal && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="receipt-submitted-title">

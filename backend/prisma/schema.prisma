@@ -130,10 +130,30 @@ model Employee {
   hireDate   DateTime? @map("hire_date") @db.Date
   availabilityStatus String @default("OFF_DUTY") @map("availability_status")
 
-  profile Profiles? @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  confirmedOrders Orders[] @relation("OrderConfirmedBy")
+  profile         Profiles?       @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  branch          Branch?         @relation(fields: [branchId], references: [branchId])
+  assignedOrders  Orders[]        @relation("OrderAssignedEmployee")
+  confirmedOrders Orders[]        @relation("OrderConfirmedBy")
+  deliveries      Delivery[]      @relation("DeliveryAssignedEmployee")
+  attendance      Attendance[]
+  salaryRecords   SalaryRecord[]
+  purchaseOrders  PurchaseOrder[]
 
   @@map("employee")
+  @@schema("public")
+}
+
+model Branch {
+  branchId String @id @default(dbgenerated("gen_random_uuid()")) @map("branch_id") @db.Uuid
+  name     String
+  address  String
+  phone    String
+
+  employees Employee[]
+  inventory Inventory[]
+  orders    Orders[]
+
+  @@map("branch")
   @@schema("public")
 }
 
@@ -153,7 +173,8 @@ model Supplier {
   phone      String
   email      String
   address    String
-  products   Product[]
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
 
   @@map("supplier")
   @@schema("public")
@@ -206,7 +227,8 @@ model ProductVariant {
   inventory  Inventory[]
   images     Images[]
   orderItems OrderItem[]
-  cartItems  CartItem[]
+  cartItems          CartItem[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@map("product_variant")
   @@schema("public")
@@ -214,14 +236,15 @@ model ProductVariant {
 
 model Inventory {
   inventoryId      String    @id @default(dbgenerated("gen_random_uuid()")) @map("inventory_id") @db.Uuid
-  variantId        String?   @map("variant_id") @db.Uuid
+  variantId        String    @map("variant_id") @db.Uuid
   branchId         String?   @map("branch_id") @db.Uuid
-  quantity         Int?      @default(0)
+  quantity         Int      @default(0)
   reorderLevel     Int?      @default(10) @map("reorder_level")
   lastUpdated      DateTime? @default(now()) @map("last_updated") @db.Timestamptz(6)
-  reservedQuantity Int?      @default(0) @map("reserved_quantity")
 
-  variant ProductVariant? @relation(fields: [variantId], references: [variantId], onDelete: NoAction, onUpdate: NoAction)
+  variant           ProductVariant     @relation(fields: [variantId], references: [variantId], onDelete: NoAction, onUpdate: NoAction)
+  branch            Branch?            @relation(fields: [branchId], references: [branchId])
+  stockReservations StockReservation[]
 
   @@map("inventory")
   @@schema("public")
@@ -259,29 +282,141 @@ model Orders {
   codAmount       Decimal?  @default(0.00) @map("cod_amount") @db.Decimal
 
   customer        Customer?             @relation(fields: [customerId], references: [customerId])
+  assignedEmployee Employee?            @relation("OrderAssignedEmployee", fields: [employeeId], references: [employeeId])
+  branch          Branch?               @relation(fields: [branchId], references: [branchId])
   confirmer       Employee?             @relation("OrderConfirmedBy", fields: [confirmedBy], references: [employeeId])
   orderItems      OrderItem[]
   customerDetails OrderCustomerDetails?
   shippingDetails OrderShippingDetails?
   paymentProofs   PaymentProofs[]
+  stockReservations StockReservation[]
   notifications   Notification[]
+  deliveries      Delivery[]
 
   @@map("orders")
   @@schema("public")
 }
 
+model Attendance {
+  attendanceId String    @id @default(dbgenerated("gen_random_uuid()")) @map("attendance_id") @db.Uuid
+  employeeId   String?   @map("employee_id") @db.Uuid
+  date         DateTime  @db.Date
+  checkIn      DateTime? @map("check_in") @db.Timestamptz(6)
+  checkOut     DateTime? @map("check_out") @db.Timestamptz(6)
+  status       String?
+
+  employee Employee? @relation(fields: [employeeId], references: [employeeId])
+
+  @@map("attendance")
+  @@schema("public")
+}
+
+model SalaryRecord {
+  salaryId    String    @id @default(dbgenerated("gen_random_uuid()")) @map("salary_id") @db.Uuid
+  employeeId  String?   @map("employee_id") @db.Uuid
+  month       DateTime  @db.Date
+  basicSalary Decimal   @map("basic_salary") @db.Decimal
+  bonus       Decimal?  @default(0.00) @db.Decimal
+  deduction   Decimal?  @default(0.00) @db.Decimal
+  netSalary   Decimal   @map("net_salary") @db.Decimal
+
+  employee Employee? @relation(fields: [employeeId], references: [employeeId])
+
+  @@map("salary_record")
+  @@schema("public")
+}
+
+model Delivery {
+  deliveryId         String    @id @default(dbgenerated("gen_random_uuid()")) @map("delivery_id") @db.Uuid
+  orderId            String?   @map("order_id") @db.Uuid
+  assignedEmployeeId String?   @map("assigned_employee_id") @db.Uuid
+  deliveryStatus     String?   @default("pending") @map("delivery_status")
+  deliveredAt        DateTime? @map("delivered_at") @db.Timestamptz(6)
+
+  order            Orders?   @relation(fields: [orderId], references: [orderId])
+  assignedEmployee Employee? @relation("DeliveryAssignedEmployee", fields: [assignedEmployeeId], references: [employeeId])
+
+  @@map("delivery")
+  @@schema("public")
+}
+
+model PurchaseOrder {
+  purchaseOrderId String    @id @default(dbgenerated("gen_random_uuid()")) @map("purchase_order_id") @db.Uuid
+  supplierId      String?   @map("supplier_id") @db.Uuid
+  employeeId      String?   @map("employee_id") @db.Uuid
+  orderDate       DateTime? @default(now()) @map("order_date") @db.Timestamptz(6)
+  status          String?   @default("requested")
+  totalAmount     Decimal   @map("total_amount") @db.Decimal
+
+  supplier Supplier?           @relation(fields: [supplierId], references: [supplierId])
+  employee Employee?           @relation(fields: [employeeId], references: [employeeId])
+  items    PurchaseOrderItem[]
+
+  @@map("purchase_order")
+  @@schema("public")
+}
+
+model PurchaseOrderItem {
+  poItemId        String  @id @default(dbgenerated("gen_random_uuid()")) @map("po_item_id") @db.Uuid
+  purchaseOrderId String? @map("purchase_order_id") @db.Uuid
+  variantId       String? @map("variant_id") @db.Uuid
+  quantity        Int
+  costPrice       Decimal @map("cost_price") @db.Decimal
+
+  purchaseOrder PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [purchaseOrderId])
+  variant       ProductVariant? @relation(fields: [variantId], references: [variantId])
+
+  @@map("purchase_order_item")
+  @@schema("public")
+}
+
+model DeliveryFeeRule {
+  ruleId    String  @id @default(dbgenerated("gen_random_uuid()")) @map("rule_id") @db.Uuid
+  district  String  @unique
+  feeAmount Decimal @map("fee_amount") @db.Decimal
+
+  @@map("delivery_fee_rules")
+  @@schema("public")
+}
+
 model OrderItem {
   orderItemId String  @id @default(dbgenerated("gen_random_uuid()")) @map("order_item_id") @db.Uuid
-  orderId     String? @map("order_id") @db.Uuid
-  variantId   String? @map("variant_id") @db.Uuid
+  orderId     String  @map("order_id") @db.Uuid
+  variantId   String  @map("variant_id") @db.Uuid
   quantity    Int
   unitPrice   Decimal @map("unit_price") @db.Decimal
   subtotal    Decimal @db.Decimal
 
-  order   Orders?         @relation(fields: [orderId], references: [orderId])
-  variant ProductVariant? @relation(fields: [variantId], references: [variantId])
+  order   Orders          @relation(fields: [orderId], references: [orderId])
+  variant ProductVariant  @relation(fields: [variantId], references: [variantId])
+  stockReservations StockReservation[]
 
   @@map("order_item")
+  @@schema("public")
+}
+
+model StockReservation {
+  reservationId String    @id @default(dbgenerated("gen_random_uuid()")) @map("reservation_id") @db.Uuid
+  orderId       String    @map("order_id") @db.Uuid
+  orderItemId   String    @map("order_item_id") @db.Uuid
+  inventoryId   String    @map("inventory_id") @db.Uuid
+  quantity      Int
+  status        String    @default("Active")
+  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  confirmedAt   DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  releasedAt    DateTime? @map("released_at") @db.Timestamptz(6)
+  releaseReason String?   @map("release_reason")
+
+  order     Orders    @relation(fields: [orderId], references: [orderId])
+  orderItem OrderItem @relation(fields: [orderItemId], references: [orderItemId])
+  inventory Inventory @relation(fields: [inventoryId], references: [inventoryId])
+
+  @@index([orderId, status])
+  @@index([orderItemId])
+  @@index([status, expiresAt], map: "stock_reservation_expiry_index")
+  @@unique([orderItemId, inventoryId])
+  @@map("stock_reservation")
   @@schema("public")
 }
 

@@ -229,6 +229,75 @@
   box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
 }
 
+.quantity-selection-section {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.quantity-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #ffffff;
+}
+
+.product-quantity-control {
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: #111113;
+  overflow: hidden;
+}
+
+.product-quantity-btn {
+  width: 42px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.product-quantity-btn:hover:not(:disabled) {
+  background: #1d1d20;
+  color: #00ff9d;
+}
+
+.product-quantity-btn:disabled {
+  color: #55555a;
+  cursor: not-allowed;
+}
+
+.product-quantity-input {
+  width: 48px;
+  height: 100%;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+}
+
+.product-quantity-input::-webkit-inner-spin-button,
+.product-quantity-input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.quantity-stock-note {
+  color: #8e8e93;
+  font-size: 0.75rem;
+}
+
 /* Add to Cart Action */
 .add-to-cart-btn {
   width: 100%;

@@ -19,6 +19,7 @@ import { PaymentProofModule } from './payment-proof/payment-proof.module';
 import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CustomizationModule } from './customization/customization.module';
+import { StockReservationModule } from './stock-reservation/stock-reservation.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { CustomizationModule } from './customization/customization.module';
     EmailModule,
     NotificationsModule,
     CustomizationModule,
+    StockReservationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

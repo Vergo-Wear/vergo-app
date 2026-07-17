@@ -56,4 +56,16 @@ export class UpdateCustomizationDto {
   @IsString()
   @IsOptional()
   brandStatementDescription?: string;
+
+  @IsString()
+  @IsOptional()
+  bankName?: string;
+
+  @IsString()
+  @IsOptional()
+  bankBranch?: string;
+
+  @IsString()
+  @IsOptional()
+  bankAccountNumber?: string;
 }

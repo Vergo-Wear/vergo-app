@@ -27,10 +27,12 @@ describe('OrdersService', () => {
     findMany: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+    deleteMany: jest.fn(),
   };
-  const orderItemDelegate = { create: jest.fn() };
-  const orderCustomerDetailsDelegate = { create: jest.fn() };
-  const orderShippingDetailsDelegate = { create: jest.fn() };
+  const orderItemDelegate = { create: jest.fn(), deleteMany: jest.fn() };
+  const orderCustomerDetailsDelegate = { create: jest.fn(), update: jest.fn() };
+  const orderShippingDetailsDelegate = { create: jest.fn(), update: jest.fn() };
+  const stockReservationDelegate = { deleteMany: jest.fn() };
   const userAddressDelegate = {
     findFirst: jest.fn(),
     create: jest.fn(),
@@ -47,7 +49,9 @@ describe('OrdersService', () => {
     orderItem: orderItemDelegate,
     orderCustomerDetails: orderCustomerDetailsDelegate,
     orderShippingDetails: orderShippingDetailsDelegate,
+    stockReservation: stockReservationDelegate,
     userAddress: userAddressDelegate,
+    $executeRaw: jest.fn(),
     // Execute the callback against the same mocked delegates so the whole
     // "transaction" shares state; a thrown error rejects like a rollback.
     $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
@@ -59,6 +63,11 @@ describe('OrdersService', () => {
     notifyOrderReady: jest.fn(),
     notifyPaymentRejected: jest.fn(),
     notifyPaymentExpired: jest.fn(),
+  };
+  const stockReservations = {
+    reserveForOrder: jest.fn(),
+    releaseForOrder: jest.fn(),
+    confirmForOrder: jest.fn(),
   };
 
   let service: OrdersService;
@@ -107,11 +116,18 @@ describe('OrdersService', () => {
       prisma as never,
       configService as never,
       notifications as never,
+      stockReservations as never,
     );
 
     productVariantDelegate.findUnique.mockResolvedValue(variant);
     ordersDelegate.create.mockResolvedValue({ orderId });
-    orderItemDelegate.create.mockResolvedValue({});
+    ordersDelegate.findFirst.mockResolvedValue(null);
+    orderItemDelegate.create.mockResolvedValue({
+      orderItemId: 'order-item-1',
+      orderId,
+      variantId,
+      quantity: 2,
+    });
     orderCustomerDetailsDelegate.create.mockResolvedValue({});
     orderShippingDetailsDelegate.create.mockResolvedValue({});
     userAddressDelegate.updateMany.mockResolvedValue({ count: 1 });
@@ -120,13 +136,18 @@ describe('OrdersService', () => {
       quantity: 10,
       reservedQuantity: 0,
     });
-    inventoryDelegate.findMany.mockResolvedValue([{
-      inventoryId: 'inventory-1',
-      variantId,
-      quantity: 10,
-      reservedQuantity: 0,
-    }]);
+    inventoryDelegate.findMany.mockResolvedValue([
+      {
+        inventoryId: 'inventory-1',
+        variantId,
+        quantity: 10,
+        reservedQuantity: 0,
+      },
+    ]);
     inventoryDelegate.updateMany.mockResolvedValue({ count: 1 });
+    stockReservations.reserveForOrder.mockResolvedValue(undefined);
+    stockReservations.releaseForOrder.mockResolvedValue(undefined);
+    stockReservations.confirmForOrder.mockResolvedValue(undefined);
   });
 
   describe('guest checkout', () => {
@@ -347,7 +368,10 @@ describe('OrdersService', () => {
       await service.create(dto, profileId);
 
       expect(ordersDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ paymentMethod: 'bank_transfer' }),
+        data: expect.objectContaining({
+          paymentMethod: 'bank_transfer',
+          orderStatus: 'Pending Payment',
+        }),
       });
       expect(paymentProofsDelegate.create).toHaveBeenCalledTimes(1);
       expect(paymentProofsDelegate.create).toHaveBeenCalledWith({
@@ -374,6 +398,120 @@ describe('OrdersService', () => {
       expect(minutes).toBeLessThan(15.1);
     });
 
+    it('reuses an unchanged pending bank-transfer order without new reservations', async () => {
+      const dto = baseDto();
+      dto.paymentMethod = 'bank_transfer';
+      const existingOrder = {
+        orderId,
+        customerId,
+        paymentMethod: 'bank_transfer',
+        totalAmount: new Prisma.Decimal(9850),
+        productTotal: new Prisma.Decimal(9500),
+        deliveryFee: new Prisma.Decimal(350),
+        shippingAddress: '12 Galle Road, Apt 4, Colombo, Colombo (10100)',
+        orderItems: [
+          {
+            variantId,
+            quantity: 2,
+            unitPrice: new Prisma.Decimal(4750),
+            subtotal: new Prisma.Decimal(9500),
+          },
+        ],
+        customerDetails: {
+          firstName: 'Julian',
+          lastName: 'Verso',
+          email: 'julian@example.com',
+          phone: '0771234567',
+        },
+        shippingDetails: {
+          receiverName: 'Julian Verso',
+          phone: '0771234567',
+          addressLine1: '12 Galle Road',
+          addressLine2: 'Apt 4',
+          city: 'Colombo',
+          district: 'Colombo',
+          postalCode: '10100',
+          deliveryNote: 'Ring the bell',
+        },
+        paymentProofs: [{ expiresAt: new Date(Date.now() + 10 * 60 * 1000) }],
+      };
+      ordersDelegate.findFirst.mockResolvedValue(existingOrder);
+
+      const result = await service.create(dto, profileId);
+
+      expect(result).toBe(existingOrder);
+      expect(ordersDelegate.create).not.toHaveBeenCalled();
+      expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
+      expect(stockReservations.reserveForOrder).not.toHaveBeenCalled();
+      expect(stockReservationDelegate.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('updates the pending order and replaces its active allocations when details change', async () => {
+      const dto = baseDto();
+      dto.paymentMethod = 'bank_transfer';
+      dto.items = [{ variantId, quantity: 1 }];
+      ordersDelegate.findFirst.mockResolvedValue({
+        orderId,
+        customerId,
+        paymentMethod: 'bank_transfer',
+        totalAmount: new Prisma.Decimal(9850),
+        productTotal: new Prisma.Decimal(9500),
+        deliveryFee: new Prisma.Decimal(350),
+        shippingAddress: '12 Galle Road, Colombo, Colombo (10100)',
+        orderItems: [],
+        customerDetails: null,
+        shippingDetails: null,
+        paymentProofs: [{ expiresAt: new Date(Date.now() + 10 * 60 * 1000) }],
+      });
+      ordersDelegate.update.mockResolvedValue({ orderId });
+
+      await service.create(dto, profileId);
+
+      expect(ordersDelegate.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { orderId } }),
+      );
+      expect(stockReservationDelegate.deleteMany).toHaveBeenCalledWith({
+        where: { orderId, status: 'Active' },
+      });
+      expect(orderItemDelegate.deleteMany).toHaveBeenCalledWith({
+        where: { orderId },
+      });
+      expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
+    });
+
+    it('switches a pending bank-transfer order to COD by committing stock and deleting the hold', async () => {
+      const dto = baseDto();
+      dto.paymentMethod = 'cash on delivery';
+      ordersDelegate.findFirst.mockResolvedValue({
+        orderId,
+        customerId,
+        paymentMethod: 'bank_transfer',
+        totalAmount: new Prisma.Decimal(9850),
+        productTotal: new Prisma.Decimal(9500),
+        deliveryFee: new Prisma.Decimal(350),
+        shippingAddress: '12 Galle Road, Apt 4, Colombo, Colombo (10100)',
+        orderItems: [],
+        customerDetails: null,
+        shippingDetails: null,
+        paymentProofs: [{ expiresAt: new Date(Date.now() + 10 * 60 * 1000) }],
+      });
+      ordersDelegate.update.mockResolvedValue({ orderId });
+
+      await service.create(dto, profileId);
+
+      expect(stockReservations.confirmForOrder).toHaveBeenCalledWith(
+        prisma,
+        orderId,
+      );
+      expect(stockReservationDelegate.deleteMany).toHaveBeenCalledWith({
+        where: { orderId, status: 'Confirmed' },
+      });
+      expect(paymentProofsDelegate.deleteMany).toHaveBeenCalledWith({
+        where: { orderId },
+      });
+      expect(stockReservations.reserveForOrder).not.toHaveBeenCalled();
+    });
+
     it('rolls the order back when the proof insert fails', async () => {
       paymentProofsDelegate.create.mockRejectedValue(
         new Error('proof insert failed'),
@@ -389,33 +527,35 @@ describe('OrdersService', () => {
   });
 
   describe('validation and rollback', () => {
-    it('reserves only available stock before creating an order', async () => {
+    it('creates an order-owned reservation after its order item exists', async () => {
       await service.create(baseDto());
 
-      expect(inventoryDelegate.updateMany).toHaveBeenCalledWith({
-        where: {
-          inventoryId: 'inventory-1',
-          reservedQuantity: 0,
-          quantity: { gte: 2 },
-        },
-        data: { reservedQuantity: 2, lastUpdated: expect.any(Date) },
-      });
+      expect(stockReservations.reserveForOrder).toHaveBeenCalledWith(
+        prisma,
+        orderId,
+        [expect.objectContaining({ orderItemId: 'order-item-1', variantId, quantity: 2 })],
+        null,
+      );
     });
 
     it('rejects an order when quantity minus reserved quantity is insufficient', async () => {
-      inventoryDelegate.findMany.mockResolvedValue([{
-        inventoryId: 'inventory-1', variantId, quantity: 5, reservedQuantity: 4,
-      }]);
+      stockReservations.reserveForOrder.mockRejectedValue(
+        new BadRequestException('Some products in your order are no longer available. Please review your cart and try again.'),
+      );
 
-      await expect(service.create(baseDto())).rejects.toThrow('has only 1 item(s) available');
-      expect(ordersDelegate.create).not.toHaveBeenCalled();
+      await expect(service.create(baseDto())).rejects.toThrow(
+        'Some products in your order are no longer available',
+      );
     });
 
     it('rejects a concurrent reservation change instead of overselling', async () => {
-      inventoryDelegate.updateMany.mockResolvedValue({ count: 0 });
+      stockReservations.reserveForOrder.mockRejectedValue(
+        new BadRequestException('Some products in your order are no longer available. Please review your cart and try again.'),
+      );
 
-      await expect(service.create(baseDto())).rejects.toThrow('Stock changed while placing the order');
-      expect(ordersDelegate.create).not.toHaveBeenCalled();
+      await expect(service.create(baseDto())).rejects.toThrow(
+        'Some products in your order are no longer available',
+      );
     });
 
     it('rejects an invalid shipping district', async () => {
@@ -464,18 +604,27 @@ describe('OrdersService', () => {
         orderItems: [{ variantId, quantity: 2 }],
       });
       ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
-      ordersDelegate.findUnique.mockResolvedValue({ orderId, orderStatus: 'Cancelled' });
-      inventoryDelegate.findMany.mockResolvedValue([{
-        inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
-      }]);
+      ordersDelegate.findUnique.mockResolvedValue({
+        orderId,
+        orderStatus: 'Cancelled',
+      });
+      inventoryDelegate.findMany.mockResolvedValue([
+        {
+          inventoryId: 'inventory-1',
+          variantId,
+          quantity: 10,
+          reservedQuantity: 2,
+        },
+      ]);
 
       await service.cancelCustomerOrder(profileId, orderId);
 
-      expect(inventoryDelegate.updateMany).toHaveBeenCalledWith({
-        where: { inventoryId: 'inventory-1', reservedQuantity: 2 },
-        data: { reservedQuantity: 0, lastUpdated: expect.any(Date) },
-      });
-      expect(inventoryDelegate.updateMany.mock.calls[0][0].data.quantity).toBeUndefined();
+      expect(stockReservations.releaseForOrder).toHaveBeenCalledWith(
+        prisma,
+        orderId,
+        'Released',
+        'Customer cancelled order',
+      );
     });
   });
 
@@ -493,9 +642,14 @@ describe('OrdersService', () => {
         orderStatus: 'Preparing',
         employeeId: 'emp-1',
       });
-      inventoryDelegate.findMany.mockResolvedValue([{
-        inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
-      }]);
+      inventoryDelegate.findMany.mockResolvedValue([
+        {
+          inventoryId: 'inventory-1',
+          variantId,
+          quantity: 10,
+          reservedQuantity: 2,
+        },
+      ]);
 
       await service.updateManagedStatus(
         profileId,
@@ -600,7 +754,9 @@ describe('OrdersService', () => {
                 OR: expect.arrayContaining([
                   expect.objectContaining({
                     employeeId: null,
-                    orderStatus: expect.objectContaining({ in: expect.any(Array) }),
+                    orderStatus: expect.objectContaining({
+                      in: expect.any(Array),
+                    }),
                   }),
                   { employeeId: 'emp-1' },
                 ]),
@@ -640,9 +796,14 @@ describe('OrdersService', () => {
         orderItems: [{ variantId, quantity: 2, variant: { sku: 'SKU-1' } }],
       });
       ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
-      inventoryDelegate.findMany.mockResolvedValue([{
-        inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
-      }]);
+      inventoryDelegate.findMany.mockResolvedValue([
+        {
+          inventoryId: 'inventory-1',
+          variantId,
+          quantity: 10,
+          reservedQuantity: 2,
+        },
+      ]);
 
       await service.updateManagedStatus(
         profileId,
@@ -685,9 +846,14 @@ describe('OrdersService', () => {
           orderId,
           orderItems: [{ variantId, quantity: 2 }],
         });
-        inventoryDelegate.findMany.mockResolvedValue([{
-          inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
-        }]);
+        inventoryDelegate.findMany.mockResolvedValue([
+          {
+            inventoryId: 'inventory-1',
+            variantId,
+            quantity: 10,
+            reservedQuantity: 2,
+          },
+        ]);
       });
 
       it('rejecting a proof notifies the customer and reopens payment', async () => {
@@ -702,7 +868,7 @@ describe('OrdersService', () => {
           where: { proofId, status: 'Pending Verification' },
           data: { status: 'Rejected', adminNotes: 'Blurry receipt' },
         });
-        expect(ordersDelegate.update).toHaveBeenCalledWith({
+      expect(ordersDelegate.update).toHaveBeenCalledWith({
           where: { orderId },
           data: {
             confirmationStatus: 'Rejected',
@@ -715,6 +881,12 @@ describe('OrdersService', () => {
         expect(notifications.notifyPaymentRejected).toHaveBeenCalledWith(
           orderId,
           'Blurry receipt',
+        );
+        expect(stockReservations.releaseForOrder).toHaveBeenCalledWith(
+          prisma,
+          orderId,
+          'Released',
+          'Payment proof rejected',
         );
       });
 
@@ -751,6 +923,10 @@ describe('OrdersService', () => {
             rejectionReason: null,
           },
         });
+        expect(stockReservations.confirmForOrder).toHaveBeenCalledWith(
+          prisma,
+          orderId,
+        );
       });
     });
 
@@ -760,9 +936,14 @@ describe('OrdersService', () => {
           orderId,
           orderItems: [{ variantId, quantity: 2 }],
         });
-        inventoryDelegate.findMany.mockResolvedValue([{
-          inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
-        }]);
+        inventoryDelegate.findMany.mockResolvedValue([
+          {
+            inventoryId: 'inventory-1',
+            variantId,
+            quantity: 10,
+            reservedQuantity: 2,
+          },
+        ]);
       });
 
       it('expires overdue proofs once and notifies each customer', async () => {
@@ -779,6 +960,8 @@ describe('OrdersService', () => {
           where: {
             proofId,
             status: { in: ['Pending Upload'] },
+            receiptUrl: null,
+            expiresAt: { lte: expect.any(Date) },
           },
           data: { status: 'Expired' },
         });

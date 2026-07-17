@@ -10,19 +10,18 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, SRI_LANKAN_DISTRICTS } from './dto/create-order.dto';
-import { Prisma } from '@prisma/client';
+import { OrderItem, Prisma } from '@prisma/client';
 import { AddressesService } from '../addresses/addresses.service';
 import { PaymentProofStatus } from '../common/enums/payment-proof-status.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { READY_STATUS } from './dto/update-order-status.dto';
 import { ReviewPaymentProofDto } from './dto/review-payment-proof.dto';
+import { StockReservationService } from '../stock-reservation/stock-reservation.service';
 
 const BANK_TRANSFER_HOLD_MINUTES = 15;
 
 /** Payment proof statuses that are still awaiting an outcome. */
-const PENDING_PROOF_STATUSES = [
-  PaymentProofStatus.PENDING_UPLOAD as string,
-];
+const PENDING_PROOF_STATUSES = [PaymentProofStatus.PENDING_UPLOAD as string];
 
 const EMPLOYEE_PROCESSING_STATUSES = [
   'Ready to Process',
@@ -75,6 +74,15 @@ interface StockCheckItem {
   variant?: { sku?: string | null } | null;
 }
 
+type PendingBankTransferOrder = Prisma.OrdersGetPayload<{
+  include: {
+    orderItems: true;
+    customerDetails: true;
+    shippingDetails: true;
+    paymentProofs: true;
+  };
+}>;
+
 @Injectable()
 export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OrdersService.name);
@@ -84,100 +92,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly notifications: NotificationsService,
+    private readonly stockReservations: StockReservationService,
   ) {}
 
   /** Bank-transfer inventory is held for exactly 15 minutes. */
   private paymentProofExpiresAt(): Date {
     return new Date(Date.now() + BANK_TRANSFER_HOLD_MINUTES * 60 * 1000);
-  }
-
-  private async reserveStock(tx: Prisma.TransactionClient, items: StockCheckItem[]) {
-    for (const item of items) {
-      if (!item.variantId || item.quantity <= 0) {
-        throw new BadRequestException('Every order item must have a valid variant and quantity.');
-      }
-      let remaining = item.quantity;
-      const rows = await tx.inventory.findMany({
-        where: { variantId: item.variantId },
-        orderBy: { inventoryId: 'asc' },
-      });
-      for (const row of rows) {
-        if (remaining === 0) break;
-        const reserved = row.reservedQuantity ?? 0;
-        const take = Math.min(remaining, Math.max(0, (row.quantity ?? 0) - reserved));
-        if (take === 0) continue;
-        const changed = await tx.inventory.updateMany({
-          where: {
-            inventoryId: row.inventoryId,
-            reservedQuantity: row.reservedQuantity,
-            quantity: { gte: reserved + take },
-          },
-          data: { reservedQuantity: reserved + take, lastUpdated: new Date() },
-        });
-        if (changed.count !== 1) {
-          throw new BadRequestException('Stock changed while placing the order. Please try again.');
-        }
-        remaining -= take;
-      }
-      if (remaining > 0) {
-        throw new BadRequestException(
-          `${item.variant?.sku || item.variantId} has only ${item.quantity - remaining} item(s) available.`,
-        );
-      }
-    }
-  }
-
-  private async releaseStock(tx: Prisma.TransactionClient, items: StockCheckItem[]) {
-    for (const item of items) {
-      if (!item.variantId || item.quantity <= 0) continue;
-      let remaining = item.quantity;
-      const rows = await tx.inventory.findMany({
-        where: { variantId: item.variantId, reservedQuantity: { gt: 0 } },
-        orderBy: { inventoryId: 'asc' },
-      });
-      for (const row of rows) {
-        if (remaining === 0) break;
-        const reserved = row.reservedQuantity ?? 0;
-        const release = Math.min(remaining, reserved);
-        const changed = await tx.inventory.updateMany({
-          where: { inventoryId: row.inventoryId, reservedQuantity: reserved },
-          data: { reservedQuantity: reserved - release, lastUpdated: new Date() },
-        });
-        if (changed.count !== 1) throw new BadRequestException('Stock reservation changed. Please retry.');
-        remaining -= release;
-      }
-      if (remaining > 0) {
-        throw new BadRequestException('The order stock reservation is incomplete.');
-      }
-    }
-  }
-
-  private async commitReservedStock(tx: Prisma.TransactionClient, items: StockCheckItem[]) {
-    for (const item of items) {
-      if (!item.variantId || item.quantity <= 0) continue;
-      let remaining = item.quantity;
-      const rows = await tx.inventory.findMany({
-        where: { variantId: item.variantId, reservedQuantity: { gt: 0 } },
-        orderBy: { inventoryId: 'asc' },
-      });
-      for (const row of rows) {
-        if (remaining === 0) break;
-        const reserved = row.reservedQuantity ?? 0;
-        const consume = Math.min(remaining, reserved, row.quantity ?? 0);
-        if (consume === 0) continue;
-        const changed = await tx.inventory.updateMany({
-          where: { inventoryId: row.inventoryId, reservedQuantity: reserved, quantity: row.quantity },
-          data: {
-            reservedQuantity: reserved - consume,
-            quantity: (row.quantity ?? 0) - consume,
-            lastUpdated: new Date(),
-          },
-        });
-        if (changed.count !== 1) throw new BadRequestException('Stock changed while claiming the order.');
-        remaining -= consume;
-      }
-      if (remaining > 0) throw new BadRequestException('Reserved stock is no longer available.');
-    }
   }
 
   /** Periodically expires overdue payment proofs (no queue infra exists yet). */
@@ -266,14 +186,33 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           where: {
             orderId,
             employeeId: null,
-            orderStatus: { in: ['Pending', 'Draft', 'Pending Payment', 'Pending Verification', 'Ready to Process'] },
+            orderStatus: {
+              in: [
+                'Pending',
+                'Draft',
+                'Pending Payment',
+                'Pending Verification',
+                'Ready to Process',
+              ],
+            },
           },
           data: { orderStatus: 'Cancelled' },
         });
-        if (transition.count !== 1) throw new ForbiddenException('This order can no longer be cancelled.');
+        if (transition.count !== 1)
+          throw new ForbiddenException(
+            'This order can no longer be cancelled.',
+          );
 
-        await this.releaseStock(tx, order.orderItems);
-        return tx.orders.findUnique({ where: { orderId }, include: this.orderInclude });
+        await this.stockReservations.releaseForOrder(
+          tx,
+          orderId,
+          'Released',
+          'Customer cancelled order',
+        );
+        return tx.orders.findUnique({
+          where: { orderId },
+          include: this.orderInclude,
+        });
       });
     } catch (err: any) {
       const errMsg = err.message || '';
@@ -372,9 +311,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       const inventory = await this.prisma.inventory.findFirst({
         where: { branchId, variantId: item.variantId },
       });
+      const activeReservations = inventory
+        ? await this.prisma.stockReservation.aggregate({
+            where: { inventoryId: inventory.inventoryId, status: 'Active' },
+            _sum: { quantity: true },
+          })
+        : null;
       const available = Math.max(
         0,
-        (inventory?.quantity || 0) - (inventory?.reservedQuantity || 0),
+        (inventory?.quantity || 0) -
+          (activeReservations?._sum.quantity || 0),
       );
       if (available < item.quantity) {
         shortages.push(
@@ -382,7 +328,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
-    return { stockAvailable: shortages.length === 0, stockShortages: shortages };
+    return {
+      stockAvailable: shortages.length === 0,
+      stockShortages: shortages,
+    };
   }
 
   async findAllOrders() {
@@ -397,10 +346,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
    * shipping information come from the immutable order_customer_details /
    * order_shipping_details snapshots — never from profile tables.
    */
-  async findManagedOrder(
-    orderId: string,
-    role?: string | null,
-  ) {
+  async findManagedOrder(orderId: string, role?: string | null) {
     const order = await this.prisma.orders.findUnique({
       where: { orderId },
       include: this.orderInclude,
@@ -446,10 +392,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         where: { profileId },
       });
       if (!employee) throw new NotFoundException('Employee profile not found.');
-      const managedOrder = await this.findManagedOrder(
-        orderId,
-        role,
-      );
+      const managedOrder = await this.findManagedOrder(orderId, role);
 
       if (status === 'Claimed') {
         if (
@@ -467,8 +410,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             },
             data: { orderStatus: 'Claimed', employeeId: employee.employeeId },
           });
-          if (claimed.count === 0) throw new ForbiddenException('This order has already been claimed by another employee.');
-          await this.commitReservedStock(tx, managedOrder.orderItems);
+          if (claimed.count === 0)
+            throw new ForbiddenException(
+              'This order has already been claimed by another employee.',
+            );
         });
         return this.findManagedOrder(orderId, role);
       }
@@ -497,24 +442,40 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
               status === 'Ready to Process' ? 'Approved' : 'Rejected',
             confirmedAt: new Date(),
             rejectionReason:
-              status === 'Rejected' ? rejectionReason ?? null : null,
+              status === 'Rejected' ? (rejectionReason ?? null) : null,
           }
         : {};
-    const updated = status === 'Rejected' && !order.employeeId
-      ? await this.prisma.$transaction(async (tx) => {
-          const rejected = await tx.orders.update({
+    const updated =
+      status === 'Rejected' && !order.employeeId
+        ? await this.prisma.$transaction(async (tx) => {
+            const rejected = await tx.orders.update({
+              where: { orderId },
+              data: { orderStatus: status, employeeId, ...confirmationData },
+              include: this.orderInclude,
+            });
+            await this.stockReservations.releaseForOrder(
+              tx,
+              orderId,
+              'Released',
+              'Admin rejected order',
+            );
+            return rejected;
+          })
+        : status === 'Ready to Process' && role?.toLowerCase() === 'admin'
+          ? await this.prisma.$transaction(async (tx) => {
+              const approved = await tx.orders.update({
+                where: { orderId },
+                data: { orderStatus: status, employeeId, ...confirmationData },
+                include: this.orderInclude,
+              });
+              await this.stockReservations.confirmForOrder(tx, orderId);
+              return approved;
+            })
+        : await this.prisma.orders.update({
             where: { orderId },
             data: { orderStatus: status, employeeId, ...confirmationData },
             include: this.orderInclude,
           });
-          await this.releaseStock(tx, order.orderItems);
-          return rejected;
-        })
-      : await this.prisma.orders.update({
-          where: { orderId },
-          data: { orderStatus: status, employeeId, ...confirmationData },
-          include: this.orderInclude,
-        });
 
     // Notify the customer only after the READY status has been saved, and
     // only when the status actually changed (READY -> READY is a no-op).
@@ -559,10 +520,21 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         if (!order) throw new NotFoundException('Order not found.');
         await tx.orders.update({
           where: { orderId },
-          data: { confirmationStatus: 'Rejected', orderStatus: 'Rejected', confirmedAt: new Date(), rejectionReason: dto.adminNotes ?? null },
+          data: {
+            confirmationStatus: 'Rejected',
+            orderStatus: 'Rejected',
+            confirmedAt: new Date(),
+            rejectionReason: dto.adminNotes ?? null,
+          },
         });
-        await this.releaseStock(tx, order.orderItems);
+        await this.stockReservations.releaseForOrder(
+          tx,
+          orderId,
+          'Released',
+          'Payment proof rejected',
+        );
       } else if (dto.status === 'Approved') {
+        await this.stockReservations.confirmForOrder(tx, orderId);
         await tx.orders.update({
           where: { orderId },
           data: {
@@ -575,7 +547,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       }
       return true;
     });
-    if (!changed) return this.prisma.paymentProofs.findFirst({ where: { proofId } });
+    if (!changed)
+      return this.prisma.paymentProofs.findFirst({ where: { proofId } });
 
     if (dto.status === 'Rejected') {
       await this.notifications.notifyPaymentRejected(orderId, dto.adminNotes);
@@ -592,10 +565,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
    * 'Expired' exactly once, so notifications are never duplicated.
    */
   async expireOverduePaymentProofs() {
+    const now = new Date();
     const overdue = await this.prisma.paymentProofs.findMany({
       where: {
         status: { in: PENDING_PROOF_STATUSES },
-        expiresAt: { lt: new Date() },
+        receiptUrl: null,
+        expiresAt: { lte: now },
       },
     });
 
@@ -603,7 +578,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     for (const proof of overdue) {
       const changed = await this.prisma.$transaction(async (tx) => {
         const transition = await tx.paymentProofs.updateMany({
-          where: { proofId: proof.proofId, status: { in: PENDING_PROOF_STATUSES } },
+          where: {
+            proofId: proof.proofId,
+            status: { in: PENDING_PROOF_STATUSES },
+            receiptUrl: null,
+            expiresAt: { lte: now },
+          },
           data: { status: 'Expired' },
         });
         if (transition.count === 0) return false;
@@ -613,10 +593,22 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         });
         if (!order) throw new NotFoundException('Order not found.');
         const changed = await tx.orders.updateMany({
-          where: { orderId: proof.orderId, orderStatus: { in: ['Pending', 'Pending Payment', 'Pending Verification'] } },
+          where: {
+            orderId: proof.orderId,
+            orderStatus: {
+              in: ['Pending', 'Pending Payment', 'Pending Verification'],
+            },
+          },
           data: { orderStatus: 'Expired' },
         });
-        if (changed.count === 1) await this.releaseStock(tx, order.orderItems);
+        if (changed.count === 1) {
+          await this.stockReservations.releaseForOrder(
+            tx,
+            proof.orderId,
+            'Expired',
+            'Payment receipt was not uploaded',
+          );
+        }
         return changed.count === 1;
       });
       if (!changed) continue;
@@ -707,10 +699,6 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         });
       }
 
-      // Reserve before creating the order. The transaction rolls all changes
-      // back if any variant cannot be fully reserved.
-      await this.reserveStock(tx, itemsToCreate);
-
       // 2. Prepare totals
       const deliveryFee = Number(createOrderDto.deliveryFee);
       const totalAmount = productTotal + deliveryFee;
@@ -769,43 +757,159 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
       const shippingAddress = `${sd.addressLine1}${sd.addressLine2 ? ', ' + sd.addressLine2 : ''}, ${sd.city}, ${sd.district}${sd.postalCode ? ' (' + sd.postalCode + ')' : ''}`;
 
-      // 4. Every newly placed order awaits admin confirmation.
-      const orderStatus = 'Pending';
+      // 4. COD awaits admin confirmation; bank transfer also awaits payment
+      // proof upload before it can move to verification.
+      const orderStatus = isBankTransfer ? 'Pending Payment' : 'Pending';
+      const paymentMethod = isCod
+        ? 'Cash on Delivery'
+        : createOrderDto.paymentMethod;
 
-      // 5. Create main Order record
-      const order = await tx.orders.create({
-        data: {
-          customerId,
-          totalAmount: new Prisma.Decimal(totalAmount),
-          productTotal: new Prisma.Decimal(productTotal),
-          deliveryFee: new Prisma.Decimal(deliveryFee),
-          codAmount: new Prisma.Decimal(codAmount),
-          // Persist one canonical business value regardless of whether the
-          // client submitted the short COD alias or the display label.
-          paymentMethod: isCod
-            ? 'Cash on Delivery'
-            : createOrderDto.paymentMethod,
-          shippingAddress: shippingAddress,
-          orderStatus: orderStatus,
-        },
-      });
-
-      // Bank transfer orders always get exactly one payment proof record,
-      // created in the same transaction so an order can never exist
-      // without one. COD orders never get a proof record.
-      if (isBankTransfer) {
-        await tx.paymentProofs.create({
-          data: {
-            orderId: order.orderId,
-            status: PaymentProofStatus.PENDING_UPLOAD,
-            expiresAt: this.paymentProofExpiresAt(),
+      // A customer can have only one editable bank-transfer checkout at a
+      // time. The advisory lock serializes repeated browser submits before we
+      // look for it, so two requests cannot create duplicate orders or stock
+      // reservations for the same customer.
+      let existingPendingOrder: PendingBankTransferOrder | null = null;
+      if (customerId) {
+        await tx.$executeRaw(
+          Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${customerId}))`,
+        );
+        existingPendingOrder = await tx.orders.findFirst({
+          where: {
+            customerId,
+            paymentMethod: { in: ['bank_transfer', 'direct bank transfer'] },
+            orderStatus: 'Pending Payment',
+            paymentProofs: {
+              some: {
+                status: PaymentProofStatus.PENDING_UPLOAD,
+                receiptUrl: null,
+                expiresAt: { gt: new Date() },
+              },
+            },
+          },
+          orderBy: { orderDate: 'desc' },
+          include: {
+            orderItems: true,
+            customerDetails: true,
+            shippingDetails: true,
+            paymentProofs: true,
           },
         });
       }
 
+      const sameItems = existingPendingOrder
+        ? [...existingPendingOrder.orderItems]
+            .map(
+              (item) =>
+                `${item.variantId}:${item.quantity}:${Number(item.unitPrice)}:${Number(item.subtotal)}`,
+            )
+            .sort()
+            .join('|') ===
+          itemsToCreate
+            .map(
+              (item) =>
+                `${item.variantId}:${item.quantity}:${Number(item.unitPrice)}:${Number(item.subtotal)}`,
+            )
+            .sort()
+            .join('|')
+        : false;
+      const unchangedPendingOrder =
+        existingPendingOrder &&
+        isBankTransfer &&
+        existingPendingOrder.paymentMethod === paymentMethod &&
+        sameItems &&
+        Number(existingPendingOrder.totalAmount) === totalAmount &&
+        Number(existingPendingOrder.productTotal) === productTotal &&
+        Number(existingPendingOrder.deliveryFee) === deliveryFee &&
+        existingPendingOrder.shippingAddress === shippingAddress &&
+        existingPendingOrder.customerDetails?.firstName ===
+          createOrderDto.contactDetails.firstName &&
+        existingPendingOrder.customerDetails?.lastName ===
+          createOrderDto.contactDetails.lastName &&
+        existingPendingOrder.customerDetails?.email ===
+          createOrderDto.contactDetails.email &&
+        existingPendingOrder.customerDetails?.phone ===
+          createOrderDto.contactDetails.phone &&
+        existingPendingOrder.shippingDetails?.receiverName === sd.receiverName &&
+        existingPendingOrder.shippingDetails?.phone === sd.phone &&
+        existingPendingOrder.shippingDetails?.addressLine1 === sd.addressLine1 &&
+        existingPendingOrder.shippingDetails?.addressLine2 === sd.addressLine2 &&
+        existingPendingOrder.shippingDetails?.city === sd.city &&
+        existingPendingOrder.shippingDetails?.district === sd.district &&
+        existingPendingOrder.shippingDetails?.postalCode === sd.postalCode &&
+        existingPendingOrder.shippingDetails?.deliveryNote ===
+          (dtoSd.deliveryNote || null);
+
+      // A retry of the same checkout returns the original pending order and
+      // leaves its proof and stock allocations untouched.
+      if (unchangedPendingOrder) return existingPendingOrder;
+
+      const switchingPendingBankTransferToCod = Boolean(
+        existingPendingOrder && isCod,
+      );
+
+      const orderData = {
+        customerId,
+        totalAmount: new Prisma.Decimal(totalAmount),
+        productTotal: new Prisma.Decimal(productTotal),
+        deliveryFee: new Prisma.Decimal(deliveryFee),
+        codAmount: new Prisma.Decimal(codAmount),
+        paymentMethod,
+        shippingAddress,
+        orderStatus,
+      };
+
+      // Changed details update the one editable pending order. The old active
+      // allocations are removed in this transaction before the new set is
+      // calculated, so the reservation table never accumulates duplicates.
+      const order = existingPendingOrder
+        ? await tx.orders.update({
+            where: { orderId: existingPendingOrder.orderId },
+            data: orderData,
+          })
+        : await tx.orders.create({ data: orderData });
+
+      // Bank transfer orders always get exactly one payment proof record,
+      // created in the same transaction so an order can never exist
+      // without one. COD orders never get a proof record.
+      const reservationExpiresAt = switchingPendingBankTransferToCod
+        ? null
+        : existingPendingOrder
+        ? existingPendingOrder.paymentProofs[0]?.expiresAt ?? null
+        : isBankTransfer
+          ? this.paymentProofExpiresAt()
+          : null;
+      if (reservationExpiresAt && !existingPendingOrder) {
+        await tx.paymentProofs.create({
+          data: {
+            orderId: order.orderId,
+            status: PaymentProofStatus.PENDING_UPLOAD,
+            expiresAt: reservationExpiresAt,
+          },
+        });
+      }
+
+      if (existingPendingOrder) {
+        if (switchingPendingBankTransferToCod) {
+          // COD commits the already-held units into inventory instead of
+          // retaining a stock-reservation row. This prevents the same bank
+          // transfer hold from being counted twice after the method changes.
+          await this.stockReservations.confirmForOrder(tx, order.orderId);
+          await tx.stockReservation.deleteMany({
+            where: { orderId: order.orderId, status: 'Confirmed' },
+          });
+          await tx.paymentProofs.deleteMany({ where: { orderId: order.orderId } });
+        } else {
+          await tx.stockReservation.deleteMany({
+            where: { orderId: order.orderId, status: 'Active' },
+          });
+        }
+        await tx.orderItem.deleteMany({ where: { orderId: order.orderId } });
+      }
+
       // 6. Create Order Items and link to order_id and variant_id
+      const orderItems: OrderItem[] = [];
       for (const item of itemsToCreate) {
-        await tx.orderItem.create({
+        orderItems.push(await tx.orderItem.create({
           data: {
             orderId: order.orderId,
             variantId: item.variantId,
@@ -813,37 +917,63 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             unitPrice: item.unitPrice,
             subtotal: item.subtotal,
           },
-        });
+        }));
+      }
+
+      // Reserve only after the order and its item records exist. A pending
+      // bank-transfer order switched to COD has already committed its held
+      // stock above, so it must not create a second reservation.
+      if (!switchingPendingBankTransferToCod) {
+        await this.stockReservations.reserveForOrder(
+          tx,
+          order.orderId,
+          orderItems,
+          reservationExpiresAt,
+        );
       }
 
       // 7. Save customer classification and contact details
       const customerType = customerId ? 'registered' : 'guest';
-      await tx.orderCustomerDetails.create({
-        data: {
-          orderId: order.orderId,
-          customerId,
-          firstName: createOrderDto.contactDetails.firstName,
-          lastName: createOrderDto.contactDetails.lastName,
-          email: createOrderDto.contactDetails.email,
-          phone: createOrderDto.contactDetails.phone,
-          customerType: customerType,
-        },
-      });
+      const customerDetailsData = {
+        customerId,
+        firstName: createOrderDto.contactDetails.firstName,
+        lastName: createOrderDto.contactDetails.lastName,
+        email: createOrderDto.contactDetails.email,
+        phone: createOrderDto.contactDetails.phone,
+        customerType,
+      };
+      if (existingPendingOrder) {
+        await tx.orderCustomerDetails.update({
+          where: { orderId: order.orderId },
+          data: customerDetailsData,
+        });
+      } else {
+        await tx.orderCustomerDetails.create({
+          data: { orderId: order.orderId, ...customerDetailsData },
+        });
+      }
 
       // 8. Save order shipping details
-      await tx.orderShippingDetails.create({
-        data: {
-          orderId: order.orderId,
-          receiverName: sd.receiverName,
-          phone: sd.phone,
-          addressLine1: sd.addressLine1,
-          addressLine2: sd.addressLine2,
-          city: sd.city,
-          district: sd.district,
-          postalCode: sd.postalCode,
-          deliveryNote: dtoSd.deliveryNote || null,
-        },
-      });
+      const shippingDetailsData = {
+        receiverName: sd.receiverName,
+        phone: sd.phone,
+        addressLine1: sd.addressLine1,
+        addressLine2: sd.addressLine2,
+        city: sd.city,
+        district: sd.district,
+        postalCode: sd.postalCode,
+        deliveryNote: dtoSd.deliveryNote || null,
+      };
+      if (existingPendingOrder) {
+        await tx.orderShippingDetails.update({
+          where: { orderId: order.orderId },
+          data: shippingDetailsData,
+        });
+      } else {
+        await tx.orderShippingDetails.create({
+          data: { orderId: order.orderId, ...shippingDetailsData },
+        });
+      }
 
       return order;
     });

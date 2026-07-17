@@ -31,6 +31,18 @@ export default function ProductDetailPage({ params }: PageProps) {
   // Size options fallback or dynamic
   const sizeOptions = product?.sizes || ["S", "M", "L", "XL"];
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0] || "M");
+  const [quantity, setQuantity] = useState(1);
+
+  const selectedVariant = useMemo(
+    () =>
+      product?.variants.find(
+        (variant) =>
+          variant.size === selectedSize &&
+          variant.color === (product.colors?.[0] || variant.color),
+      ),
+    [product, selectedSize],
+  );
+  const availableQuantity = selectedVariant?.availableQuantity ?? 0;
 
   // Accordion state
   const [openAccordions, setOpenAccordions] = useState<{ [key: string]: boolean }>({
@@ -46,12 +58,23 @@ export default function ProductDetailPage({ params }: PageProps) {
   };
 
   const handleAddToCart = () => {
-    if (!product) return;
-    addToCart(product, selectedSize, 1, product.colors?.[0] || undefined);
-    setToast(`Added "${product.name}" (Size ${selectedSize}) to your cart!`);
+    if (!product || availableQuantity < 1) return;
+    addToCart(
+      product,
+      selectedSize,
+      Math.min(quantity, availableQuantity),
+      product.colors?.[0] || undefined,
+    );
+    setToast(
+      `Added ${Math.min(quantity, availableQuantity)} × "${product.name}" (Size ${selectedSize}) to your cart!`,
+    );
     setTimeout(() => {
       setToast(null);
     }, 3500);
+  };
+
+  const updateQuantity = (nextQuantity: number) => {
+    setQuantity(Math.max(1, Math.min(nextQuantity || 1, availableQuantity || 1)));
   };
 
   // Complete The Look logic: recommend 4 products from other categories or other products in catalog
@@ -160,7 +183,13 @@ export default function ProductDetailPage({ params }: PageProps) {
                     <button
                       key={size}
                       type="button"
-                      onClick={() => setSelectedSize(size)}
+                      onClick={() => {
+                        setSelectedSize(size);
+                        const sizeAvailability = product.variants.find(
+                          (variant) => variant.size === size,
+                        )?.availableQuantity ?? 0;
+                        setQuantity((current) => Math.max(1, Math.min(current, sizeAvailability || 1)));
+                      }}
                       className={`size-btn ${selectedSize === size ? "selected" : ""}`}
                     >
                       {size}
@@ -170,15 +199,61 @@ export default function ProductDetailPage({ params }: PageProps) {
               </div>
             )}
 
+            <div className="quantity-selection-section">
+              <label className="quantity-label" htmlFor="product-quantity">
+                QUANTITY
+              </label>
+              <div className="product-quantity-control">
+                <button
+                  type="button"
+                  className="product-quantity-btn"
+                  onClick={() => updateQuantity(quantity - 1)}
+                  disabled={quantity <= 1}
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <input
+                  id="product-quantity"
+                  className="product-quantity-input"
+                  type="number"
+                  min="1"
+                  max={Math.max(1, availableQuantity)}
+                  value={quantity}
+                  onChange={(event) => updateQuantity(Number(event.target.value))}
+                  disabled={availableQuantity < 1}
+                  aria-label="Quantity"
+                />
+                <button
+                  type="button"
+                  className="product-quantity-btn"
+                  onClick={() => updateQuantity(quantity + 1)}
+                  disabled={quantity >= availableQuantity || availableQuantity < 1}
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+              <span className="quantity-stock-note">
+                {availableQuantity > 0
+                  ? `${availableQuantity} available`
+                  : "Selected size is out of stock"}
+              </span>
+            </div>
+
             {/* Add to Cart Button */}
             <button
               type="button"
               onClick={handleAddToCart}
               className="add-to-cart-btn"
-              disabled={!product.isAvailable}
-              style={!product.isAvailable ? { background: "rgba(255,255,255,0.08)", color: "#8e8e93", border: "1px solid rgba(255,255,255,0.08)", cursor: "not-allowed" } : {}}
+              disabled={!product.isAvailable || availableQuantity < 1}
+              style={
+                !product.isAvailable || availableQuantity < 1
+                  ? { background: "rgba(255,255,255,0.08)", color: "#8e8e93", border: "1px solid rgba(255,255,255,0.08)", cursor: "not-allowed" }
+                  : {}
+              }
             >
-              {product.isAvailable ? "ADD TO CART" : "SOLD OUT"}
+              {product.isAvailable && availableQuantity > 0 ? "ADD TO CART" : "SOLD OUT"}
             </button>
 
             {/* Accordions */}
