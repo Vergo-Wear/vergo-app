@@ -742,10 +742,6 @@ export default function LoginPage() {
             <div className="forgot-password-wrapper">
               <a
                 href="/auth/forgot-password"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setMessage({ text: "Forgot password flow is not implemented yet. A separate ClickUp task will be created.", type: "error" });
-                }}
                 className="forgot-password-link"
               >
                 Forgot Password?

@@ -1,0 +1,271 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createSupabaseClient, getSupabaseRedirectSession } from "@/lib/supabase";
+
+export default function ResetPasswordPage() {
+  const router = useRouter();
+  
+  const [session, setSession] = useState<any>(null);
+  const [isVerifying, setIsVerifying] = useState(true);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    const client = createSupabaseClient();
+    if (!client) {
+      setIsVerifying(false);
+      return;
+    }
+
+    const checkSession = async () => {
+      try {
+        // Exchange authorization code or hash tokens in the URL for an active session
+        const sess = await getSupabaseRedirectSession(client);
+        setSession(sess);
+      } catch (err: any) {
+        console.error("Failed to parse reset password session:", err);
+        setMessage({
+          text: err.message || "Failed to authenticate password reset link. It may be expired or already used.",
+          type: "error",
+        });
+      } finally {
+        setIsVerifying(false);
+      }
+    };
+
+    checkSession();
+  }, []);
+
+  useEffect(() => {
+    if (message && message.type === "error") {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!session) {
+      setMessage({
+        text: "No active recovery session found. Please request a new recovery link.",
+        type: "error",
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setMessage({ text: "Password must be at least 6 characters.", type: "error" });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setMessage({ text: "Passwords do not match.", type: "error" });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const client = createSupabaseClient();
+      if (!client) {
+        throw new Error("Authentication provider is currently offline.");
+      }
+
+      // Update password inside user profile
+      const { error } = await client.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage({
+        text: "Your password has been successfully updated. Redirecting to sign in...",
+        type: "success",
+      });
+
+      // Clear tokens and credentials on log out so they must log in using the new password
+      await client.auth.signOut();
+      sessionStorage.removeItem("vergo_is_logged_in");
+      sessionStorage.removeItem("vergo_access_token");
+      sessionStorage.removeItem("vergo_refresh_token");
+      sessionStorage.removeItem("vergo_user");
+
+      setTimeout(() => {
+        router.push("/auth/login");
+      }, 2000);
+    } catch (err: any) {
+      setMessage({
+        text: err.message || "Failed to update password. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isPasswordInvalid = newPassword.length > 1 && newPassword.length < 6;
+  const isConfirmInvalid = confirmPassword.length > 1 && newPassword !== confirmPassword;
+
+  return (
+    <div className="auth-page-wrapper">
+      {/* Toast Notification Container */}
+      {message && (
+        <div className="auth-toast-container">
+          <div className={`auth-toast ${message.type}`}>
+            <span className="auth-toast-icon">
+              {message.type === "success" ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+            </span>
+            <span>{message.text}</span>
+          </div>
+        </div>
+      )}
+
+      <main className="auth-container">
+        <div className="register-card">
+          <div className="register-card-logo">
+            <Image
+              src="/images/wlogo.png"
+              alt="VERGO"
+              width={130}
+              height={40}
+              priority
+              style={{ objectFit: "contain", width: "auto", height: "auto" }}
+            />
+          </div>
+
+          <h1 className="register-title">CREATE NEW PASSWORD</h1>
+
+          {isVerifying ? (
+          <div style={{ textAlign: "center", padding: "12px 0" }}>
+              <p style={{ color: "var(--accent-muted, #8e8e93)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", animation: "pulse 1.5s infinite" }}>
+                Verifying recovery tokens...
+              </p>
+            </div>
+          ) : !session ? (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ padding: "16px", border: "1px solid rgba(255, 77, 77, 0.2)", borderRadius: "8px", backgroundColor: "rgba(255, 77, 77, 0.05)", marginBottom: "24px" }}>
+                <p style={{ color: "#ff4d4d", fontSize: "0.8rem", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", lineHeight: "1.4" }}>
+                  Invalid or Expired Link
+                </p>
+                <p style={{ color: "rgba(255, 255, 255, 0.7)", fontSize: "0.75rem", marginTop: "8px", lineHeight: "1.4" }}>
+                  The recovery link is invalid, expired, or has already been used. Please request a new one.
+                </p>
+              </div>
+              <Link
+                href="/auth/forgot-password"
+                className="register-submit-btn"
+                style={{ display: "block", textDecoration: "none", textAlign: "center", paddingTop: "12px", paddingBottom: "12px" }}
+              >
+                Request Recovery Link
+              </Link>
+            </div>
+          ) : (
+            <form className="register-form" onSubmit={handleSubmit}>
+              {/* New Password Input */}
+              <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                  NEW PASSWORD
+                </label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter new password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    style={{
+                      borderColor: isPasswordInvalid ? "#ff4d4d" : undefined,
+                      boxShadow: isPasswordInvalid ? "0 0 0 1px #ff4d4d" : undefined
+                    }}
+                    className="custom-input"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {isPasswordInvalid && (
+                  <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                    Password must be at least 6 characters.
+                  </span>
+                )}
+              </div>
+
+              {/* Confirm Password Input */}
+              <div className="input-group">
+                <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                  CONFIRM NEW PASSWORD
+                </label>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={{
+                    borderColor: isConfirmInvalid ? "#ff4d4d" : undefined,
+                    boxShadow: isConfirmInvalid ? "0 0 0 1px #ff4d4d" : undefined
+                  }}
+                  className="custom-input"
+                  required
+                />
+                {isConfirmInvalid && (
+                  <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
+                    Passwords do not match.
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || isPasswordInvalid || isConfirmInvalid || !newPassword || !confirmPassword}
+                className="register-submit-btn"
+                style={{
+                  opacity: (isSubmitting || isPasswordInvalid || isConfirmInvalid || !newPassword || !confirmPassword) ? 0.6 : 1,
+                  cursor: (isSubmitting || isPasswordInvalid || isConfirmInvalid || !newPassword || !confirmPassword) ? "not-allowed" : "pointer",
+                  marginTop: "16px"
+                }}
+              >
+                {isSubmitting ? "SAVING PASSWORD..." : "UPDATE PASSWORD"}
+              </button>
+            </form>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
