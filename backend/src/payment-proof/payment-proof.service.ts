@@ -236,6 +236,10 @@ export class PaymentProofService {
         where: { orderId: order.orderId },
         data: { orderStatus: PaymentProofStatus.PENDING_VERIFICATION },
       });
+      await this.stockReservations.commitAndDeleteForOrder(
+        tx,
+        order.orderId,
+      );
       return tx.paymentProofs.findUniqueOrThrow({
         where: { proofId: proof.proofId },
       });

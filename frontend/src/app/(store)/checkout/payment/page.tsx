@@ -1353,7 +1353,7 @@ function BankTransferFlow({
               </svg>
             </div>
             <p className="bt-warning-text">
-              Stock is only held for a limited 4-hour window. Orders without proof of payment after this period will be automatically cancelled.
+              Stock is only held for 15 minutes. Orders without proof of payment after this period will be automatically cancelled.
             </p>
           </div>
 

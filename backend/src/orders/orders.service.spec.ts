@@ -68,6 +68,8 @@ describe('OrdersService', () => {
     reserveForOrder: jest.fn(),
     releaseForOrder: jest.fn(),
     confirmForOrder: jest.fn(),
+    confirmAndDeleteForOrder: jest.fn(),
+    restoreCommittedForOrder: jest.fn(),
   };
 
   let service: OrdersService;
@@ -148,6 +150,8 @@ describe('OrdersService', () => {
     stockReservations.reserveForOrder.mockResolvedValue(undefined);
     stockReservations.releaseForOrder.mockResolvedValue(undefined);
     stockReservations.confirmForOrder.mockResolvedValue(undefined);
+    stockReservations.confirmAndDeleteForOrder.mockResolvedValue(undefined);
+    stockReservations.restoreCommittedForOrder.mockResolvedValue(undefined);
   });
 
   describe('guest checkout', () => {
@@ -499,13 +503,10 @@ describe('OrdersService', () => {
 
       await service.create(dto, profileId);
 
-      expect(stockReservations.confirmForOrder).toHaveBeenCalledWith(
+      expect(stockReservations.confirmAndDeleteForOrder).toHaveBeenCalledWith(
         prisma,
         orderId,
       );
-      expect(stockReservationDelegate.deleteMany).toHaveBeenCalledWith({
-        where: { orderId, status: 'Confirmed' },
-      });
       expect(paymentProofsDelegate.deleteMany).toHaveBeenCalledWith({
         where: { orderId },
       });
@@ -888,6 +889,10 @@ describe('OrdersService', () => {
           'Released',
           'Payment proof rejected',
         );
+        expect(stockReservations.restoreCommittedForOrder).toHaveBeenCalledWith(
+          prisma,
+          orderId,
+        );
       });
 
       it('rejecting an already-rejected proof does not notify again', async () => {
@@ -923,10 +928,7 @@ describe('OrdersService', () => {
             rejectionReason: null,
           },
         });
-        expect(stockReservations.confirmForOrder).toHaveBeenCalledWith(
-          prisma,
-          orderId,
-        );
+        expect(stockReservations.confirmForOrder).not.toHaveBeenCalled();
       });
     });
 

@@ -245,6 +245,7 @@ model Inventory {
   variant           ProductVariant     @relation(fields: [variantId], references: [variantId], onDelete: NoAction, onUpdate: NoAction)
   branch            Branch?            @relation(fields: [branchId], references: [branchId])
   stockReservations StockReservation[]
+  commitments       InventoryCommitment[]
 
   @@map("inventory")
   @@schema("public")
@@ -290,6 +291,7 @@ model Orders {
   shippingDetails OrderShippingDetails?
   paymentProofs   PaymentProofs[]
   stockReservations StockReservation[]
+  inventoryCommitments InventoryCommitment[]
   notifications   Notification[]
   deliveries      Delivery[]
 
@@ -417,6 +419,24 @@ model StockReservation {
   @@index([status, expiresAt], map: "stock_reservation_expiry_index")
   @@unique([orderItemId, inventoryId])
   @@map("stock_reservation")
+  @@schema("public")
+}
+
+model InventoryCommitment {
+  commitmentId String    @id @default(dbgenerated("gen_random_uuid()")) @map("commitment_id") @db.Uuid
+  orderId      String    @map("order_id") @db.Uuid
+  inventoryId  String    @map("inventory_id") @db.Uuid
+  quantity     Int
+  status       String    @default("Committed")
+  committedAt  DateTime  @default(now()) @map("committed_at") @db.Timestamptz(6)
+  restoredAt   DateTime? @map("restored_at") @db.Timestamptz(6)
+
+  order     Orders    @relation(fields: [orderId], references: [orderId])
+  inventory Inventory @relation(fields: [inventoryId], references: [inventoryId])
+
+  @@unique([orderId, inventoryId])
+  @@index([orderId, status])
+  @@map("inventory_commitment")
   @@schema("public")
 }
 

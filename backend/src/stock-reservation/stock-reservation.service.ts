@@ -107,7 +107,7 @@ export class StockReservationService {
     });
   }
 
-  /** Converts active allocations into sold stock once approval is final. */
+  /** Converts active allocations into committed inventory exactly once. */
   async confirmForOrder(tx: Prisma.TransactionClient, orderId: string) {
     const reservations = await tx.stockReservation.findMany({
       where: { orderId, status: 'Active' },
@@ -135,6 +135,94 @@ export class StockReservationService {
       if (transitioned.count !== 1) {
         throw new ConflictException('The stock reservation changed. Please retry.');
       }
+    }
+  }
+
+  /** Commits held stock and removes the now-complete allocation records. */
+  async confirmAndDeleteForOrder(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+  ) {
+    await this.confirmForOrder(tx, orderId);
+    await tx.stockReservation.deleteMany({
+      where: { orderId, status: 'Confirmed' },
+    });
+  }
+
+  /**
+   * Commits an uploaded bank-transfer receipt's held stock, records the exact
+   * inventory rows changed, then removes the temporary reservation records.
+   * The commitment record lets a later admin rejection restore the same rows.
+   */
+  async commitAndDeleteForOrder(tx: Prisma.TransactionClient, orderId: string) {
+    const reservations = await tx.stockReservation.findMany({
+      where: { orderId, status: 'Active' },
+    });
+
+    for (const reservation of reservations) {
+      const committed = await tx.inventory.updateMany({
+        where: {
+          inventoryId: reservation.inventoryId,
+          quantity: { gte: reservation.quantity },
+        },
+        data: {
+          quantity: { decrement: reservation.quantity },
+          lastUpdated: new Date(),
+        },
+      });
+      if (committed.count !== 1) {
+        throw new ConflictException('The reserved stock is no longer available.');
+      }
+
+      await tx.inventoryCommitment.upsert({
+        where: {
+          orderId_inventoryId: { orderId, inventoryId: reservation.inventoryId },
+        },
+        create: {
+          orderId,
+          inventoryId: reservation.inventoryId,
+          quantity: reservation.quantity,
+        },
+        update: {
+          quantity: { increment: reservation.quantity },
+          status: 'Committed',
+          committedAt: new Date(),
+          restoredAt: null,
+        },
+      });
+    }
+
+    await tx.stockReservation.deleteMany({
+      where: { orderId, status: 'Active' },
+    });
+  }
+
+  /** Restores stock committed at receipt submission once, after rejection. */
+  async restoreCommittedForOrder(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+  ) {
+    const commitments = await tx.inventoryCommitment.findMany({
+      where: { orderId, status: 'Committed' },
+    });
+
+    for (const commitment of commitments) {
+      const restored = await tx.inventoryCommitment.updateMany({
+        where: {
+          commitmentId: commitment.commitmentId,
+          status: 'Committed',
+        },
+        data: { status: 'Restored', restoredAt: new Date() },
+      });
+      if (restored.count !== 1) continue;
+
+      await tx.inventory.update({
+        where: { inventoryId: commitment.inventoryId },
+        data: {
+          quantity: { increment: commitment.quantity },
+          lastUpdated: new Date(),
+        },
+      });
     }
   }
 }

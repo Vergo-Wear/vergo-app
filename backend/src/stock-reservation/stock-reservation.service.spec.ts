@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { StockReservationService } from './stock-reservation.service';
 
 describe('StockReservationService', () => {
-  const inventory = { findMany: jest.fn(), updateMany: jest.fn() };
+  const inventory = { findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn() };
   const stockReservation = {
     create: jest.fn(),
     findMany: jest.fn(),
@@ -10,7 +10,12 @@ describe('StockReservationService', () => {
     deleteMany: jest.fn(),
     aggregate: jest.fn(),
   };
-  const prisma = { inventory, stockReservation, $queryRaw: jest.fn() };
+  const inventoryCommitment = {
+    upsert: jest.fn(),
+    findMany: jest.fn(),
+    updateMany: jest.fn(),
+  };
+  const prisma = { inventory, stockReservation, inventoryCommitment, $queryRaw: jest.fn() };
   const orderId = '4be0cbd5-2f43-45ff-9f2c-1f0ce8ab4444';
   const orderItemId = '7c1de9f2-30aa-45cd-8f27-b5c07b8f5555';
 
@@ -136,5 +141,44 @@ describe('StockReservationService', () => {
         data: expect.objectContaining({ status: 'Confirmed' }),
       }),
     );
+  });
+
+  it('commits submitted-proof stock, records the allocation, and deletes the reservation', async () => {
+    stockReservation.findMany.mockResolvedValue([
+      { reservationId: 'reservation-1', inventoryId: 'inventory-1', quantity: 2 },
+    ]);
+    inventoryCommitment.upsert.mockResolvedValue({});
+
+    await service.commitAndDeleteForOrder(prisma as never, orderId);
+
+    expect(inventory.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { inventoryId: 'inventory-1', quantity: { gte: 2 } },
+        data: expect.objectContaining({ quantity: { decrement: 2 } }),
+      }),
+    );
+    expect(inventoryCommitment.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ orderId, inventoryId: 'inventory-1', quantity: 2 }),
+      }),
+    );
+    expect(stockReservation.deleteMany).toHaveBeenCalledWith({
+      where: { orderId, status: 'Active' },
+    });
+  });
+
+  it('restores committed stock once when an admin rejects the proof', async () => {
+    inventoryCommitment.findMany.mockResolvedValue([
+      { commitmentId: 'commitment-1', inventoryId: 'inventory-1', quantity: 2 },
+    ]);
+    inventoryCommitment.updateMany.mockResolvedValue({ count: 1 });
+    inventory.update.mockResolvedValue({});
+
+    await service.restoreCommittedForOrder(prisma as never, orderId);
+
+    expect(inventory.update).toHaveBeenCalledWith({
+      where: { inventoryId: 'inventory-1' },
+      data: expect.objectContaining({ quantity: { increment: 2 } }),
+    });
   });
 });

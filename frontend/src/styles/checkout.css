@@ -262,14 +262,37 @@ button.step-item:focus-visible {
 }
 
 .checkout-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
 }
 
 .checkout-actions .submit-btn {
-  flex: 1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   justify-content: center;
+}
+
+.shipping-payment-submit {
+  position: relative;
+}
+
+.shipping-payment-submit-sizer {
+  visibility: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shipping-payment-submit-label {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 .checkout-back-btn {
@@ -297,7 +320,16 @@ button.step-item:focus-visible {
 
 @media (max-width: 480px) {
   .checkout-actions {
-    flex-direction: column-reverse;
+    grid-template-columns: 1fr;
+  }
+
+  .checkout-actions .submit-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .checkout-back-btn {
+    grid-row: 2;
   }
 }
 

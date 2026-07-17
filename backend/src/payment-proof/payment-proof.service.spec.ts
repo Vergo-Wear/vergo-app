@@ -39,7 +39,10 @@ describe('PaymentProofService', () => {
 
   const cloudinary = { uploadBuffer: jest.fn() };
   const notifications = { notifyPaymentExpired: jest.fn() };
-  const stockReservations = { releaseForOrder: jest.fn() };
+  const stockReservations = {
+    releaseForOrder: jest.fn(),
+    commitAndDeleteForOrder: jest.fn(),
+  };
 
   let service: PaymentProofService;
 
@@ -118,6 +121,7 @@ describe('PaymentProofService', () => {
     inventoryDelegate.findMany.mockResolvedValue([]);
     inventoryDelegate.updateMany.mockResolvedValue({ count: 1 });
     stockReservations.releaseForOrder.mockResolvedValue(undefined);
+    stockReservations.commitAndDeleteForOrder.mockResolvedValue(undefined);
   });
 
   describe('uploadReceipt', () => {
@@ -151,6 +155,10 @@ describe('PaymentProofService', () => {
         where: { orderId },
         data: { orderStatus: PaymentProofStatus.PENDING_VERIFICATION },
       });
+      expect(stockReservations.commitAndDeleteForOrder).toHaveBeenCalledWith(
+        prisma,
+        orderId,
+      );
       expect(result).toEqual({
         receiptUrl: 'https://res.cloudinary.com/demo/receipt.png',
         uploadedAt: expect.any(Date),

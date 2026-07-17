@@ -209,6 +209,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           'Released',
           'Customer cancelled order',
         );
+        await this.stockReservations.restoreCommittedForOrder(tx, orderId);
         return tx.orders.findUnique({
           where: { orderId },
           include: this.orderInclude,
@@ -459,6 +460,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
               'Released',
               'Admin rejected order',
             );
+            await this.stockReservations.restoreCommittedForOrder(tx, orderId);
             return rejected;
           })
         : status === 'Ready to Process' && role?.toLowerCase() === 'admin'
@@ -533,8 +535,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           'Released',
           'Payment proof rejected',
         );
+        await this.stockReservations.restoreCommittedForOrder(tx, orderId);
       } else if (dto.status === 'Approved') {
-        await this.stockReservations.confirmForOrder(tx, orderId);
         await tx.orders.update({
           where: { orderId },
           data: {
@@ -893,10 +895,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           // COD commits the already-held units into inventory instead of
           // retaining a stock-reservation row. This prevents the same bank
           // transfer hold from being counted twice after the method changes.
-          await this.stockReservations.confirmForOrder(tx, order.orderId);
-          await tx.stockReservation.deleteMany({
-            where: { orderId: order.orderId, status: 'Confirmed' },
-          });
+          await this.stockReservations.confirmAndDeleteForOrder(
+            tx,
+            order.orderId,
+          );
           await tx.paymentProofs.deleteMany({ where: { orderId: order.orderId } });
         } else {
           await tx.stockReservation.deleteMany({
