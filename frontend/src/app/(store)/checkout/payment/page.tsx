@@ -120,7 +120,7 @@ export default function PaymentPage() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
     
     const payload = {
-      paymentMethod: paymentMethod === "cod" ? "cod" : "bank_transfer",
+      paymentMethod: paymentMethod === "cod" ? "cash on delivery" : "bank_transfer",
       deliveryFee: deliveryFee,
       contactDetails: {
         firstName: contactInfo?.firstName || "",

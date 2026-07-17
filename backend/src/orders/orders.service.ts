@@ -780,7 +780,11 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           productTotal: new Prisma.Decimal(productTotal),
           deliveryFee: new Prisma.Decimal(deliveryFee),
           codAmount: new Prisma.Decimal(codAmount),
-          paymentMethod: createOrderDto.paymentMethod,
+          // Persist one canonical business value regardless of whether the
+          // client submitted the short COD alias or the display label.
+          paymentMethod: isCod
+            ? 'Cash on Delivery'
+            : createOrderDto.paymentMethod,
           shippingAddress: shippingAddress,
           orderStatus: orderStatus,
         },

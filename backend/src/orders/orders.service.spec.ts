@@ -136,8 +136,21 @@ describe('OrdersService', () => {
       expect(ordersDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           customerId: null,
-          paymentMethod: 'cod',
+          paymentMethod: 'Cash on Delivery',
+          productTotal: new Prisma.Decimal(9500),
+          deliveryFee: new Prisma.Decimal(350),
+          totalAmount: new Prisma.Decimal(9850),
+          codAmount: new Prisma.Decimal(9850),
         }),
+      });
+      expect(orderItemDelegate.create).toHaveBeenCalledWith({
+        data: {
+          orderId,
+          variantId,
+          quantity: 2,
+          unitPrice: new Prisma.Decimal(4750),
+          subtotal: new Prisma.Decimal(9500),
+        },
       });
       expect(orderCustomerDetailsDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -199,7 +212,12 @@ describe('OrdersService', () => {
       await service.create(baseDto(), profileId);
 
       expect(ordersDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ customerId, paymentMethod: 'cod' }),
+        data: expect.objectContaining({
+          customerId,
+          paymentMethod: 'Cash on Delivery',
+          deliveryFee: new Prisma.Decimal(350),
+          codAmount: new Prisma.Decimal(9850),
+        }),
       });
       expect(orderCustomerDetailsDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -315,7 +333,10 @@ describe('OrdersService', () => {
 
       expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
       expect(ordersDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ paymentMethod: 'cod' }),
+        data: expect.objectContaining({
+          paymentMethod: 'Cash on Delivery',
+          codAmount: new Prisma.Decimal(9850),
+        }),
       });
     });
 
