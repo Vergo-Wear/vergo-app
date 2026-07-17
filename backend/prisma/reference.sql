@@ -146,13 +146,18 @@ CREATE TABLE public.orders (
   total_amount numeric NOT NULL,
   payment_method text NOT NULL,
   shipping_address text NOT NULL,
-  order_status text DEFAULT 'pending'::text CHECK (order_status = ANY (ARRAY['Draft'::text, 'Pending Payment'::text, 'Pending Verification'::text, 'Ready to Process'::text, 'Claimed by Employee'::text, 'Preparing'::text, 'Ready'::text, 'Sent for Delivery'::text, 'Completed'::text, 'Cancelled'::text, 'Rejected'::text, 'Expired'::text])),
+  order_status text NOT NULL DEFAULT 'Pending'::text CHECK (order_status = ANY (ARRAY['Pending'::text, 'Draft'::text, 'Pending Payment'::text, 'Pending Verification'::text, 'Ready to Process'::text, 'Claimed by Employee'::text, 'Claimed'::text, 'Preparing'::text, 'Ready'::text, 'Ready for Pickup'::text, 'Sent for Delivery'::text, 'Sent'::text, 'Delivered'::text, 'Completed'::text, 'Cancelled'::text, 'Rejected'::text, 'Expired'::text])),
+  confirmation_status text NOT NULL DEFAULT 'Pending'::text CHECK (confirmation_status = ANY (ARRAY['Pending'::text, 'Approved'::text, 'Rejected'::text])),
+  confirmed_by uuid,
+  confirmed_at timestamp with time zone,
+  rejection_reason text,
   product_total numeric NOT NULL DEFAULT 0.00,
   delivery_fee numeric NOT NULL DEFAULT 0.00,
   cod_amount numeric DEFAULT 0.00,
   CONSTRAINT orders_pkey PRIMARY KEY (order_id),
   CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customer(customer_id),
   CONSTRAINT orders_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employee(employee_id),
+  CONSTRAINT orders_confirmed_by_fkey FOREIGN KEY (confirmed_by) REFERENCES public.employee(employee_id),
   CONSTRAINT orders_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branch(branch_id)
 );
 CREATE TABLE public.order_item (

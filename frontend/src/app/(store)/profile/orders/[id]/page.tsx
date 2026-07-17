@@ -80,6 +80,8 @@ export default function OrderDetailsPage({
   // Load order data
   const loadOrder = async () => {
     setError(null);
+    setAccessDenied(false);
+    setIsGuestOrder(false);
     const token = sessionStorage.getItem("vergo_access_token");
     const storedUser = sessionStorage.getItem("vergo_user");
     const loggedIn = sessionStorage.getItem("vergo_is_logged_in") === "true";
@@ -120,9 +122,17 @@ export default function OrderDetailsPage({
           setOrder(data as OrderDetails);
           return;
         }
+
+        const body = await response.json().catch(() => ({}));
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          setAccessDenied(true);
+          return;
+        }
+        throw new Error(body.message || "Unable to retrieve this order from the database.");
       }
 
-      // If backend call fails or no token, fallback to local storage details for mockup/guests
+      // Only genuine guest orders use the local checkout record. Authenticated
+      // customer orders must always come from the database endpoint above.
       if (isSavedInLocal) {
         const localOrderDetails = guestOrdersList.find(
           (o: any) => o.id === orderId,
@@ -343,37 +353,7 @@ export default function OrderDetailsPage({
       // Reload order details
       loadOrder();
     } catch (err: any) {
-      // Local storage sandbox fallback
-      setUploadSuccess(
-        "Bank transfer receipt submitted successfully (Sandbox fallback).",
-      );
-      setSelectedFile(null);
-      setOrder((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          orderStatus: "Pending Verification",
-          paymentProofs: [
-            {
-              proofId: "proof-mock",
-              status: "Pending Verification",
-              receiptUrl: "/uploads/proofs/mock.png",
-              uploadedAt: new Date().toISOString(),
-            },
-          ],
-        };
-      });
-
-      // Sync local storage if applicable
-      const storedOrders = localStorage.getItem("vergo_customer_orders");
-      if (storedOrders) {
-        const parsed = JSON.parse(storedOrders);
-        const idx = parsed.findIndex((o: any) => o.id === orderId);
-        if (idx > -1) {
-          parsed[idx].status = "Pending Verification";
-          localStorage.setItem("vergo_customer_orders", JSON.stringify(parsed));
-        }
-      }
+      setUploadError(err.message || "Proof receipt upload failed.");
     } finally {
       setIsUploading(false);
     }
@@ -498,15 +478,6 @@ export default function OrderDetailsPage({
     printWindow.document.close();
   };
 
-  // Redirect to real-time Package Tracking page
-  const handleTrackPackage = () => {
-    if (!order) return;
-    const status = order.orderStatus || "Pending Payment";
-    alert(
-      `Order Tracking Ref: #${order.orderId}\nStatus: ${status}\nFulfillment Stage: Tracking status is updated within 24 hours of shipment dispatch.`,
-    );
-  };
-
   // Clean formatted currency
   const formatLkr = (num: string | number) => {
     return `Rs. ${Number(num).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -583,6 +554,7 @@ export default function OrderDetailsPage({
   const statusStr = (order.orderStatus || "").toLowerCase();
   const isUnclaimed = !order.employeeId;
   const isInitialStatus = [
+    "pending",
     "draft",
     "pending payment",
     "pending verification",
@@ -645,13 +617,13 @@ export default function OrderDetailsPage({
             >
               Download Invoice
             </button>
-            <button
-              onClick={handleTrackPackage}
+            <Link
+              href={`/profile/orders/${order.orderId}/track`}
               className="order-action-btn btn-track-package"
               style={{ padding: "12px 24px" }}
             >
               Track Package
-            </button>
+            </Link>
           </div>
         </div>
 

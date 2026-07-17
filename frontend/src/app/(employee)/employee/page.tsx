@@ -21,7 +21,7 @@ export default function EmployeeDashboard() {
   const [selectedDetailsOrder, setSelectedDetailsOrder] = useState<OrderItem | null>(null);
 
   // Filter tasks that are pending
-  const pendingTasks = pickingQueue.filter(t => t.status === "pending");
+  const pendingTasks = pickingQueue.filter(t => t.status === "pending").slice(0, 5);
 
   // Leaderboard data
   const leaderboard = [
@@ -326,32 +326,32 @@ export default function EmployeeDashboard() {
 
       {/* Main Grid */}
       <div className="emp-grid-2col">
-        {/* High Priority Picking Queue */}
+        {/* Compact version of the approved orders claim queue */}
         <div className="emp-card">
           <div className="emp-card-header">
             <h2 className="emp-card-title">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 18, height: 18, color: "var(--emp-neon-green)" }}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
               </svg>
-              <span>High-Priority Picking Queue</span>
+              <span>Available Orders</span>
             </h2>
             {pendingTasks.length > 0 && (
-              <span className="emp-badge red">{pendingTasks.length} Critical</span>
+              <span className="emp-badge red">{pendingTasks.length} Available</span>
             )}
           </div>
 
           <div className="emp-table-container">
             {pendingTasks.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 0", color: "var(--emp-text-muted)" }}>
-                No high-priority picking tasks available. Claim queue is clear!
+                No approved parcels are currently available to claim.
               </div>
             ) : (
               <table className="emp-table">
                 <thead>
                   <tr>
-                    <th>Order ID</th>
+                    <th>Details</th>
                     <th>Customer details</th>
-                    <th>Time Remaining</th>
+                    <th>Parcel</th>
                     <th>Payment</th>
                     <th>Valuation</th>
                     <th style={{ textAlign: "right" }}>Action</th>
@@ -359,30 +359,16 @@ export default function EmployeeDashboard() {
                 </thead>
                 <tbody>
                   {pendingTasks.map((task) => {
-                    const minutes = parseInt(task.timeRemaining.split(":")[0]);
-                    const isCritical = minutes < 5;
-                    const isWarning = minutes >= 5 && minutes < 10;
-                    
                     // Look up matching order from orders list
-                    const matchingOrder = orders.find(o => o.id === task.id) || {
-                      id: task.id,
-                      initials: "RP",
-                      customerName: "Roshan Perera",
-                      customerEmail: "roshan.perera@vortex.lk",
-                      customerPhone: "+94 77 123 4567",
-                      customerAddress: "Apartment 4B, Lotus Towers, Colombo 05",
-                      paymentMethod: "COD" as const,
-                      valuation: 84500.00,
-                      itemsList: [{ description: "V-1 Sentinel Tech Puffer / Onyx Black", qty: 1, unitPrice: 59500.00, sku: "ST-VG-99" }]
-                    };
+                    const matchingOrder = orders.find(o => o.id === task.id);
+                    if (!matchingOrder) return null;
 
                     return (
                       <tr key={task.id}>
                         <td className="emp-order-id">
-                          <span style={{ marginRight: "4px" }}>#{task.id}</span>
                           {/* Info Eye Icon for Mobile view list details popup */}
                           <button
-                            onClick={() => setSelectedDetailsOrder(matchingOrder as any)}
+                            onClick={() => setSelectedDetailsOrder(matchingOrder)}
                             style={{
                               background: "none",
                               border: "none",
@@ -415,10 +401,10 @@ export default function EmployeeDashboard() {
                           </div>
                         </td>
                         <td>
-                          <span className={`emp-timer ${isCritical ? "critical" : isWarning ? "warning" : ""}`}>
-                            {task.timeRemaining}
-                          </span>
-                          <div style={{ fontSize: "10.5px", color: "var(--emp-text-muted)", marginTop: "2px" }}>Zone: {task.zone}</div>
+                          <div style={{ fontWeight: 700 }}>1 parcel</div>
+                          <div style={{ fontSize: "10.5px", color: "var(--emp-text-muted)", marginTop: "2px" }}>
+                            {matchingOrder.itemsList.reduce((sum, item) => sum + item.qty, 0)} item(s) · {matchingOrder.itemsList.length} variant(s)
+                          </div>
                         </td>
                         <td>
                           <span className={`emp-badge ${matchingOrder.paymentMethod === "COD" ? "red" : "gray"}`}>
@@ -429,12 +415,15 @@ export default function EmployeeDashboard() {
                           Rs. {matchingOrder.valuation.toLocaleString()}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          <button
-                            className="emp-btn-claim"
-                            onClick={() => claimTask(task.id)}
-                          >
-                            Claim Task
-                          </button>
+                          {matchingOrder.stockAvailable ? (
+                            <button className="emp-btn-claim" onClick={() => claimTask(task.id)}>
+                              Claim Order
+                            </button>
+                          ) : (
+                            <button className="emp-btn-claim disabled" disabled title={matchingOrder.stockShortages.join("\n")}>
+                              Insufficient Stock
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -446,7 +435,7 @@ export default function EmployeeDashboard() {
 
           <div style={{ marginTop: "16px", textAlign: "right" }}>
             <Link href="/employee/orders" style={{ color: "var(--emp-neon-green)", fontSize: "12px", fontWeight: 700, textDecoration: "underline" }}>
-              More Orders &rarr;
+              View All Orders &rarr;
             </Link>
           </div>
         </div>
@@ -551,7 +540,7 @@ export default function EmployeeDashboard() {
         <div className="emp-modal-overlay" style={{ zIndex: 400 }}>
           <div className="emp-modal" style={{ maxWidth: "420px", width: "90%" }}>
             <div className="emp-modal-header">
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Order Details: #{selectedDetailsOrder.id}</h3>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Parcel Details</h3>
               <button className="emp-modal-close" onClick={() => setSelectedDetailsOrder(null)}>&times;</button>
             </div>
             <div className="emp-modal-body" style={{ fontSize: "13px", display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -585,9 +574,12 @@ export default function EmployeeDashboard() {
                 <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--emp-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Products list</span>
                 <div style={{ background: "rgba(0,0,0,0.2)", border: "1px solid var(--emp-border)", borderRadius: "6px", padding: "8px 12px", marginTop: "4px", maxHeight: "110px", overflowY: "auto" }}>
                   {selectedDetailsOrder.itemsList && selectedDetailsOrder.itemsList.map((item, idx) => (
-                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: idx < selectedDetailsOrder.itemsList.length - 1 ? "1px solid var(--emp-border-light)" : "none", fontSize: "12px" }}>
-                      <span style={{ maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#ffffff" }} title={item.description}>{item.description}</span>
-                      <span style={{ fontWeight: 700, color: "var(--emp-neon-green)" }}>x{item.qty}</span>
+                    <div key={idx} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "12px", padding: "8px 0", borderBottom: idx < selectedDetailsOrder.itemsList.length - 1 ? "1px solid var(--emp-border-light)" : "none", fontSize: "12px" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#ffffff", fontWeight: 700 }} title={item.description}>{item.description}</div>
+                        <div style={{ color: "var(--emp-text-muted)", marginTop: "3px" }}>Size: <strong style={{ color: "#ffffff" }}>{item.size}</strong> · Color: <strong style={{ color: "#ffffff" }}>{item.color}</strong></div>
+                      </div>
+                      <span style={{ fontWeight: 800, color: "var(--emp-neon-green)", alignSelf: "center" }}>x{item.qty}</span>
                     </div>
                   ))}
                 </div>

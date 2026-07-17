@@ -66,17 +66,18 @@ export class OrdersController {
   @Get('manage')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('Admin', 'Employee')
-  getAllOrders() {
-    return this.ordersService.findAllOrders();
+  getAllOrders(@CurrentIdentity() user: RequestUser) {
+    return this.ordersService.findManagedOrders(user.id, user.role);
   }
 
   @Get('manage/:id')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('Admin', 'Employee')
   getManagedOrder(
+    @CurrentIdentity() user: RequestUser,
     @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
   ) {
-    return this.ordersService.findManagedOrder(orderId);
+    return this.ordersService.findManagedOrder(orderId, user.role);
   }
 
   @Patch('manage/:id/status')
@@ -92,12 +93,28 @@ export class OrdersController {
       user.role,
       orderId,
       dto.status,
+      dto.rejectionReason,
+    );
+  }
+
+  @Patch('manage/:id/claim')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee')
+  claimManagedOrder(
+    @CurrentIdentity() user: RequestUser,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
+  ) {
+    return this.ordersService.updateManagedStatus(
+      user.id,
+      user.role,
+      orderId,
+      'Claimed',
     );
   }
 
   @Patch('manage/:id/payment-proofs/:proofId/review')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('Admin', 'Employee')
+  @Roles('Admin')
   reviewPaymentProof(
     @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
     @Param('proofId', new ParseUUIDPipe({ version: '4' })) proofId: string,
@@ -108,7 +125,7 @@ export class OrdersController {
 
   @Post('manage/payment-proofs/expire')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('Admin', 'Employee')
+  @Roles('Admin')
   expireOverduePaymentProofs() {
     return this.ordersService.expireOverduePaymentProofs();
   }
