@@ -581,6 +581,8 @@ function BankTransferFlow({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [showReceiptSubmittedModal, setShowReceiptSubmittedModal] = useState(false);
+  const [submittedPaymentStatus, setSubmittedPaymentStatus] = useState("Pending Verification");
 
   // Cancellation states
   const [isCancelling, setIsCancelling] = useState(false);
@@ -720,10 +722,13 @@ function BankTransferFlow({
         throw new Error(errMsg || "Proof receipt upload failed.");
       }
 
+      const paymentStatus = data.status || "Pending Verification";
+      setSubmittedPaymentStatus(paymentStatus);
       setUploadSuccess(
-        `Bank transfer receipt submitted successfully. Payment status: ${data.status || "Pending Verification"}.`,
+        `Bank transfer receipt submitted successfully. Payment status: ${paymentStatus}.`,
       );
       setSelectedFile(null);
+      setShowReceiptSubmittedModal(true);
     } catch (err: any) {
       setUploadError(err.message || "Upload failed. Please try again.");
     } finally {
@@ -1449,6 +1454,65 @@ function BankTransferFlow({
       )}
 
 
+
+      {showReceiptSubmittedModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="receipt-submitted-title">
+          <div className="modal-box">
+            <div className="modal-icon-container" style={{ color: "#00FF9D" }}>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="modal-icon"
+                width={24}
+                height={24}
+              >
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            </div>
+            <h3 id="receipt-submitted-title" className="modal-title">Receipt Submitted Successfully</h3>
+            <p className="modal-message">
+              Your bank transfer receipt has been received and is now waiting for verification.
+              <span
+                style={{
+                  display: "block",
+                  width: "fit-content",
+                  margin: "16px auto 0",
+                  padding: "7px 12px",
+                  borderRadius: "999px",
+                  backgroundColor: "rgba(255, 193, 7, 0.12)",
+                  border: "1px solid rgba(255, 193, 7, 0.3)",
+                  color: "#FFC107",
+                  fontSize: "11px",
+                  fontWeight: "800",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Payment Status: {submittedPaymentStatus}
+              </span>
+              <span style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)", display: "block", marginTop: "12px" }}>
+                Order Reference: <strong>#{orderId}</strong>
+              </span>
+            </p>
+            <div className="modal-buttons-container">
+              <button
+                type="button"
+                className="modal-primary-btn"
+                style={{ backgroundColor: "#00FF9D" }}
+                onClick={onClose}
+              >
+                Back to Homepage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custom Toast Notification */}
       {toast && (
