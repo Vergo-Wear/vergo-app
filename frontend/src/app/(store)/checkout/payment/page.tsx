@@ -64,20 +64,31 @@ export default function PaymentPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const forcedGuest = localStorage.getItem("vergo_checkout_as_guest") === "true";
-      const loggedIn = sessionStorage.getItem("vergo_is_logged_in") === "true" && !forcedGuest;
+      const storedUser = sessionStorage.getItem("vergo_user");
+      const accessToken = sessionStorage.getItem("vergo_access_token");
+      let isCustomer = false;
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          const role = parsedUser?.role?.roleName ?? parsedUser?.role;
+          isCustomer = typeof role === "string" && role.toLowerCase() === "customer";
+          setUserProfile(parsedUser);
+        } catch (e) {
+          console.warn("Unable to read the signed-in customer profile.", e);
+        }
+      }
+
+      const loggedIn =
+        sessionStorage.getItem("vergo_is_logged_in") === "true" &&
+        Boolean(accessToken) &&
+        isCustomer &&
+        !forcedGuest;
       setIsLoggedIn(loggedIn);
       setPaymentMethod(loggedIn ? "bank_transfer" : "cod");
 
       const storedContact = localStorage.getItem("vergo_checkout_contact");
       const storedShipping = localStorage.getItem("vergo_checkout_shipping");
-      const storedUser = sessionStorage.getItem("vergo_user");
-
-      if (storedUser) {
-        try {
-          setUserProfile(JSON.parse(storedUser));
-        } catch (e) {}
-      }
-
       if (storedContact) {
         try {
           setContactInfo(JSON.parse(storedContact));
@@ -97,6 +108,13 @@ export default function PaymentPage() {
 
   const handlePlaceOrder = async () => {
     setSubmitError(null);
+
+    if (!isLoggedIn && paymentMethod === "bank_transfer") {
+      setPaymentMethod("cod");
+      setSubmitError("Please log in to use Bank Transfer.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -350,7 +368,7 @@ export default function PaymentPage() {
                 </span>
                 {!isLoggedIn && (
                   <span style={{ fontSize: "11px", color: "#EA4335", fontWeight: "600", marginTop: "4px" }}>
-                    🔒 Only available for logged-in customers.{" "}
+                    Please log in to use Bank Transfer.{" "}
                     <a
                       href="/auth/login"
                       onClick={(e) => {
