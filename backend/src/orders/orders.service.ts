@@ -17,12 +17,11 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { READY_STATUS } from './dto/update-order-status.dto';
 import { ReviewPaymentProofDto } from './dto/review-payment-proof.dto';
 
-const DEFAULT_PAYMENT_PROOF_EXPIRY_HOURS = 4;
+const BANK_TRANSFER_HOLD_MINUTES = 15;
 
 /** Payment proof statuses that are still awaiting an outcome. */
 const PENDING_PROOF_STATUSES = [
   PaymentProofStatus.PENDING_UPLOAD as string,
-  PaymentProofStatus.PENDING_VERIFICATION as string,
 ];
 
 const EMPLOYEE_PROCESSING_STATUSES = [
@@ -56,8 +55,8 @@ const EMPLOYEE_STATUS_TRANSITIONS: Record<string, string[]> = {
   'Ready for Pickup': ['Sent'],
 };
 
-/** How often overdue payment proofs are swept and expired (1 hour). */
-const PROOF_EXPIRY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+/** Sweep often enough that a 15-minute stock hold is released promptly. */
+const PROOF_EXPIRY_SWEEP_INTERVAL_MS = 60 * 1000;
 
 /** Address fields snapshotted into order_shipping_details */
 interface ShippingSnapshot {
@@ -87,14 +86,98 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     private readonly notifications: NotificationsService,
   ) {}
 
-  /** Hours a bank-transfer customer has to upload their receipt. */
-  private paymentProofExpiryHours(): number {
-    const configured = Number(
-      this.configService.get<string>('PAYMENT_PROOF_EXPIRY_HOURS'),
-    );
-    return Number.isFinite(configured) && configured > 0
-      ? configured
-      : DEFAULT_PAYMENT_PROOF_EXPIRY_HOURS;
+  /** Bank-transfer inventory is held for exactly 15 minutes. */
+  private paymentProofExpiresAt(): Date {
+    return new Date(Date.now() + BANK_TRANSFER_HOLD_MINUTES * 60 * 1000);
+  }
+
+  private async reserveStock(tx: Prisma.TransactionClient, items: StockCheckItem[]) {
+    for (const item of items) {
+      if (!item.variantId || item.quantity <= 0) {
+        throw new BadRequestException('Every order item must have a valid variant and quantity.');
+      }
+      let remaining = item.quantity;
+      const rows = await tx.inventory.findMany({
+        where: { variantId: item.variantId },
+        orderBy: { inventoryId: 'asc' },
+      });
+      for (const row of rows) {
+        if (remaining === 0) break;
+        const reserved = row.reservedQuantity ?? 0;
+        const take = Math.min(remaining, Math.max(0, (row.quantity ?? 0) - reserved));
+        if (take === 0) continue;
+        const changed = await tx.inventory.updateMany({
+          where: {
+            inventoryId: row.inventoryId,
+            reservedQuantity: row.reservedQuantity,
+            quantity: { gte: reserved + take },
+          },
+          data: { reservedQuantity: reserved + take, lastUpdated: new Date() },
+        });
+        if (changed.count !== 1) {
+          throw new BadRequestException('Stock changed while placing the order. Please try again.');
+        }
+        remaining -= take;
+      }
+      if (remaining > 0) {
+        throw new BadRequestException(
+          `${item.variant?.sku || item.variantId} has only ${item.quantity - remaining} item(s) available.`,
+        );
+      }
+    }
+  }
+
+  private async releaseStock(tx: Prisma.TransactionClient, items: StockCheckItem[]) {
+    for (const item of items) {
+      if (!item.variantId || item.quantity <= 0) continue;
+      let remaining = item.quantity;
+      const rows = await tx.inventory.findMany({
+        where: { variantId: item.variantId, reservedQuantity: { gt: 0 } },
+        orderBy: { inventoryId: 'asc' },
+      });
+      for (const row of rows) {
+        if (remaining === 0) break;
+        const reserved = row.reservedQuantity ?? 0;
+        const release = Math.min(remaining, reserved);
+        const changed = await tx.inventory.updateMany({
+          where: { inventoryId: row.inventoryId, reservedQuantity: reserved },
+          data: { reservedQuantity: reserved - release, lastUpdated: new Date() },
+        });
+        if (changed.count !== 1) throw new BadRequestException('Stock reservation changed. Please retry.');
+        remaining -= release;
+      }
+      if (remaining > 0) {
+        throw new BadRequestException('The order stock reservation is incomplete.');
+      }
+    }
+  }
+
+  private async commitReservedStock(tx: Prisma.TransactionClient, items: StockCheckItem[]) {
+    for (const item of items) {
+      if (!item.variantId || item.quantity <= 0) continue;
+      let remaining = item.quantity;
+      const rows = await tx.inventory.findMany({
+        where: { variantId: item.variantId, reservedQuantity: { gt: 0 } },
+        orderBy: { inventoryId: 'asc' },
+      });
+      for (const row of rows) {
+        if (remaining === 0) break;
+        const reserved = row.reservedQuantity ?? 0;
+        const consume = Math.min(remaining, reserved, row.quantity ?? 0);
+        if (consume === 0) continue;
+        const changed = await tx.inventory.updateMany({
+          where: { inventoryId: row.inventoryId, reservedQuantity: reserved, quantity: row.quantity },
+          data: {
+            reservedQuantity: reserved - consume,
+            quantity: (row.quantity ?? 0) - consume,
+            lastUpdated: new Date(),
+          },
+        });
+        if (changed.count !== 1) throw new BadRequestException('Stock changed while claiming the order.');
+        remaining -= consume;
+      }
+      if (remaining > 0) throw new BadRequestException('Reserved stock is no longer available.');
+    }
   }
 
   /** Periodically expires overdue payment proofs (no queue infra exists yet). */
@@ -179,42 +262,18 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       }
 
       return await this.prisma.$transaction(async (tx) => {
-        const updatedOrder = await tx.orders.update({
-          where: { orderId },
+        const transition = await tx.orders.updateMany({
+          where: {
+            orderId,
+            employeeId: null,
+            orderStatus: { in: ['Pending', 'Draft', 'Pending Payment', 'Pending Verification', 'Ready to Process'] },
+          },
           data: { orderStatus: 'Cancelled' },
-          include: this.orderInclude,
         });
+        if (transition.count !== 1) throw new ForbiddenException('This order can no longer be cancelled.');
 
-        // Release stock: decrease reservedQuantity and increase quantity
-        for (const item of order.orderItems) {
-          if (!item.variantId) continue;
-
-          const inventoryRow = await tx.inventory.findFirst({
-            where: {
-              variantId: item.variantId,
-              ...(order.branchId ? { branchId: order.branchId } : {}),
-            },
-          });
-
-          if (inventoryRow) {
-            const newReserved = Math.max(
-              0,
-              (inventoryRow.reservedQuantity || 0) - item.quantity,
-            );
-            const newQuantity = (inventoryRow.quantity || 0) + item.quantity;
-
-            await tx.inventory.update({
-              where: { inventoryId: inventoryRow.inventoryId },
-              data: {
-                reservedQuantity: newReserved,
-                quantity: newQuantity,
-                lastUpdated: new Date(),
-              },
-            });
-          }
-        }
-
-        return updatedOrder;
+        await this.releaseStock(tx, order.orderItems);
+        return tx.orders.findUnique({ where: { orderId }, include: this.orderInclude });
       });
     } catch (err: any) {
       const errMsg = err.message || '';
@@ -373,7 +432,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     status: string,
     rejectionReason?: string,
   ) {
-    const order = await this.prisma.orders.findUnique({ where: { orderId } });
+    const order = await this.prisma.orders.findUnique({
+      where: { orderId },
+      include: { orderItems: true },
+    });
     if (!order) throw new NotFoundException('Order not found.');
     if (role?.toLowerCase() === 'admin' && status === 'Claimed') {
       throw new ForbiddenException('Only an employee can claim an order.');
@@ -395,29 +457,19 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         ) {
           throw new BadRequestException('Only ready orders can be claimed.');
         }
-        const stock = await this.checkParcelStock(
-          managedOrder.orderItems,
-          employee.branchId,
-        );
-        if (!stock.stockAvailable) {
-          throw new BadRequestException(
-            `This parcel cannot be claimed because branch stock is insufficient: ${stock.stockShortages.join('; ')}`,
-          );
-        }
-        const claimed = await this.prisma.orders.updateMany({
-          where: {
-            orderId,
-            employeeId: null,
-            confirmationStatus: 'Approved',
-            orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES },
-          },
-          data: { orderStatus: 'Claimed', employeeId: employee.employeeId },
+        await this.prisma.$transaction(async (tx) => {
+          const claimed = await tx.orders.updateMany({
+            where: {
+              orderId,
+              employeeId: null,
+              confirmationStatus: 'Approved',
+              orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES },
+            },
+            data: { orderStatus: 'Claimed', employeeId: employee.employeeId },
+          });
+          if (claimed.count === 0) throw new ForbiddenException('This order has already been claimed by another employee.');
+          await this.commitReservedStock(tx, managedOrder.orderItems);
         });
-        if (claimed.count === 0) {
-          throw new ForbiddenException(
-            'This order has already been claimed by another employee.',
-          );
-        }
         return this.findManagedOrder(orderId, role);
       }
 
@@ -448,11 +500,21 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
               status === 'Rejected' ? rejectionReason ?? null : null,
           }
         : {};
-    const updated = await this.prisma.orders.update({
-      where: { orderId },
-      data: { orderStatus: status, employeeId, ...confirmationData },
-      include: this.orderInclude,
-    });
+    const updated = status === 'Rejected' && !order.employeeId
+      ? await this.prisma.$transaction(async (tx) => {
+          const rejected = await tx.orders.update({
+            where: { orderId },
+            data: { orderStatus: status, employeeId, ...confirmationData },
+            include: this.orderInclude,
+          });
+          await this.releaseStock(tx, order.orderItems);
+          return rejected;
+        })
+      : await this.prisma.orders.update({
+          where: { orderId },
+          data: { orderStatus: status, employeeId, ...confirmationData },
+          include: this.orderInclude,
+        });
 
     // Notify the customer only after the READY status has been saved, and
     // only when the status actually changed (READY -> READY is a no-op).
@@ -479,37 +541,44 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     });
     if (!proof) throw new NotFoundException('Payment proof not found.');
 
-    // Atomic transition guard: only rows not already in the target status
-    // are updated, so concurrent duplicate reviews produce count = 0.
-    const transition = await this.prisma.paymentProofs.updateMany({
-      where: { proofId, status: { not: dto.status } },
-      data: { status: dto.status, adminNotes: dto.adminNotes ?? null },
+    const changed = await this.prisma.$transaction(async (tx) => {
+      const transition = await tx.paymentProofs.updateMany({
+        where: {
+          proofId,
+          status: PaymentProofStatus.PENDING_VERIFICATION,
+        },
+        data: { status: dto.status, adminNotes: dto.adminNotes ?? null },
+      });
+      if (transition.count === 0) return false;
+
+      if (dto.status === 'Rejected') {
+        const order = await tx.orders.findUnique({
+          where: { orderId },
+          include: { orderItems: true },
+        });
+        if (!order) throw new NotFoundException('Order not found.');
+        await tx.orders.update({
+          where: { orderId },
+          data: { confirmationStatus: 'Rejected', orderStatus: 'Rejected', confirmedAt: new Date(), rejectionReason: dto.adminNotes ?? null },
+        });
+        await this.releaseStock(tx, order.orderItems);
+      } else if (dto.status === 'Approved') {
+        await tx.orders.update({
+          where: { orderId },
+          data: {
+            confirmationStatus: 'Approved',
+            orderStatus: 'Ready to Process',
+            confirmedAt: new Date(),
+            rejectionReason: null,
+          },
+        });
+      }
+      return true;
     });
-    if (transition.count === 0) {
-      return this.prisma.paymentProofs.findFirst({ where: { proofId } });
-    }
+    if (!changed) return this.prisma.paymentProofs.findFirst({ where: { proofId } });
 
     if (dto.status === 'Rejected') {
-      await this.prisma.orders.update({
-        where: { orderId },
-        data: {
-          confirmationStatus: 'Rejected',
-          orderStatus: 'Rejected',
-          confirmedAt: new Date(),
-          rejectionReason: dto.adminNotes ?? null,
-        },
-      });
       await this.notifications.notifyPaymentRejected(orderId, dto.adminNotes);
-    } else if (dto.status === 'Approved') {
-      await this.prisma.orders.update({
-        where: { orderId },
-        data: {
-          confirmationStatus: 'Approved',
-          orderStatus: 'Ready to Process',
-          confirmedAt: new Date(),
-          rejectionReason: null,
-        },
-      });
     }
 
     return this.prisma.paymentProofs.findFirst({ where: { proofId } });
@@ -532,24 +601,26 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
     let expired = 0;
     for (const proof of overdue) {
-      // Atomic transition guard against concurrent sweeps/reviews.
-      const transition = await this.prisma.paymentProofs.updateMany({
-        where: {
-          proofId: proof.proofId,
-          status: { in: PENDING_PROOF_STATUSES },
-        },
-        data: { status: 'Expired' },
+      const changed = await this.prisma.$transaction(async (tx) => {
+        const transition = await tx.paymentProofs.updateMany({
+          where: { proofId: proof.proofId, status: { in: PENDING_PROOF_STATUSES } },
+          data: { status: 'Expired' },
+        });
+        if (transition.count === 0) return false;
+        const order = await tx.orders.findUnique({
+          where: { orderId: proof.orderId },
+          include: { orderItems: true },
+        });
+        if (!order) throw new NotFoundException('Order not found.');
+        const changed = await tx.orders.updateMany({
+          where: { orderId: proof.orderId, orderStatus: { in: ['Pending', 'Pending Payment', 'Pending Verification'] } },
+          data: { orderStatus: 'Expired' },
+        });
+        if (changed.count === 1) await this.releaseStock(tx, order.orderItems);
+        return changed.count === 1;
       });
-      if (transition.count === 0) continue;
+      if (!changed) continue;
       expired += 1;
-
-      await this.prisma.orders.updateMany({
-        where: {
-          orderId: proof.orderId,
-          orderStatus: { in: ['Pending Payment', 'Pending Verification'] },
-        },
-        data: { orderStatus: 'Pending Payment' },
-      });
       await this.notifications.notifyPaymentExpired(proof.orderId);
     }
 
@@ -636,6 +707,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         });
       }
 
+      // Reserve before creating the order. The transaction rolls all changes
+      // back if any variant cannot be fully reserved.
+      await this.reserveStock(tx, itemsToCreate);
+
       // 2. Prepare totals
       const deliveryFee = Number(createOrderDto.deliveryFee);
       const totalAmount = productTotal + deliveryFee;
@@ -719,9 +794,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           data: {
             orderId: order.orderId,
             status: PaymentProofStatus.PENDING_UPLOAD,
-            expiresAt: new Date(
-              Date.now() + this.paymentProofExpiryHours() * 60 * 60 * 1000,
-            ),
+            expiresAt: this.paymentProofExpiresAt(),
           },
         });
       }

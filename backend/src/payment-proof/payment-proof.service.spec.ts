@@ -10,17 +10,21 @@ import { PaymentProofStatus } from '../common/enums/payment-proof-status.enum';
 
 describe('PaymentProofService', () => {
   const customerDelegate = { findFirst: jest.fn() };
-  const ordersDelegate = { findFirst: jest.fn(), update: jest.fn() };
-  const paymentProofsDelegate = { update: jest.fn() };
+  const ordersDelegate = {
+    findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(),
+  };
+  const paymentProofsDelegate = {
+    findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(),
+  };
+  const inventoryDelegate = { findMany: jest.fn(), updateMany: jest.fn() };
 
   const prisma = {
     customer: customerDelegate,
     orders: ordersDelegate,
     paymentProofs: paymentProofsDelegate,
-    // The service passes an array of already-built prisma promises; resolve
-    // them together the same way an interactive transaction commit would.
-    $transaction: jest.fn((operations: Promise<unknown>[]) =>
-      Promise.all(operations),
+    inventory: inventoryDelegate,
+    $transaction: jest.fn((operations: Promise<unknown>[] | ((tx: unknown) => unknown)) =>
+      typeof operations === 'function' ? operations(prisma) : Promise.all(operations),
     ),
   };
 
@@ -78,6 +82,14 @@ describe('PaymentProofService', () => {
         }),
     );
     ordersDelegate.update.mockResolvedValue({ orderId });
+    ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
+    ordersDelegate.findUnique.mockResolvedValue({ orderId, orderItems: [] });
+    paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
+    paymentProofsDelegate.findUnique.mockResolvedValue({
+      proofId, orderId, expiresAt: pastDate(), status: PaymentProofStatus.EXPIRED,
+    });
+    inventoryDelegate.findMany.mockResolvedValue([]);
+    inventoryDelegate.updateMany.mockResolvedValue({ count: 1 });
   });
 
   describe('uploadReceipt', () => {
@@ -201,10 +213,10 @@ describe('PaymentProofService', () => {
       await expect(
         service.uploadReceipt(profileId, orderId, receiptFile),
       ).rejects.toThrow(BadRequestException);
-      expect(paymentProofsDelegate.update).toHaveBeenCalledWith({
-        where: { proofId },
+      expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ proofId, status: PaymentProofStatus.PENDING_UPLOAD }),
         data: { status: PaymentProofStatus.EXPIRED },
-      });
+      }));
       expect(cloudinary.uploadBuffer).not.toHaveBeenCalled();
     });
 
@@ -267,12 +279,23 @@ describe('PaymentProofService', () => {
       ordersDelegate.findFirst.mockResolvedValue(
         bankTransferOrder({ expiresAt: pastDate() }),
       );
+      ordersDelegate.findUnique.mockResolvedValue({
+        orderId,
+        orderItems: [{ variantId: 'variant-1', quantity: 2 }],
+      });
+      inventoryDelegate.findMany.mockResolvedValue([{
+        inventoryId: 'inventory-1', variantId: 'variant-1', quantity: 10, reservedQuantity: 2,
+      }]);
 
       const result = await service.getForCustomerOrder(profileId, orderId);
 
-      expect(paymentProofsDelegate.update).toHaveBeenCalledWith({
-        where: { proofId },
+      expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ proofId, status: PaymentProofStatus.PENDING_UPLOAD }),
         data: { status: PaymentProofStatus.EXPIRED },
+      }));
+      expect(inventoryDelegate.updateMany).toHaveBeenCalledWith({
+        where: { inventoryId: 'inventory-1', reservedQuantity: 2 },
+        data: { reservedQuantity: 0, lastUpdated: expect.any(Date) },
       });
       expect(result.status).toBe(PaymentProofStatus.EXPIRED);
     });

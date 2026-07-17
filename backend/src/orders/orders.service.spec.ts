@@ -8,13 +8,19 @@ describe('OrdersService', () => {
   const productVariantDelegate = { findUnique: jest.fn() };
   const ordersDelegate = {
     create: jest.fn(),
+    findFirst: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
   };
   const employeeDelegate = { findFirst: jest.fn() };
-  const inventoryDelegate = { findFirst: jest.fn(), update: jest.fn() };
+  const inventoryDelegate = {
+    findFirst: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  };
   const paymentProofsDelegate = {
     create: jest.fn(),
     findFirst: jest.fn(),
@@ -114,6 +120,13 @@ describe('OrdersService', () => {
       quantity: 10,
       reservedQuantity: 0,
     });
+    inventoryDelegate.findMany.mockResolvedValue([{
+      inventoryId: 'inventory-1',
+      variantId,
+      quantity: 10,
+      reservedQuantity: 0,
+    }]);
+    inventoryDelegate.updateMany.mockResolvedValue({ count: 1 });
   });
 
   describe('guest checkout', () => {
@@ -327,8 +340,7 @@ describe('OrdersService', () => {
       expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
     });
 
-    it('honours PAYMENT_PROOF_EXPIRY_HOURS from configuration', async () => {
-      configService.get.mockReturnValue('12');
+    it('holds bank-transfer stock for 15 minutes', async () => {
       const dto = baseDto();
       dto.paymentMethod = 'bank_transfer';
 
@@ -336,9 +348,9 @@ describe('OrdersService', () => {
       await service.create(dto, profileId);
 
       const { expiresAt } = paymentProofsDelegate.create.mock.calls[0][0].data;
-      const hours = (expiresAt.getTime() - before) / (60 * 60 * 1000);
-      expect(hours).toBeGreaterThan(11.9);
-      expect(hours).toBeLessThan(12.1);
+      const minutes = (expiresAt.getTime() - before) / (60 * 1000);
+      expect(minutes).toBeGreaterThan(14.9);
+      expect(minutes).toBeLessThan(15.1);
     });
 
     it('rolls the order back when the proof insert fails', async () => {
@@ -356,6 +368,35 @@ describe('OrdersService', () => {
   });
 
   describe('validation and rollback', () => {
+    it('reserves only available stock before creating an order', async () => {
+      await service.create(baseDto());
+
+      expect(inventoryDelegate.updateMany).toHaveBeenCalledWith({
+        where: {
+          inventoryId: 'inventory-1',
+          reservedQuantity: 0,
+          quantity: { gte: 2 },
+        },
+        data: { reservedQuantity: 2, lastUpdated: expect.any(Date) },
+      });
+    });
+
+    it('rejects an order when quantity minus reserved quantity is insufficient', async () => {
+      inventoryDelegate.findMany.mockResolvedValue([{
+        inventoryId: 'inventory-1', variantId, quantity: 5, reservedQuantity: 4,
+      }]);
+
+      await expect(service.create(baseDto())).rejects.toThrow('has only 1 item(s) available');
+      expect(ordersDelegate.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a concurrent reservation change instead of overselling', async () => {
+      inventoryDelegate.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.create(baseDto())).rejects.toThrow('Stock changed while placing the order');
+      expect(ordersDelegate.create).not.toHaveBeenCalled();
+    });
+
     it('rejects an invalid shipping district', async () => {
       const dto = baseDto();
       dto.shippingDetails.district = 'Atlantis';
@@ -392,6 +433,31 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('stock release', () => {
+    it('cancelling an unclaimed order releases reserved stock without increasing quantity', async () => {
+      customerDelegate.findFirst.mockResolvedValue({ customerId });
+      ordersDelegate.findFirst.mockResolvedValue({
+        orderId,
+        employeeId: null,
+        orderStatus: 'Pending',
+        orderItems: [{ variantId, quantity: 2 }],
+      });
+      ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
+      ordersDelegate.findUnique.mockResolvedValue({ orderId, orderStatus: 'Cancelled' });
+      inventoryDelegate.findMany.mockResolvedValue([{
+        inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
+      }]);
+
+      await service.cancelCustomerOrder(profileId, orderId);
+
+      expect(inventoryDelegate.updateMany).toHaveBeenCalledWith({
+        where: { inventoryId: 'inventory-1', reservedQuantity: 2 },
+        data: { reservedQuantity: 0, lastUpdated: expect.any(Date) },
+      });
+      expect(inventoryDelegate.updateMany.mock.calls[0][0].data.quantity).toBeUndefined();
+    });
+  });
+
   describe('order ready notification', () => {
     beforeEach(() => {
       ordersDelegate.update.mockResolvedValue({
@@ -406,6 +472,9 @@ describe('OrdersService', () => {
         orderStatus: 'Preparing',
         employeeId: 'emp-1',
       });
+      inventoryDelegate.findMany.mockResolvedValue([{
+        inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
+      }]);
 
       await service.updateManagedStatus(
         profileId,
@@ -550,6 +619,9 @@ describe('OrdersService', () => {
         orderItems: [{ variantId, quantity: 2, variant: { sku: 'SKU-1' } }],
       });
       ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
+      inventoryDelegate.findMany.mockResolvedValue([{
+        inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
+      }]);
 
       await service.updateManagedStatus(
         profileId,
@@ -588,6 +660,13 @@ describe('OrdersService', () => {
           status: 'Pending Verification',
         });
         ordersDelegate.update.mockResolvedValue({ orderId });
+        ordersDelegate.findUnique.mockResolvedValue({
+          orderId,
+          orderItems: [{ variantId, quantity: 2 }],
+        });
+        inventoryDelegate.findMany.mockResolvedValue([{
+          inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
+        }]);
       });
 
       it('rejecting a proof notifies the customer and reopens payment', async () => {
@@ -599,7 +678,7 @@ describe('OrdersService', () => {
         });
 
         expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith({
-          where: { proofId, status: { not: 'Rejected' } },
+          where: { proofId, status: 'Pending Verification' },
           data: { status: 'Rejected', adminNotes: 'Blurry receipt' },
         });
         expect(ordersDelegate.update).toHaveBeenCalledWith({
@@ -655,9 +734,19 @@ describe('OrdersService', () => {
     });
 
     describe('payment proof expiry', () => {
+      beforeEach(() => {
+        ordersDelegate.findUnique.mockResolvedValue({
+          orderId,
+          orderItems: [{ variantId, quantity: 2 }],
+        });
+        inventoryDelegate.findMany.mockResolvedValue([{
+          inventoryId: 'inventory-1', variantId, quantity: 10, reservedQuantity: 2,
+        }]);
+      });
+
       it('expires overdue proofs once and notifies each customer', async () => {
         paymentProofsDelegate.findMany.mockResolvedValue([
-          { proofId, orderId, status: 'Pending Verification' },
+          { proofId, orderId, status: 'Pending Upload' },
         ]);
         paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
         ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
@@ -668,7 +757,7 @@ describe('OrdersService', () => {
         expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith({
           where: {
             proofId,
-            status: { in: ['Pending Upload', 'Pending Verification'] },
+            status: { in: ['Pending Upload'] },
           },
           data: { status: 'Expired' },
         });
@@ -680,7 +769,7 @@ describe('OrdersService', () => {
 
       it('an already-expired proof is never expired or notified twice', async () => {
         paymentProofsDelegate.findMany.mockResolvedValue([
-          { proofId, orderId, status: 'Pending Verification' },
+          { proofId, orderId, status: 'Pending Upload' },
         ]);
         // Simulates a concurrent sweep having already transitioned the proof.
         paymentProofsDelegate.updateMany.mockResolvedValue({ count: 0 });

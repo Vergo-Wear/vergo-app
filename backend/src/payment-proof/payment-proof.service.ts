@@ -63,9 +63,53 @@ export class PaymentProofService {
     if (!isExpirable || proof.expiresAt.getTime() > Date.now()) {
       return proof;
     }
-    return this.prisma.paymentProofs.update({
-      where: { proofId: proof.proofId },
-      data: { status: PaymentProofStatus.EXPIRED },
+    return this.prisma.$transaction(async (tx) => {
+      const transition = await tx.paymentProofs.updateMany({
+        where: {
+          proofId: proof.proofId,
+          status: PaymentProofStatus.PENDING_UPLOAD,
+          expiresAt: { lte: new Date() },
+        },
+        data: { status: PaymentProofStatus.EXPIRED },
+      });
+      if (transition.count === 0) {
+        return (await tx.paymentProofs.findUnique({ where: { proofId: proof.proofId } })) ?? proof;
+      }
+
+      const order = await tx.orders.findUnique({
+        where: { orderId: proof.orderId },
+        include: { orderItems: true },
+      });
+      if (order) {
+        for (const item of order.orderItems) {
+          if (!item.variantId || item.quantity <= 0) continue;
+          let remaining = item.quantity;
+          const rows = await tx.inventory.findMany({
+            where: { variantId: item.variantId, reservedQuantity: { gt: 0 } },
+            orderBy: { inventoryId: 'asc' },
+          });
+          for (const row of rows) {
+            if (remaining === 0) break;
+            const reserved = row.reservedQuantity ?? 0;
+            const release = Math.min(remaining, reserved);
+            const changed = await tx.inventory.updateMany({
+              where: { inventoryId: row.inventoryId, reservedQuantity: reserved },
+              data: { reservedQuantity: reserved - release, lastUpdated: new Date() },
+            });
+            if (changed.count !== 1) throw new ConflictException('Stock reservation changed. Please retry.');
+            remaining -= release;
+          }
+          if (remaining > 0) throw new ConflictException('The order stock reservation is incomplete.');
+        }
+        await tx.orders.updateMany({
+          where: { orderId: proof.orderId, orderStatus: { in: ['Pending', 'Pending Payment'] } },
+          data: { orderStatus: 'Expired' },
+        });
+      }
+      return (await tx.paymentProofs.findUnique({ where: { proofId: proof.proofId } })) ?? {
+        ...proof,
+        status: PaymentProofStatus.EXPIRED,
+      };
     });
   }
 
