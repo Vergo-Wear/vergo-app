@@ -120,6 +120,12 @@ describe('OrdersService', () => {
     it('creates guest customer and shipping snapshots without a customer link', async () => {
       await service.create(baseDto());
 
+      expect(ordersDelegate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          customerId: null,
+          paymentMethod: 'cod',
+        }),
+      });
       expect(orderCustomerDetailsDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           orderId,
@@ -163,7 +169,11 @@ describe('OrdersService', () => {
       const dto = baseDto();
       dto.paymentMethod = 'bank_transfer';
 
-      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto)).rejects.toThrow(
+        'Guest checkouts are not allowed to use Bank Transfer payment.',
+      );
+      expect(ordersDelegate.create).not.toHaveBeenCalled();
+      expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
     });
   });
 
@@ -176,7 +186,7 @@ describe('OrdersService', () => {
       await service.create(baseDto(), profileId);
 
       expect(ordersDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ customerId }),
+        data: expect.objectContaining({ customerId, paymentMethod: 'cod' }),
       });
       expect(orderCustomerDetailsDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -302,6 +312,9 @@ describe('OrdersService', () => {
 
       await service.create(dto, profileId);
 
+      expect(ordersDelegate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ paymentMethod: 'bank_transfer' }),
+      });
       expect(paymentProofsDelegate.create).toHaveBeenCalledTimes(1);
       expect(paymentProofsDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({

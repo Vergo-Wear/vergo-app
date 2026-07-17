@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createSupabaseClient, getSupabaseRedirectSession } from "@/lib/supabase";
 
@@ -740,12 +741,12 @@ export default function LoginPage() {
 
             {/* Forgot Password Link */}
             <div className="forgot-password-wrapper">
-              <a
+              <Link
                 href="/auth/forgot-password"
                 className="forgot-password-link"
               >
                 Forgot Password?
-              </a>
+              </Link>
             </div>
 
             {/* Feedback Message */}
