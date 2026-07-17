@@ -9,7 +9,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { PaymentProofStatus } from '../common/enums/payment-proof-status.enum';
-import type { Orders, PaymentProofs } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { StockReservationService } from '../stock-reservation/stock-reservation.service';
+import type { Orders, PaymentProofs, StockReservation } from '@prisma/client';
 
 /** Multer file shape used by the receipt upload endpoint */
 export interface UploadedReceiptFile {
@@ -18,7 +20,10 @@ export interface UploadedReceiptFile {
   buffer: Buffer;
 }
 
-type OrderWithProofs = Orders & { paymentProofs: PaymentProofs[] };
+type OrderWithProofs = Orders & {
+  paymentProofs: PaymentProofs[];
+  stockReservations: Pick<StockReservation, 'expiresAt'>[];
+};
 
 @Injectable()
 export class PaymentProofService {
@@ -27,6 +32,8 @@ export class PaymentProofService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
+    private readonly notifications: NotificationsService,
+    private readonly stockReservations: StockReservationService,
   ) {}
 
   private isBankTransfer(order: Orders) {
@@ -46,7 +53,15 @@ export class PaymentProofService {
 
     const order = await this.prisma.orders.findFirst({
       where: { orderId, customerId: customer.customerId },
-      include: { paymentProofs: { orderBy: { expiresAt: 'desc' } } },
+      include: {
+        paymentProofs: { orderBy: { expiresAt: 'desc' } },
+        stockReservations: {
+          where: { status: 'Active' },
+          orderBy: { expiresAt: 'asc' },
+          take: 1,
+          select: { expiresAt: true },
+        },
+      },
     });
     if (!order) throw new NotFoundException('Order not found.');
     return order;
@@ -63,7 +78,7 @@ export class PaymentProofService {
     if (!isExpirable || proof.expiresAt.getTime() > Date.now()) {
       return proof;
     }
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const transition = await tx.paymentProofs.updateMany({
         where: {
           proofId: proof.proofId,
@@ -73,44 +88,44 @@ export class PaymentProofService {
         data: { status: PaymentProofStatus.EXPIRED },
       });
       if (transition.count === 0) {
-        return (await tx.paymentProofs.findUnique({ where: { proofId: proof.proofId } })) ?? proof;
+        return {
+          proof:
+            (await tx.paymentProofs.findUnique({
+              where: { proofId: proof.proofId },
+            })) ?? proof,
+          changed: false,
+        };
       }
 
-      const order = await tx.orders.findUnique({
-        where: { orderId: proof.orderId },
-        include: { orderItems: true },
+      const orderExpired = await tx.orders.updateMany({
+        where: {
+          orderId: proof.orderId,
+          orderStatus: { in: ['Pending', 'Pending Payment'] },
+        },
+        data: { orderStatus: 'Expired' },
       });
-      if (order) {
-        for (const item of order.orderItems) {
-          if (!item.variantId || item.quantity <= 0) continue;
-          let remaining = item.quantity;
-          const rows = await tx.inventory.findMany({
-            where: { variantId: item.variantId, reservedQuantity: { gt: 0 } },
-            orderBy: { inventoryId: 'asc' },
-          });
-          for (const row of rows) {
-            if (remaining === 0) break;
-            const reserved = row.reservedQuantity ?? 0;
-            const release = Math.min(remaining, reserved);
-            const changed = await tx.inventory.updateMany({
-              where: { inventoryId: row.inventoryId, reservedQuantity: reserved },
-              data: { reservedQuantity: reserved - release, lastUpdated: new Date() },
-            });
-            if (changed.count !== 1) throw new ConflictException('Stock reservation changed. Please retry.');
-            remaining -= release;
-          }
-          if (remaining > 0) throw new ConflictException('The order stock reservation is incomplete.');
-        }
-        await tx.orders.updateMany({
-          where: { orderId: proof.orderId, orderStatus: { in: ['Pending', 'Pending Payment'] } },
-          data: { orderStatus: 'Expired' },
-        });
+      if (orderExpired.count === 1) {
+        await this.stockReservations.releaseForOrder(
+          tx,
+          proof.orderId,
+          'Expired',
+          'Payment receipt was not uploaded',
+        );
       }
-      return (await tx.paymentProofs.findUnique({ where: { proofId: proof.proofId } })) ?? {
-        ...proof,
-        status: PaymentProofStatus.EXPIRED,
+      return {
+        proof: (await tx.paymentProofs.findUnique({
+          where: { proofId: proof.proofId },
+        })) ?? {
+          ...proof,
+          status: PaymentProofStatus.EXPIRED,
+        },
+        changed: true,
       };
     });
+    if (result.changed) {
+      await this.notifications.notifyPaymentExpired(proof.orderId);
+    }
+    return result.proof;
   }
 
   /**
@@ -128,6 +143,8 @@ export class PaymentProofService {
       receiptUrl: proof?.receiptUrl ?? null,
       uploadedAt: proof?.uploadedAt ?? null,
       expiresAt: proof?.expiresAt ?? null,
+      reservationExpiresAt:
+        order.stockReservations?.[0]?.expiresAt ?? proof?.expiresAt ?? null,
       status: proof?.status ?? null,
     };
   }
@@ -193,20 +210,36 @@ export class PaymentProofService {
     );
 
     const uploadedAt = new Date();
-    const [updatedProof] = await this.prisma.$transaction([
-      this.prisma.paymentProofs.update({
-        where: { proofId: proof.proofId },
+    const updatedProof = await this.prisma.$transaction(async (tx) => {
+      // The expiry sweep may run while Cloudinary is receiving the file. Only
+      // Pending Upload proofs that are still inside their window may win this
+      // transition, so an expired proof can never be revived by a late upload.
+      const transition = await tx.paymentProofs.updateMany({
+        where: {
+          proofId: proof.proofId,
+          status: PaymentProofStatus.PENDING_UPLOAD,
+          receiptUrl: null,
+          expiresAt: { gt: uploadedAt },
+        },
         data: {
           receiptUrl: upload.secure_url,
           uploadedAt,
           status: PaymentProofStatus.PENDING_VERIFICATION,
         },
-      }),
-      this.prisma.orders.update({
+      });
+      if (transition.count !== 1) {
+        throw new BadRequestException(
+          'The payment window for this order has expired.',
+        );
+      }
+      await tx.orders.update({
         where: { orderId: order.orderId },
         data: { orderStatus: PaymentProofStatus.PENDING_VERIFICATION },
-      }),
-    ]);
+      });
+      return tx.paymentProofs.findUniqueOrThrow({
+        where: { proofId: proof.proofId },
+      });
+    });
 
     return {
       receiptUrl: updatedProof.receiptUrl,

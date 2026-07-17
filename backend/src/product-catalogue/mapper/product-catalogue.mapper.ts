@@ -13,7 +13,14 @@ export const productWithRelations =
       supplier: true,
       variants: {
         include: {
-          inventory: true,
+          inventory: {
+            include: {
+              stockReservations: {
+                where: { status: 'Active' },
+                select: { quantity: true },
+              },
+            },
+          },
           images: true,
         },
       },
@@ -33,7 +40,8 @@ function mapVariant(
     0,
   );
   const reservedQuantity = variant.inventory.reduce(
-    (sum, inv) => sum + (inv.reservedQuantity ?? 0),
+    (sum, inv) =>
+      sum + inv.stockReservations.reduce((reserved, hold) => reserved + hold.quantity, 0),
     0,
   );
   const price = basePrice.plus(variant.priceAdjustment ?? 0).toNumber();

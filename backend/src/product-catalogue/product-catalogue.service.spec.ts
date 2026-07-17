@@ -36,8 +36,8 @@ describe('ProductCatalogueService', () => {
         color: 'Black',
         priceAdjustment: new Prisma.Decimal(250),
         inventory: [
-          { quantity: 8, reservedQuantity: 2 },
-          { quantity: 5, reservedQuantity: 1 },
+          { quantity: 8, stockReservations: [{ quantity: 2 }] },
+          { quantity: 5, stockReservations: [{ quantity: 1 }] },
         ],
         images: [
           { id: BigInt(1), imageUrl: ' https://cdn.example.com/tee.jpg ' },

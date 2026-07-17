@@ -11,7 +11,14 @@ const CATALOGUE_INCLUDE = {
   supplier: true,
   variants: {
     include: {
-      inventory: true,
+      inventory: {
+        include: {
+          stockReservations: {
+            where: { status: 'Active' },
+            select: { quantity: true },
+          },
+        },
+      },
       images: true,
     },
   },

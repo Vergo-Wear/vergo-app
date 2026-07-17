@@ -2,12 +2,10 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useCart } from "@/context/CartContext";
 import "./product-card.css";
 
 export default function ProductCard({ product }: any) {
   const router = useRouter();
-  const { addToCart } = useCart();
 
   const handleCardClick = () => {
     router.push(`/collection/${product.id}`);
@@ -32,25 +30,9 @@ export default function ProductCard({ product }: any) {
           className="product-image"
         />
 
-        {!product.isAvailable ? (
+        {!product.isAvailable && (
           <div className="sold-out-overlay">
             <div className="sold-out-box">SOLD OUT</div>
-          </div>
-        ) : (
-          <div className="product-overlay">
-            <button
-              className="quick-add-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                const defaultSize = product.sizes && product.sizes.length > 0 ? product.sizes[0] : "M";
-                addToCart(product, defaultSize, 1, product.colors && product.colors.length > 0 ? product.colors[0] : undefined);
-              }}
-            >
-              <span>Quick Add</span>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-            </button>
           </div>
         )}
       </div>

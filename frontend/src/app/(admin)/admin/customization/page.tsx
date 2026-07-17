@@ -18,6 +18,9 @@ interface CustomizationSettings {
   brandStatementBadge: string;
   brandStatementTitle: string;
   brandStatementDescription: string;
+  bankName: string;
+  bankBranch: string;
+  bankAccountNumber: string;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -243,6 +246,44 @@ export default function CustomizationPage() {
                     value={settings.newsletterSubtitle}
                     onChange={(e) => setSettings({ ...settings, newsletterSubtitle: e.target.value })}
                     className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-card p-6">
+              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
+                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">BANK TRANSFER DETAILS</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Bank Name</label>
+                  <input
+                    type="text"
+                    value={settings.bankName}
+                    onChange={(e) => setSettings({ ...settings, bankName: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. Commercial Bank"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Branch</label>
+                  <input
+                    type="text"
+                    value={settings.bankBranch}
+                    onChange={(e) => setSettings({ ...settings, bankBranch: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. Colombo Main Branch"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Account Number</label>
+                  <input
+                    type="text"
+                    value={settings.bankAccountNumber}
+                    onChange={(e) => setSettings({ ...settings, bankAccountNumber: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. 1234 - 5678 - 9012"
                   />
                 </div>
               </div>

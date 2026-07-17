@@ -22,7 +22,10 @@ export class CustomizationService {
     aboutHeroSubtitle: "We craft premium streetwear with provenance and purpose — responsibly built, intentionally designed, and verifiably authentic.",
     brandStatementBadge: "Brand Statement",
     brandStatementTitle: "A new standard in streetwear",
-    brandStatementDescription: "Since day one we've been rethinking how clothing is made and owned: from design and material sourcing to transparent supply chains and authenticated ownership. Every piece is engineered to last and to tell a story."
+    brandStatementDescription: "Since day one we've been rethinking how clothing is made and owned: from design and material sourcing to transparent supply chains and authenticated ownership. Every piece is engineered to last and to tell a story.",
+    bankName: "VERGO SL - CENTRAL BANK",
+    bankBranch: "Main Branch",
+    bankAccountNumber: "1234 - 5678 - 9012",
   };
 
   getCustomization() {
@@ -33,7 +36,7 @@ export class CustomizationService {
         return this.defaults;
       }
       const raw = fs.readFileSync(this.filePath, 'utf8');
-      return JSON.parse(raw);
+      return { ...this.defaults, ...JSON.parse(raw) };
     } catch (error) {
       this.logger.error('Failed to read customization file, returning defaults', error);
       return this.defaults;

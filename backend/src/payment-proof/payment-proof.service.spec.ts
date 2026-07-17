@@ -11,10 +11,16 @@ import { PaymentProofStatus } from '../common/enums/payment-proof-status.enum';
 describe('PaymentProofService', () => {
   const customerDelegate = { findFirst: jest.fn() };
   const ordersDelegate = {
-    findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(),
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
   };
   const paymentProofsDelegate = {
-    findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(),
+    findUnique: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
   };
   const inventoryDelegate = { findMany: jest.fn(), updateMany: jest.fn() };
 
@@ -23,12 +29,17 @@ describe('PaymentProofService', () => {
     orders: ordersDelegate,
     paymentProofs: paymentProofsDelegate,
     inventory: inventoryDelegate,
-    $transaction: jest.fn((operations: Promise<unknown>[] | ((tx: unknown) => unknown)) =>
-      typeof operations === 'function' ? operations(prisma) : Promise.all(operations),
+    $transaction: jest.fn(
+      (operations: Promise<unknown>[] | ((tx: unknown) => unknown)) =>
+        typeof operations === 'function'
+          ? operations(prisma)
+          : Promise.all(operations),
     ),
   };
 
   const cloudinary = { uploadBuffer: jest.fn() };
+  const notifications = { notifyPaymentExpired: jest.fn() };
+  const stockReservations = { releaseForOrder: jest.fn() };
 
   let service: PaymentProofService;
 
@@ -65,7 +76,12 @@ describe('PaymentProofService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PaymentProofService(prisma as never, cloudinary as never);
+    service = new PaymentProofService(
+      prisma as never,
+      cloudinary as never,
+      notifications as never,
+      stockReservations as never,
+    );
 
     customerDelegate.findFirst.mockResolvedValue({ customerId });
     cloudinary.uploadBuffer.mockResolvedValue({
@@ -86,10 +102,22 @@ describe('PaymentProofService', () => {
     ordersDelegate.findUnique.mockResolvedValue({ orderId, orderItems: [] });
     paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
     paymentProofsDelegate.findUnique.mockResolvedValue({
-      proofId, orderId, expiresAt: pastDate(), status: PaymentProofStatus.EXPIRED,
+      proofId,
+      orderId,
+      expiresAt: pastDate(),
+      status: PaymentProofStatus.EXPIRED,
+    });
+    paymentProofsDelegate.findUniqueOrThrow.mockResolvedValue({
+      proofId,
+      orderId,
+      receiptUrl: 'https://res.cloudinary.com/demo/receipt.png',
+      uploadedAt: new Date(),
+      expiresAt: futureDate(),
+      status: PaymentProofStatus.PENDING_VERIFICATION,
     });
     inventoryDelegate.findMany.mockResolvedValue([]);
     inventoryDelegate.updateMany.mockResolvedValue({ count: 1 });
+    stockReservations.releaseForOrder.mockResolvedValue(undefined);
   });
 
   describe('uploadReceipt', () => {
@@ -106,8 +134,13 @@ describe('PaymentProofService', () => {
         receiptFile.buffer,
         expect.objectContaining({ folder: `payment-proofs/${orderId}` }),
       );
-      expect(paymentProofsDelegate.update).toHaveBeenCalledWith({
-        where: { proofId },
+      expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith({
+        where: {
+          proofId,
+          status: PaymentProofStatus.PENDING_UPLOAD,
+          receiptUrl: null,
+          expiresAt: { gt: expect.any(Date) },
+        },
         data: expect.objectContaining({
           receiptUrl: 'https://res.cloudinary.com/demo/receipt.png',
           uploadedAt: expect.any(Date),
@@ -213,10 +246,15 @@ describe('PaymentProofService', () => {
       await expect(
         service.uploadReceipt(profileId, orderId, receiptFile),
       ).rejects.toThrow(BadRequestException);
-      expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({ proofId, status: PaymentProofStatus.PENDING_UPLOAD }),
-        data: { status: PaymentProofStatus.EXPIRED },
-      }));
+      expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            proofId,
+            status: PaymentProofStatus.PENDING_UPLOAD,
+          }),
+          data: { status: PaymentProofStatus.EXPIRED },
+        }),
+      );
       expect(cloudinary.uploadBuffer).not.toHaveBeenCalled();
     });
 
@@ -255,6 +293,19 @@ describe('PaymentProofService', () => {
       );
     });
 
+    it('uses the active stock reservation expiry for the payment countdown', async () => {
+      const reservationExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      const order = {
+        ...bankTransferOrder(),
+        stockReservations: [{ expiresAt: reservationExpiresAt }],
+      };
+      ordersDelegate.findFirst.mockResolvedValue(order);
+
+      const result = await service.getForCustomerOrder(profileId, orderId);
+
+      expect(result.reservationExpiresAt).toEqual(reservationExpiresAt);
+    });
+
     it('returns null proof fields for COD orders', async () => {
       ordersDelegate.findFirst.mockResolvedValue({
         orderId,
@@ -271,6 +322,7 @@ describe('PaymentProofService', () => {
         receiptUrl: null,
         uploadedAt: null,
         expiresAt: null,
+        reservationExpiresAt: null,
         status: null,
       });
     });
@@ -283,21 +335,46 @@ describe('PaymentProofService', () => {
         orderId,
         orderItems: [{ variantId: 'variant-1', quantity: 2 }],
       });
-      inventoryDelegate.findMany.mockResolvedValue([{
-        inventoryId: 'inventory-1', variantId: 'variant-1', quantity: 10, reservedQuantity: 2,
-      }]);
+      inventoryDelegate.findMany.mockResolvedValue([
+        {
+          inventoryId: 'inventory-1',
+          variantId: 'variant-1',
+          quantity: 10,
+          reservedQuantity: 2,
+        },
+      ]);
 
       const result = await service.getForCustomerOrder(profileId, orderId);
 
-      expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({ proofId, status: PaymentProofStatus.PENDING_UPLOAD }),
-        data: { status: PaymentProofStatus.EXPIRED },
-      }));
-      expect(inventoryDelegate.updateMany).toHaveBeenCalledWith({
-        where: { inventoryId: 'inventory-1', reservedQuantity: 2 },
-        data: { reservedQuantity: 0, lastUpdated: expect.any(Date) },
-      });
+      expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            proofId,
+            status: PaymentProofStatus.PENDING_UPLOAD,
+          }),
+          data: { status: PaymentProofStatus.EXPIRED },
+        }),
+      );
+      expect(stockReservations.releaseForOrder).toHaveBeenCalledWith(
+        prisma,
+        orderId,
+        'Expired',
+        'Payment receipt was not uploaded',
+      );
       expect(result.status).toBe(PaymentProofStatus.EXPIRED);
+      expect(notifications.notifyPaymentExpired).toHaveBeenCalledWith(orderId);
+    });
+
+    it('does not revive a proof that expires while its file is uploading', async () => {
+      ordersDelegate.findFirst.mockResolvedValue(bankTransferOrder());
+      paymentProofsDelegate.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.uploadReceipt(profileId, orderId, receiptFile),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(ordersDelegate.update).not.toHaveBeenCalled();
+      expect(paymentProofsDelegate.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
     it("denies access to another customer's order", async () => {

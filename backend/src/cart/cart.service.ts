@@ -24,7 +24,14 @@ export class CartService {
       include: {
         product: { include: { category: true } },
         images: true,
-        inventory: true,
+        inventory: {
+          include: {
+            stockReservations: {
+              where: { status: 'Active' },
+              select: { quantity: true },
+            },
+          },
+        },
       },
     },
   } as const;
@@ -36,7 +43,12 @@ export class CartService {
       if (!variant || !product) return [];
       const availableQuantity = variant.inventory.reduce(
         (total, row) =>
-          total + (row.quantity || 0) - (row.reservedQuantity || 0),
+          total +
+          (row.quantity || 0) -
+          row.stockReservations.reduce(
+            (reserved, hold) => reserved + hold.quantity,
+            0,
+          ),
         0,
       );
       const price =
