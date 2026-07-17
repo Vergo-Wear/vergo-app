@@ -17,7 +17,13 @@ interface OrderDetails {
   deliveryFee: string | number;
   shippingAddress: string;
   orderStatus: string | null;
+  confirmationStatus?: "Pending" | "Approved" | "Rejected";
+  confirmedAt?: string | null;
   paymentMethod: string;
+  paymentProofs?: Array<{
+    status: string;
+    uploadedAt: string | null;
+  }>;
   customerDetails: { 
     firstName: string; 
     lastName: string; 
@@ -64,9 +70,10 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
   // Fetch tracking data
   const loadOrderData = async () => {
     setError(null);
-    const token = localStorage.getItem("vergo_access_token");
-    const storedUser = localStorage.getItem("vergo_user");
-    const loggedIn = localStorage.getItem("vergo_is_logged_in") === "true";
+    setAccessDenied(false);
+    const token = sessionStorage.getItem("vergo_access_token");
+    const storedUser = sessionStorage.getItem("vergo_user");
+    const loggedIn = sessionStorage.getItem("vergo_is_logged_in") === "true";
     const user = storedUser ? JSON.parse(storedUser) : null;
 
     // Check local storage for guest orders list
@@ -76,6 +83,11 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
 
     if (!loggedIn && !isSavedInLocal) {
       setAccessDenied(true);
+      setIsLoading(false);
+      return;
+    }
+    if (loggedIn && !token) {
+      setError("Your login session has expired. Please sign in again.");
       setIsLoading(false);
       return;
     }
@@ -99,9 +111,17 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
           setOrder(data as OrderDetails);
           return;
         }
+
+        const body = await response.json().catch(() => ({}));
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          setAccessDenied(true);
+          return;
+        }
+        throw new Error(body.message || "Unable to retrieve tracking data from the database.");
       }
 
-      // Guest / Offline fallback
+      // Only genuine guest checkout records use local storage. Authenticated
+      // customer tracking always comes from the database endpoint above.
       if (isSavedInLocal) {
         const localOrderDetails = guestOrdersList.find((o: any) => o.id === orderId);
         if (localOrderDetails) {
@@ -168,7 +188,7 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
     if (!order) return;
     setIsCancelling(true);
     setError(null);
-    const token = localStorage.getItem("vergo_access_token");
+    const token = sessionStorage.getItem("vergo_access_token");
 
     try {
       if (token) {
@@ -291,8 +311,9 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
 
   // Track status codes
   const statusStr = (order.orderStatus || "").toLowerCase();
+  const isBankTransfer = order.paymentMethod.toLowerCase().includes("bank");
   const isUnclaimed = !order.employeeId;
-  const isInitialStatus = ["draft", "pending payment", "pending verification", "ready to process"].includes(statusStr);
+  const isInitialStatus = ["pending", "draft", "pending payment", "pending verification", "ready to process"].includes(statusStr);
   const canCancel = isInitialStatus && isUnclaimed;
 
   // Estimated delivery box header text color / banner pill
@@ -325,7 +346,11 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
   const orderPlacedFormatted = `${getFormattedDate(orderPlacedDate)} · ${getFormattedTime(orderPlacedDate)}`;
 
   // Payment is approved if payment status isn't pending payment (e.g. is verified/on-progress)
-  const isPaymentApproved = !["draft", "pending payment"].includes(statusStr);
+  const isPaymentApproved = isBankTransfer && !["draft", "pending payment", "pending verification", "rejected", "expired"].includes(statusStr);
+  const paymentApprovedAt = order.confirmedAt || order.paymentProofs?.at(-1)?.uploadedAt || null;
+  const isAdminApproved = order.confirmationStatus
+    ? order.confirmationStatus === "Approved"
+    : ["ready to process", "claimed", "claimed by employee", "preparing", "ready", "ready for pickup", "sent", "sent for delivery", "delivered", "completed"].includes(statusStr);
   
   // Package is preparing if employee has claimed or details are preparing/ready
   const isPreparingPackage = ["claimed by employee", "preparing", "ready", "sent for delivery", "completed"].includes(statusStr);
@@ -451,8 +476,8 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
                   </div>
                 </div>
 
-                {/* STEP 2: Payment Approved */}
-                <div style={{ position: "relative", marginBottom: "32px" }}>
+                {/* Bank transfers require payment approval; COD skips this step. */}
+                {isBankTransfer && <div style={{ position: "relative", marginBottom: "32px" }}>
                   <div style={{
                     position: "absolute",
                     left: "-38px",
@@ -480,7 +505,35 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
                       Payment Approved
                     </h3>
                     <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", margin: "4px 0 0 0" }}>
-                      {isPaymentApproved ? `${getFormattedDate(order.orderDate)} · ${getFormattedTime(order.orderDate)}` : "Pending"}
+                      {isPaymentApproved ? (paymentApprovedAt ? `${getFormattedDate(paymentApprovedAt)} · ${getFormattedTime(paymentApprovedAt)}` : "Approved") : "Pending"}
+                    </p>
+                  </div>
+                </div>}
+
+                {/* Both payment methods require order approval by Admin. */}
+                <div style={{ position: "relative", marginBottom: "32px" }}>
+                  <div style={{
+                    position: "absolute", left: "-38px", top: "0px", width: "30px", height: "30px",
+                    borderRadius: "50%",
+                    backgroundColor: isAdminApproved ? "#00FF9D" : "#121212",
+                    border: isAdminApproved ? "2px solid #00FF9D" : "2px solid rgba(255, 255, 255, 0.15)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: isAdminApproved ? "#121212" : "rgba(255, 255, 255, 0.25)"
+                  }}>
+                    {isAdminApproved ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.15)" }} />
+                    )}
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: "15px", fontWeight: "800", color: isAdminApproved ? "#ffffff" : "rgba(255, 255, 255, 0.35)", margin: 0 }}>
+                      Admin Approved
+                    </h3>
+                    <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", margin: "4px 0 0 0" }}>
+                      {isAdminApproved ? (order.confirmedAt ? `${getFormattedDate(order.confirmedAt)} · ${getFormattedTime(order.confirmedAt)}` : "Approved") : "Pending"}
                     </p>
                   </div>
                 </div>
@@ -766,7 +819,7 @@ export default function PackageTrackingPage({ params }: { params: Promise<{ id: 
                 CONTACT
               </h3>
               <p style={{ fontSize: "14px", fontWeight: "700", color: "#ffffff", margin: 0 }}>
-                {order.shippingDetails?.phone || order.customerDetails?.phone || "+94 77 123 4567"}
+                {order.shippingDetails?.phone || order.customerDetails?.phone || "Not provided"}
               </p>
             </div>
 

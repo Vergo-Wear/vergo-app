@@ -17,6 +17,11 @@ export default function OrdersManagement() {
   // Selected order details for popup modal (mobile compatibility view)
   const [selectedDetailsOrder, setSelectedDetailsOrder] = useState<OrderItem | null>(null);
 
+  const handleClaimOrder = async (orderId: string) => {
+    const claimed = await claimOrder(orderId);
+    if (claimed) window.location.href = "/employee/product-prep";
+  };
+
   // Filter orders
   const filteredOrders = orders.filter(order => {
     // If archive tab is selected, show claimed/sent orders. If active tab, show Ready to Pick
@@ -132,7 +137,7 @@ export default function OrdersManagement() {
             <table className="emp-table">
               <thead>
                 <tr>
-                  <th>Order ID</th>
+                  <th>Details</th>
                   <th>Customer Entity</th>
                   <th>Timestamp</th>
                   <th>Payment</th>
@@ -145,7 +150,6 @@ export default function OrdersManagement() {
                 {filteredOrders.map((order) => (
                   <tr key={order.id}>
                     <td className="emp-order-id">
-                      <span style={{ marginRight: "4px" }}>#{order.id}</span>
                       <button
                         onClick={() => setSelectedDetailsOrder(order)}
                         style={{
@@ -163,6 +167,9 @@ export default function OrdersManagement() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
                       </button>
+                      <div style={{ fontSize: "10px", color: "var(--emp-text-muted)", marginTop: "4px" }}>
+                        1 parcel · {order.itemsList.reduce((sum, item) => sum + item.qty, 0)} item(s)
+                      </div>
                     </td>
                     <td>
                       <div className="emp-user-cell" style={{ padding: "4px 0" }}>
@@ -217,21 +224,25 @@ export default function OrdersManagement() {
                                 : "none"
                           }}
                         ></span>
-                        <span style={{ fontSize: "13px" }}>{order.status}</span>
+                        <span style={{ fontSize: "13px" }}>{order.dbStatus}</span>
                       </div>
                     </td>
                     <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Rs. {order.valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td style={{ textAlign: "right" }}>
-                      {order.status === "Ready to Pick" ? (
+                      {order.status === "Ready to Pick" && order.stockAvailable ? (
                         <button
                           className="emp-btn-claim"
-                          onClick={() => claimOrder(order.id)}
+                          onClick={() => void handleClaimOrder(order.id)}
                         >
                           Claim Order
                         </button>
+                      ) : order.status === "Ready to Pick" ? (
+                        <button className="emp-btn-claim disabled" disabled title={order.stockShortages.join("\n")}>
+                          Insufficient Stock
+                        </button>
                       ) : (
                         <button className="emp-btn-claim disabled" disabled>
-                          {order.claimedBy ? `Claimed by ${order.claimedBy.split(" ")[0]}` : "Locked"}
+                          {order.status === "Claimed" ? "Claimed" : "Locked"}
                         </button>
                       )}
                     </td>
@@ -258,7 +269,7 @@ export default function OrdersManagement() {
         <div className="emp-modal-overlay" style={{ zIndex: 400 }}>
           <div className="emp-modal" style={{ maxWidth: "420px", width: "90%" }}>
             <div className="emp-modal-header">
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Order Details: #{selectedDetailsOrder.id}</h3>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>Parcel Details</h3>
               <button className="emp-modal-close" onClick={() => setSelectedDetailsOrder(null)}>&times;</button>
             </div>
             <div className="emp-modal-body" style={{ fontSize: "13px", display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -290,11 +301,15 @@ export default function OrdersManagement() {
               </div>
               <div>
                 <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--emp-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Products list</span>
+                <div style={{ fontSize: "11px", color: "var(--emp-neon-green)", marginTop: "3px" }}>All items below belong to one parcel.</div>
                 <div style={{ background: "rgba(0,0,0,0.2)", border: "1px solid var(--emp-border)", borderRadius: "6px", padding: "8px 12px", marginTop: "4px", maxHeight: "110px", overflowY: "auto" }}>
                   {selectedDetailsOrder.itemsList && selectedDetailsOrder.itemsList.map((item, idx) => (
-                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: idx < selectedDetailsOrder.itemsList.length - 1 ? "1px solid var(--emp-border-light)" : "none", fontSize: "12px" }}>
-                      <span style={{ maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#ffffff" }} title={item.description}>{item.description}</span>
-                      <span style={{ fontWeight: 700, color: "var(--emp-neon-green)" }}>x{item.qty}</span>
+                    <div key={idx} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "12px", padding: "8px 0", borderBottom: idx < selectedDetailsOrder.itemsList.length - 1 ? "1px solid var(--emp-border-light)" : "none", fontSize: "12px" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#ffffff", fontWeight: 700 }} title={item.description}>{item.description}</div>
+                        <div style={{ color: "var(--emp-text-muted)", marginTop: "3px" }}>Size: <strong style={{ color: "#ffffff" }}>{item.size}</strong> · Color: <strong style={{ color: "#ffffff" }}>{item.color}</strong></div>
+                      </div>
+                      <span style={{ fontWeight: 800, color: "var(--emp-neon-green)", alignSelf: "center" }}>x{item.qty}</span>
                     </div>
                   ))}
                 </div>

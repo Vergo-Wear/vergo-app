@@ -8,11 +8,13 @@ describe('OrdersService', () => {
   const productVariantDelegate = { findUnique: jest.fn() };
   const ordersDelegate = {
     create: jest.fn(),
+    findMany: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
   };
   const employeeDelegate = { findFirst: jest.fn() };
+  const inventoryDelegate = { findFirst: jest.fn(), update: jest.fn() };
   const paymentProofsDelegate = {
     create: jest.fn(),
     findFirst: jest.fn(),
@@ -34,6 +36,7 @@ describe('OrdersService', () => {
     productVariant: productVariantDelegate,
     orders: ordersDelegate,
     employee: employeeDelegate,
+    inventory: inventoryDelegate,
     paymentProofs: paymentProofsDelegate,
     orderItem: orderItemDelegate,
     orderCustomerDetails: orderCustomerDetailsDelegate,
@@ -104,6 +107,10 @@ describe('OrdersService', () => {
     orderShippingDetailsDelegate.create.mockResolvedValue({});
     userAddressDelegate.updateMany.mockResolvedValue({ count: 1 });
     userAddressDelegate.create.mockResolvedValue({});
+    inventoryDelegate.findFirst.mockResolvedValue({
+      quantity: 10,
+      reservedQuantity: 0,
+    });
   });
 
   describe('guest checkout', () => {
@@ -398,6 +405,101 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('employee processing access', () => {
+    it('filters the employee list to processing statuses and approved payment methods', async () => {
+      employeeDelegate.findFirst.mockResolvedValue({
+        employeeId: 'emp-1',
+        branchId: 'branch-1',
+      });
+      ordersDelegate.findMany.mockResolvedValue([]);
+
+      await service.findManagedOrders(profileId, 'Employee');
+
+      expect(ordersDelegate.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            orderStatus: {
+              notIn: [
+                'Cancelled',
+                'Rejected',
+                'Expired',
+                'Completed',
+                'Delivered',
+              ],
+            },
+            confirmationStatus: 'Approved',
+            AND: expect.arrayContaining([
+              expect.objectContaining({
+                OR: expect.arrayContaining([
+                  expect.objectContaining({
+                    employeeId: null,
+                    orderStatus: expect.objectContaining({ in: expect.any(Array) }),
+                  }),
+                  { employeeId: 'emp-1' },
+                ]),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('blocks employee details for an unapproved bank transfer order', async () => {
+      ordersDelegate.findUnique.mockResolvedValue({
+        orderId,
+        orderStatus: 'Pending Verification',
+        paymentMethod: 'bank_transfer',
+        confirmationStatus: 'Pending',
+        paymentProofs: [{ status: 'Pending Verification' }],
+      });
+
+      await expect(
+        service.findManagedOrder(orderId, 'Employee'),
+      ).rejects.toThrow('not approved for employee processing');
+    });
+
+    it('claims a ready approved order only when it is still unclaimed', async () => {
+      employeeDelegate.findFirst.mockResolvedValue({
+        employeeId: 'emp-1',
+        branchId: 'branch-1',
+      });
+      ordersDelegate.findUnique.mockResolvedValue({
+        orderId,
+        employeeId: null,
+        orderStatus: 'Ready to Process',
+        paymentMethod: 'bank_transfer',
+        confirmationStatus: 'Approved',
+        paymentProofs: [{ status: 'Approved' }],
+        orderItems: [{ variantId, quantity: 2, variant: { sku: 'SKU-1' } }],
+      });
+      ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.updateManagedStatus(
+        profileId,
+        'Employee',
+        orderId,
+        'Claimed',
+      );
+
+      expect(ordersDelegate.updateMany).toHaveBeenCalledWith({
+        where: {
+          orderId,
+          employeeId: null,
+          confirmationStatus: 'Approved',
+          orderStatus: {
+            in: [
+              'Pending',
+              'Pending Payment',
+              'Pending Verification',
+              'Ready to Process',
+            ],
+          },
+        },
+        data: { orderStatus: 'Claimed', employeeId: 'emp-1' },
+      });
+    });
+  });
+
   describe('payment proof review and expiry', () => {
     const proofId = 'a7c15c25-6f8a-4be3-9d41-2f8f1c7a6666';
 
@@ -425,7 +527,12 @@ describe('OrdersService', () => {
         });
         expect(ordersDelegate.update).toHaveBeenCalledWith({
           where: { orderId },
-          data: { orderStatus: 'Pending Payment' },
+          data: {
+            confirmationStatus: 'Rejected',
+            orderStatus: 'Rejected',
+            confirmedAt: expect.any(Date),
+            rejectionReason: 'Blurry receipt',
+          },
         });
         expect(notifications.notifyPaymentRejected).toHaveBeenCalledTimes(1);
         expect(notifications.notifyPaymentRejected).toHaveBeenCalledWith(
@@ -460,7 +567,12 @@ describe('OrdersService', () => {
         expect(notifications.notifyPaymentRejected).not.toHaveBeenCalled();
         expect(ordersDelegate.update).toHaveBeenCalledWith({
           where: { orderId },
-          data: { orderStatus: 'Ready to Pick' },
+          data: {
+            confirmationStatus: 'Approved',
+            orderStatus: 'Ready to Process',
+            confirmedAt: expect.any(Date),
+            rejectionReason: null,
+          },
         });
       });
     });

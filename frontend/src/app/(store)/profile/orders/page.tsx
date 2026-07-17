@@ -128,7 +128,10 @@ export default function OrderHistoryPage() {
                     <span className="order-total-label">TOTAL AMOUNT</span>
                     <span className="order-total-value">LKR {Number(order.totalAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <Link href={`/profile/orders/${order.orderId}`} className="order-action-btn btn-view-details">View Details</Link>
+                  <div className="order-actions-container">
+                    <Link href={`/profile/orders/${order.orderId}`} className="order-action-btn btn-view-details">View Details</Link>
+                    <Link href={`/profile/orders/${order.orderId}/track`} className="order-action-btn btn-track-package">Track Package</Link>
+                  </div>
                 </div>
               </div>
             );

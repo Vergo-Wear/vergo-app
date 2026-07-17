@@ -19,6 +19,37 @@ import { ReviewPaymentProofDto } from './dto/review-payment-proof.dto';
 /** Payment proof statuses that are still awaiting an outcome. */
 const PENDING_PROOF_STATUSES = ['Pending Upload', 'Pending Verification'];
 
+const EMPLOYEE_PROCESSING_STATUSES = [
+  'Ready to Process',
+  'Claimed by Employee',
+  'Claimed',
+  'Preparing',
+  'Ready for Pickup',
+  'Sent',
+];
+
+const EMPLOYEE_HIDDEN_STATUSES = [
+  'Cancelled',
+  'Rejected',
+  'Expired',
+  'Completed',
+  'Delivered',
+];
+
+const EMPLOYEE_CLAIMABLE_STATUSES = [
+  'Pending',
+  'Pending Payment',
+  'Pending Verification',
+  'Ready to Process',
+];
+
+const EMPLOYEE_STATUS_TRANSITIONS: Record<string, string[]> = {
+  'Claimed by Employee': ['Preparing'],
+  Claimed: ['Preparing'],
+  Preparing: ['Ready for Pickup'],
+  'Ready for Pickup': ['Sent'],
+};
+
 /** How often overdue payment proofs are swept and expired (1 hour). */
 const PROOF_EXPIRY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -31,6 +62,12 @@ interface ShippingSnapshot {
   city: string;
   district: string;
   postalCode: string | null;
+}
+
+interface StockCheckItem {
+  variantId: string | null;
+  quantity: number;
+  variant?: { sku?: string | null } | null;
 }
 
 @Injectable()
@@ -113,6 +150,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       // 2. Only allow cancellation in initial stages
       const status = order.orderStatus?.toLowerCase() || '';
       const allowedCancelStatuses = [
+        'pending',
         'draft',
         'pending payment',
         'pending verification',
@@ -184,6 +222,94 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async findManagedOrders(profileId: string, role: string | null) {
+    if (role?.toLowerCase() !== 'employee') {
+      return this.findAllOrders();
+    }
+
+    const employee = await this.prisma.employee.findFirst({
+      where: { profileId },
+      select: { employeeId: true, branchId: true },
+    });
+    if (!employee) throw new NotFoundException('Employee profile not found.');
+
+    const orders = await this.prisma.orders.findMany({
+      where: {
+        orderStatus: { notIn: EMPLOYEE_HIDDEN_STATUSES },
+        confirmationStatus: 'Approved',
+        AND: [
+          {
+            OR: [
+              {
+                paymentMethod: { in: ['cod', 'COD', 'Cash on Delivery'] },
+              },
+              {
+                paymentMethod: {
+                  in: [
+                    'bank_transfer',
+                    'Bank Transfer',
+                    'Direct Bank Transfer',
+                  ],
+                },
+                paymentProofs: { some: { status: 'Approved' } },
+              },
+            ],
+          },
+          {
+            OR: [
+              {
+                employeeId: null,
+                orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES },
+              },
+              { employeeId: employee.employeeId },
+            ],
+          },
+        ],
+      },
+      include: this.orderInclude,
+      orderBy: { orderDate: 'desc' },
+    });
+    return Promise.all(
+      orders.map(async (order) => ({
+        ...order,
+        ...(await this.checkParcelStock(order.orderItems, employee.branchId)),
+      })),
+    );
+  }
+
+  private async checkParcelStock(
+    items: StockCheckItem[],
+    branchId: string | null,
+  ) {
+    if (!branchId) {
+      return {
+        stockAvailable: false,
+        stockShortages: ['Employee is not assigned to a stock branch.'],
+      };
+    }
+
+    const shortages: string[] = [];
+    for (const item of items) {
+      if (!item.variantId) {
+        shortages.push('An order item has no product variant.');
+        continue;
+      }
+      const inventory = await this.prisma.inventory.findFirst({
+        where: { branchId, variantId: item.variantId },
+      });
+      const available = Math.max(
+        0,
+        (inventory?.quantity || 0) - (inventory?.reservedQuantity || 0),
+      );
+      if (available < item.quantity) {
+        shortages.push(
+          `${item.variant?.sku || item.variantId}: needs ${item.quantity}, ${available} available`,
+        );
+      }
+    }
+    return { stockAvailable: shortages.length === 0, stockShortages: shortages };
+  }
+
   async findAllOrders() {
     return this.prisma.orders.findMany({
       include: this.orderInclude,
@@ -196,12 +322,31 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
    * shipping information come from the immutable order_customer_details /
    * order_shipping_details snapshots — never from profile tables.
    */
-  async findManagedOrder(orderId: string) {
+  async findManagedOrder(
+    orderId: string,
+    role?: string | null,
+  ) {
     const order = await this.prisma.orders.findUnique({
       where: { orderId },
       include: this.orderInclude,
     });
     if (!order) throw new NotFoundException('Order not found.');
+    if (role?.toLowerCase() === 'employee') {
+      const isConfirmed = order.confirmationStatus === 'Approved';
+      const isProcessable =
+        !EMPLOYEE_HIDDEN_STATUSES.includes(order.orderStatus || '') &&
+        (EMPLOYEE_PROCESSING_STATUSES.includes(order.orderStatus || '') ||
+          EMPLOYEE_CLAIMABLE_STATUSES.includes(order.orderStatus || ''));
+      const isBankTransfer = order.paymentMethod.toLowerCase().includes('bank');
+      const paymentApproved = isBankTransfer
+        ? order.paymentProofs.some((proof) => proof.status === 'Approved')
+        : true;
+      if (!isProcessable || !isConfirmed || !paymentApproved) {
+        throw new ForbiddenException(
+          'This order is not approved for employee processing.',
+        );
+      }
+    }
     return order;
   }
 
@@ -210,20 +355,86 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     role: string | null,
     orderId: string,
     status: string,
+    rejectionReason?: string,
   ) {
     const order = await this.prisma.orders.findUnique({ where: { orderId } });
     if (!order) throw new NotFoundException('Order not found.');
+    if (role?.toLowerCase() === 'admin' && status === 'Claimed') {
+      throw new ForbiddenException('Only an employee can claim an order.');
+    }
     let employeeId = order.employeeId;
     if (role?.toLowerCase() === 'employee') {
       const employee = await this.prisma.employee.findFirst({
         where: { profileId },
       });
       if (!employee) throw new NotFoundException('Employee profile not found.');
+      const managedOrder = await this.findManagedOrder(
+        orderId,
+        role,
+      );
+
+      if (status === 'Claimed') {
+        if (
+          !EMPLOYEE_CLAIMABLE_STATUSES.includes(managedOrder.orderStatus || '')
+        ) {
+          throw new BadRequestException('Only ready orders can be claimed.');
+        }
+        const stock = await this.checkParcelStock(
+          managedOrder.orderItems,
+          employee.branchId,
+        );
+        if (!stock.stockAvailable) {
+          throw new BadRequestException(
+            `This parcel cannot be claimed because branch stock is insufficient: ${stock.stockShortages.join('; ')}`,
+          );
+        }
+        const claimed = await this.prisma.orders.updateMany({
+          where: {
+            orderId,
+            employeeId: null,
+            confirmationStatus: 'Approved',
+            orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES },
+          },
+          data: { orderStatus: 'Claimed', employeeId: employee.employeeId },
+        });
+        if (claimed.count === 0) {
+          throw new ForbiddenException(
+            'This order has already been claimed by another employee.',
+          );
+        }
+        return this.findManagedOrder(orderId, role);
+      }
+
+      if (managedOrder.employeeId !== employee.employeeId) {
+        throw new ForbiddenException(
+          'Claim this order before updating its status.',
+        );
+      }
+      if (
+        !EMPLOYEE_STATUS_TRANSITIONS[managedOrder.orderStatus || '']?.includes(
+          status,
+        )
+      ) {
+        throw new BadRequestException(
+          `Cannot move an order from "${managedOrder.orderStatus}" to "${status}".`,
+        );
+      }
       employeeId = employee.employeeId;
     }
+    const confirmationData =
+      role?.toLowerCase() === 'admin' &&
+      ['Ready to Process', 'Rejected'].includes(status)
+        ? {
+            confirmationStatus:
+              status === 'Ready to Process' ? 'Approved' : 'Rejected',
+            confirmedAt: new Date(),
+            rejectionReason:
+              status === 'Rejected' ? rejectionReason ?? null : null,
+          }
+        : {};
     const updated = await this.prisma.orders.update({
       where: { orderId },
-      data: { orderStatus: status, employeeId },
+      data: { orderStatus: status, employeeId, ...confirmationData },
       include: this.orderInclude,
     });
 
@@ -263,16 +474,25 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (dto.status === 'Rejected') {
-      // The customer must upload a new receipt, so reopen the payment step.
       await this.prisma.orders.update({
         where: { orderId },
-        data: { orderStatus: 'Pending Payment' },
+        data: {
+          confirmationStatus: 'Rejected',
+          orderStatus: 'Rejected',
+          confirmedAt: new Date(),
+          rejectionReason: dto.adminNotes ?? null,
+        },
       });
       await this.notifications.notifyPaymentRejected(orderId, dto.adminNotes);
     } else if (dto.status === 'Approved') {
       await this.prisma.orders.update({
         where: { orderId },
-        data: { orderStatus: 'Ready to Pick' },
+        data: {
+          confirmationStatus: 'Approved',
+          orderStatus: 'Ready to Process',
+          confirmedAt: new Date(),
+          rejectionReason: null,
+        },
       });
     }
 
@@ -458,8 +678,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
       const shippingAddress = `${sd.addressLine1}${sd.addressLine2 ? ', ' + sd.addressLine2 : ''}, ${sd.city}, ${sd.district}${sd.postalCode ? ' (' + sd.postalCode + ')' : ''}`;
 
-      // 4. Set appropriate order status based on payment method
-      const orderStatus = isCod ? 'Pending Verification' : 'Pending Payment';
+      // 4. Every newly placed order awaits admin confirmation.
+      const orderStatus = 'Pending';
 
       // 5. Create main Order record
       const order = await tx.orders.create({

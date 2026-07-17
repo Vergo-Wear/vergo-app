@@ -9,68 +9,10 @@ import "@/styles/employee.css";
 // Shared Layout Content to access EmployeeContext
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { notifications, addNewOrder, logoutEmployee, isEmployeeAvailable, availabilityLastNotified, toggleAvailability, searchQuery, setSearchQuery } = useEmployee();
+  const { notifications, logoutEmployee, isEmployeeAvailable, availabilityLastNotified, toggleAvailability, searchQuery, setSearchQuery } = useEmployee();
   
   const isSearchHidden = pathname === "/employee" || pathname === "/employee/delivery-prep";
   
-  // New Order / Entry modal state
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  // Simulator inputs
-  const [customerName, setCustomerName] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("+94 77 123 4567");
-  const [customerAddress, setCustomerAddress] = useState("No. 45, Galle Road, Colombo 03, Sri Lanka");
-  const [selectedProductSku, setSelectedProductSku] = useState("ST-VG-99");
-  const [selectedSize, setSelectedSize] = useState("M");
-  const [selectedQty, setSelectedQty] = useState("1");
-  const [paymentMethod, setPaymentMethod] = useState<"COD" | "BANK">("COD");
-
-  const catalog = [
-    { name: "V-1 Sentinel Tech Puffer", sku: "ST-VG-99", color: "Onyx Black", unitPrice: 59500.00 },
-    { name: "Stealth Cargo Trousers", sku: "ST-AC-02", color: "Charcoal", unitPrice: 25000.00 },
-    { name: "Ghost-01 Tech Hoodie", sku: "ST-GH-404-CH", color: "Charcoal", unitPrice: 62500.00 },
-    { name: "Signal Utility Vest", sku: "ST-UT-102-NG", color: "Neon Green", unitPrice: 32000.00 },
-    { name: "Industrial Cobra Belt", sku: "ST-AC-05-BK", color: "Black", unitPrice: 10000.00 }
-  ];
-
-  const handleCreateOrder = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customerName.trim()) return;
-
-    const prod = catalog.find(c => c.sku === selectedProductSku) || catalog[0];
-    const qty = parseInt(selectedQty) || 1;
-    const calcValuation = prod.unitPrice * qty;
-
-    addNewOrder({
-      customerName,
-      customerEmail: customerEmail.trim() || `${customerName.toLowerCase().replace(/\s+/g, ".")}@example.lk`,
-      customerPhone: customerPhone.trim(),
-      customerAddress: customerAddress.trim(),
-      paymentMethod,
-      valuation: calcValuation,
-      itemsList: [
-        {
-          description: `${prod.name} / ${prod.color} ${selectedSize}`,
-          qty: qty,
-          unitPrice: prod.unitPrice,
-          sku: prod.sku
-        }
-      ]
-    });
-
-    // Reset fields
-    setCustomerName("");
-    setCustomerEmail("");
-    setCustomerPhone("+94 77 123 4567");
-    setCustomerAddress("No. 45, Galle Road, Colombo 03, Sri Lanka");
-    setSelectedProductSku("ST-VG-99");
-    setSelectedSize("M");
-    setSelectedQty("1");
-    setPaymentMethod("COD");
-    setIsModalOpen(false);
-  };
-
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const unreadNotifCount = notifications.length;
 
@@ -179,23 +121,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        <div className="emp-sidebar-bottom">
-          <div style={{ fontSize: "9px", color: "var(--emp-text-muted)", textTransform: "uppercase", textAlign: "center", marginBottom: "8px", fontWeight: 700, letterSpacing: "0.5px" }}>
-            Simulation Tool
-          </div>
-          <button
-            className="emp-sidebar-btn"
-            style={{
-              background: "rgba(255, 255, 255, 0.02)",
-              border: "1px dashed rgba(255, 255, 255, 0.15)",
-              color: "#ffffff",
-              boxShadow: "none"
-            }}
-            onClick={() => setIsModalOpen(true)}
-          >
-            + Simulate Order
-          </button>
-        </div>
       </aside>
 
       {/* Main Content Pane */}
@@ -211,23 +136,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               </div>
               
               <div className="flex items-center gap-2">
-                {/* Mobile simulated order trigger */}
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  style={{
-                    cursor: "pointer",
-                    padding: "4px 8px",
-                    borderRadius: "4px",
-                    fontWeight: 700,
-                    fontSize: "10px",
-                    border: "1px dashed rgba(255,255,255,0.2)",
-                    background: "rgba(255,255,255,0.02)",
-                    color: "#ffffff"
-                  }}
-                >
-                  + Simulate
-                </button>
-
                 {/* Mobile availability toggle status */}
                 <button
                   onClick={toggleAvailability}
@@ -458,134 +366,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </Link>
       </nav>
 
-      {/* Simulator Modal Popup */}
-      {isModalOpen && (
-        <div className="emp-modal-overlay">
-          <div className="emp-modal">
-            <div className="emp-modal-header">
-              <h3>Simulate New Inbound Customer Order</h3>
-              <button className="emp-modal-close" onClick={() => setIsModalOpen(false)}>&times;</button>
-            </div>
-            <form onSubmit={handleCreateOrder}>
-              <div className="emp-modal-body">
-                <div className="emp-form-control">
-                  <label htmlFor="cname">Customer Name</label>
-                  <input
-                    type="text"
-                    id="cname"
-                    className="emp-form-input"
-                    placeholder="Roshan Perera"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="emp-form-control">
-                  <label htmlFor="cemail">Email Address (Optional)</label>
-                  <input
-                    type="email"
-                    id="cemail"
-                    className="emp-form-input"
-                    placeholder="roshan.perera@vortex.lk"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                  />
-                </div>
-
-                <div className="emp-form-control">
-                  <label htmlFor="cphone">Phone Number</label>
-                  <input
-                    type="text"
-                    id="cphone"
-                    className="emp-form-input"
-                    placeholder="+94 77 123 4567"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="emp-form-control">
-                  <label htmlFor="caddress">Shipping Address</label>
-                  <input
-                    type="text"
-                    id="caddress"
-                    className="emp-form-input"
-                    placeholder="No. 45, Galle Road, Colombo 03, Sri Lanka"
-                    value={customerAddress}
-                    onChange={(e) => setCustomerAddress(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr 1fr", gap: "12px" }}>
-                  <div className="emp-form-control">
-                    <label htmlFor="cproduct">Select Product</label>
-                    <select
-                      id="cproduct"
-                      className="emp-api-select"
-                      value={selectedProductSku}
-                      onChange={(e) => setSelectedProductSku(e.target.value)}
-                    >
-                      {catalog.map(c => (
-                        <option key={c.sku} value={c.sku}>
-                          {c.name} (Rs. {c.unitPrice.toLocaleString()})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="emp-form-control">
-                    <label htmlFor="csize">Size</label>
-                    <select
-                      id="csize"
-                      className="emp-api-select"
-                      value={selectedSize}
-                      onChange={(e) => setSelectedSize(e.target.value)}
-                    >
-                      <option value="M">M</option>
-                      <option value="L">L</option>
-                      <option value="XL">XL</option>
-                      <option value="ONE SIZE">ONE SIZE</option>
-                    </select>
-                  </div>
-
-                  <div className="emp-form-control">
-                    <label htmlFor="cqty">Quantity</label>
-                    <input
-                      type="number"
-                      id="cqty"
-                      className="emp-form-input"
-                      value={selectedQty}
-                      onChange={(e) => setSelectedQty(e.target.value)}
-                      min="1"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="emp-form-control">
-                  <label htmlFor="paymethod">Payment Method</label>
-                  <select
-                    id="paymethod"
-                    className="emp-api-select"
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as "COD" | "BANK")}
-                  >
-                    <option value="COD">Cash on Delivery (COD)</option>
-                    <option value="BANK">Bank Transfer / Card</option>
-                  </select>
-                </div>
-              </div>
-              <div className="emp-modal-footer">
-                <button type="button" className="emp-btn-cancel" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                <button type="submit" className="emp-btn-submit">Simulate Order</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
