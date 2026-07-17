@@ -14,6 +14,7 @@ import { CartModule } from './cart/cart.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { AdminModule } from './admin/admin.module';
 import { AddressesModule } from './addresses/addresses.module';
+import { CustomizationModule } from './customization/customization.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AddressesModule } from './addresses/addresses.module';
     ReviewsModule,
     AdminModule,
     AddressesModule,
+    CustomizationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

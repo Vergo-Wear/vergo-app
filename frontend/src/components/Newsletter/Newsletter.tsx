@@ -1,11 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./newsletter.css";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export default function Newsletter() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [title, setTitle] = useState("Stay in the loop");
+  const [subtitle, setSubtitle] = useState("Join our decentralized mailing list. Get early access to drops and real-time inventory verification alerts.");
+
+  useEffect(() => {
+    fetch(`${API_URL}/customization`)
+      .then((res) => {
+        if (res.ok) return res.json();
+      })
+      .then((data) => {
+        if (data) {
+          if (data.newsletterTitle) setTitle(data.newsletterTitle);
+          if (data.newsletterSubtitle) setSubtitle(data.newsletterSubtitle);
+        }
+      })
+      .catch((err) => console.error("Failed to load newsletter customizations", err));
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,10 +41,9 @@ export default function Newsletter() {
     <section className="newsletter">
       <div className="newsletter-container">
         <div className="newsletter-text">
-          <h2>Stay in the loop</h2>
+          <h2>{title}</h2>
           <p>
-            Join our decentralized mailing list. Get early access
-            <br />to drops and real-time inventory verification alerts.
+            {subtitle}
           </p>
         </div>
 
@@ -38,27 +55,18 @@ export default function Newsletter() {
             </div>
           ) : (
             <div className="newsletter-form-container">
-              <form className="newsletter-form" onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit} className="newsletter-form">
                 <input
                   type="email"
-                  placeholder="Enter your email address"
+                  placeholder="ENTER YOUR EMAIL Address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  disabled={status === "loading"}
-                  className="newsletter-input"
                 />
-                <button
-                  type="submit"
-                  disabled={status === "loading"}
-                  className="newsletter-btn"
-                >
-                  {status === "loading" ? "Subscribing..." : "Sign Up"}
+                <button type="submit" disabled={status === "loading"}>
+                  {status === "loading" ? "SUBMITTING..." : "JOIN"}
                 </button>
               </form>
-              <p className="newsletter-disclaimer">
-                * By signing up, you agree to our Privacy Policy and Terms of Service.
-              </p>
             </div>
           )}
         </div>
