@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { CustomizationModule } from './customization/customization.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     AddressesModule,
     EmailModule,
     NotificationsModule,
+    CustomizationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
