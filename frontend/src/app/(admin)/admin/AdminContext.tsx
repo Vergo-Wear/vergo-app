@@ -15,6 +15,8 @@ interface AdminContextType {
   addNotification: (message: string, type: "success" | "error" | "info") => void; removeNotification: (id: string) => void;
   transferStock: (sku: string, fromNode: string, toNode: string, amount: number) => boolean;
   toggleEmployeeShift: (id: string) => void; restockItem: (sku: string, location: string, amount: number) => void; shipPendingItem: (sku: string, location: string) => void;
+  removeEmployee: (id: string) => void;
+  addEmployee: (id: string, name: string) => void;
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
@@ -74,10 +76,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     persistQuantity(item, item.inStock + amount);
   };
   const toggleEmployeeShift = () => addNotification("Shift tracking is not configured in the database.", "error");
+  const removeEmployee = (id: string) => setEmployees((current) => current.filter((employee) => employee.id !== id));
+  const addEmployee = (id: string, name: string) =>
+    setEmployees((current) => [...current, { id, rank: current.length + 1, name, avatar: name.split(" ").map((part) => part[0]).join("").slice(0, 2), status: "ON SHIFT", parcels: 0 }]);
   const shipPendingItem = () => addNotification("Shipment status belongs to an order, not inventory.", "error");
   const alerts: StockAlert[] = inventory.filter((item) => item.inStock <= (item.reorderLevel || 0)).map((item) => ({ id: item.inventoryId || item.sku, sku: item.sku, name: item.name, node: item.location, units: item.inStock, status: "critical" }));
 
-  return <AdminContext.Provider value={{ inventory, alerts, employees, stats, notifications, searchQuery, statusFilter, transferModalOpen, setSearchQuery, setStatusFilter, setTransferModalOpen, addNotification, removeNotification, transferStock, toggleEmployeeShift, restockItem, shipPendingItem }}>{children}</AdminContext.Provider>;
+  return <AdminContext.Provider value={{ inventory, alerts, employees, stats, notifications, searchQuery, statusFilter, transferModalOpen, setSearchQuery, setStatusFilter, setTransferModalOpen, addNotification, removeNotification, transferStock, toggleEmployeeShift, restockItem, shipPendingItem, removeEmployee, addEmployee }}>{children}</AdminContext.Provider>;
 }
 
 export function useAdmin() {
