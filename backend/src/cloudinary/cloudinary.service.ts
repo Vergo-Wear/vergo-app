@@ -60,4 +60,16 @@ export class CloudinaryService {
       stream.end(buffer);
     });
   }
+
+  /** Deletes a replaced or failed upload so only the current receipt remains. */
+  async deleteAsset(publicId: string): Promise<void> {
+    if (!this.configured || !publicId) return;
+    const destroy = (resourceType: 'image' | 'raw') =>
+      cloudinary.uploader.destroy(publicId, {
+        resource_type: resourceType,
+        invalidate: true,
+      });
+    const imageResult = await destroy('image');
+    if (imageResult.result === 'not found') await destroy('raw');
+  }
 }

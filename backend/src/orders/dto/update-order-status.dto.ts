@@ -4,8 +4,6 @@ import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 export const READY_STATUS = 'Ready for Pickup';
 
 export const MANAGED_ORDER_STATUSES = [
-  'Pending Payment',
-  'Pending Verification',
   'Ready to Process',
   'Claimed',
   'Preparing',
@@ -13,6 +11,7 @@ export const MANAGED_ORDER_STATUSES = [
   'Sent',
   'Delivered',
   'Cancelled',
+  'Completed',
 ];
 
 export class UpdateOrderStatusDto {

@@ -3,12 +3,11 @@ import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
-import { PaymentProofModule } from '../payment-proof/payment-proof.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StockReservationModule } from '../stock-reservation/stock-reservation.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, PaymentProofModule, NotificationsModule, StockReservationModule],
+  imports: [PrismaModule, AuthModule, NotificationsModule, StockReservationModule],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
-import { hasCompletedContact, hasCompletedShipping } from "@/lib/checkout-progress";
+import {
+  hasCompletedContact,
+  hasCompletedShipping,
+} from "@/lib/checkout-progress";
 import { useGuestCheckoutGuard } from "@/hooks/useGuestCheckoutGuard";
 import "@/styles/checkout.css";
 
@@ -30,22 +33,15 @@ interface ShippingInfo {
   setAsPrimary?: boolean;
 }
 
-interface UserProfile {
-  customerId?: string;
-  id?: string;
-}
-
 export default function PaymentPage() {
   const router = useRouter();
-
-  useEffect(() => {
-    if (!hasCompletedContact()) {
-      router.replace("/checkout");
-    } else if (!hasCompletedShipping()) {
-      router.replace("/checkout/shipping");
-    }
-  }, [router]);
-  const { cart, cartSubtotal, clearCart, formatLkr, isLoaded: isCartLoaded } = useCart();
+  const {
+    cart,
+    cartSubtotal,
+    clearCart,
+    formatLkr,
+    isLoaded: isCartLoaded,
+  } = useCart();
   useGuestCheckoutGuard(cart.length, isCartLoaded);
 
   // Local storage details
@@ -59,11 +55,71 @@ export default function PaymentPage() {
   const [showOrderCompletedModal, setShowOrderCompletedModal] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [reservationId, setReservationId] = useState<string | null>(null);
+  const [reservationExpiresAt, setReservationExpiresAt] = useState<
+    string | null
+  >(null);
+  const [bankCheckoutPayload, setBankCheckoutPayload] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [isCheckingActiveReservation, setIsCheckingActiveReservation] =
+    useState(true);
+  const [isChoosingAlternativePayment, setIsChoosingAlternativePayment] =
+    useState(false);
+  const lastSyncedCheckoutRef = useRef("");
+
+  const itemsToDisplay = cart;
+  const subtotalLkr = cartSubtotal;
+  const deliveryFee = shippingInfo?.deliveryFee || 0;
+  const grandTotalLkr = subtotalLkr + deliveryFee;
+
+  const createCheckoutPayload = useCallback(
+    (method: "cod" | "bank_transfer") => ({
+      paymentMethod: method === "cod" ? "cash on delivery" : "bank_transfer",
+      deliveryFee,
+      contactDetails: {
+        firstName: contactInfo?.firstName || "",
+        lastName: contactInfo?.lastName || "",
+        email: contactInfo?.email || "",
+        phone: contactInfo?.phone || "",
+      },
+      shippingDetails: {
+        receiverName: shippingInfo?.receiverName || "",
+        phone: shippingInfo?.receiverPhone || "",
+        addressLine1: shippingInfo?.addressLine1 || "",
+        addressLine2: shippingInfo?.addressLine2 || "",
+        city: shippingInfo?.city || "",
+        district: shippingInfo?.district || "",
+        postalCode: shippingInfo?.postalCode || "",
+        deliveryNote: shippingInfo?.deliveryNote || "",
+      },
+      ...(isLoggedIn && shippingInfo?.savedAddressId
+        ? { savedAddressId: shippingInfo.savedAddressId }
+        : {}),
+      ...(isLoggedIn && !shippingInfo?.savedAddressId
+        ? {
+            saveAddress: shippingInfo?.saveAddress ?? false,
+            setAsPrimary: shippingInfo?.setAsPrimary ?? false,
+          }
+        : {}),
+      items: itemsToDisplay.map((item) => ({
+        variantId: item.product.variants.find(
+          (variant) =>
+            variant.size === item.size &&
+            (!item.color || variant.color === item.color),
+        )?.variantId,
+        quantity: item.quantity || 1,
+      })),
+    }),
+    [contactInfo, deliveryFee, isLoggedIn, itemsToDisplay, shippingInfo],
+  );
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const forcedGuest = localStorage.getItem("vergo_checkout_as_guest") === "true";
+      const forcedGuest =
+        localStorage.getItem("vergo_checkout_as_guest") === "true";
       const storedUser = sessionStorage.getItem("vergo_user");
       const accessToken = sessionStorage.getItem("vergo_access_token");
       let isCustomer = false;
@@ -72,8 +128,8 @@ export default function PaymentPage() {
         try {
           const parsedUser = JSON.parse(storedUser);
           const role = parsedUser?.role?.roleName ?? parsedUser?.role;
-          isCustomer = typeof role === "string" && role.toLowerCase() === "customer";
-          setUserProfile(parsedUser);
+          isCustomer =
+            typeof role === "string" && role.toLowerCase() === "customer";
         } catch (e) {
           console.warn("Unable to read the signed-in customer profile.", e);
         }
@@ -103,8 +159,232 @@ export default function PaymentPage() {
           console.error(e);
         }
       }
+      setAuthReady(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!authReady || !isCartLoaded) return;
+    if (!isLoggedIn || isChoosingAlternativePayment || reservationId) {
+      setIsCheckingActiveReservation(false);
+      return;
+    }
+
+    const token = sessionStorage.getItem("vergo_access_token");
+    if (!token) return;
+
+    const controller = new AbortController();
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    setIsCheckingActiveReservation(true);
+    void fetch(`${apiUrl}/orders/bank-transfer/reservations/current`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error("Unable to check the active reservation.");
+        const responseBody = await response.text();
+        if (!responseBody.trim()) return;
+        const current = JSON.parse(responseBody) as {
+          reservationId?: string | null;
+          expiresAt?: string | null;
+          checkoutPayload?: Record<string, unknown> | null;
+          deliveryFee?: number | string | null;
+        };
+        if (!current?.reservationId || !current?.expiresAt) return;
+
+        const savedPayload = current.checkoutPayload as
+          | {
+              contactDetails?: ContactInfo;
+              shippingDetails?: {
+                receiverName?: string;
+                phone?: string;
+                addressLine1?: string;
+                addressLine2?: string;
+                city?: string;
+                district?: string;
+                postalCode?: string;
+                deliveryNote?: string;
+              };
+              deliveryFee?: number;
+              savedAddressId?: string;
+              saveAddress?: boolean;
+              setAsPrimary?: boolean;
+            }
+          | null
+          | undefined;
+        if (!hasCompletedContact() && savedPayload?.contactDetails) {
+          const contact = savedPayload.contactDetails;
+          setContactInfo(contact);
+          localStorage.setItem(
+            "vergo_checkout_contact",
+            JSON.stringify(contact),
+          );
+        }
+        if (!hasCompletedShipping() && savedPayload?.shippingDetails) {
+          const shipping = {
+            receiverName: savedPayload.shippingDetails.receiverName,
+            receiverPhone: savedPayload.shippingDetails.phone,
+            addressLine1: savedPayload.shippingDetails.addressLine1,
+            addressLine2: savedPayload.shippingDetails.addressLine2,
+            city: savedPayload.shippingDetails.city,
+            district: savedPayload.shippingDetails.district,
+            postalCode: savedPayload.shippingDetails.postalCode,
+            deliveryNote: savedPayload.shippingDetails.deliveryNote,
+            deliveryFee: Number(
+              savedPayload.deliveryFee ?? current.deliveryFee ?? 0,
+            ),
+            savedAddressId: savedPayload.savedAddressId,
+            saveAddress: savedPayload.saveAddress,
+            setAsPrimary: savedPayload.setAsPrimary,
+          };
+          setShippingInfo(shipping);
+          localStorage.setItem(
+            "vergo_checkout_shipping",
+            JSON.stringify(shipping),
+          );
+        }
+        setPaymentMethod("bank_transfer");
+        setReservationId(current.reservationId);
+        setReservationExpiresAt(current.expiresAt);
+        setBankCheckoutPayload(
+          current.checkoutPayload ?? createCheckoutPayload("bank_transfer"),
+        );
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") return;
+        console.warn(
+          "Unable to resume the active Bank Transfer reservation.",
+          error,
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsCheckingActiveReservation(false);
+      });
+
+    return () => controller.abort();
+  }, [
+    authReady,
+    createCheckoutPayload,
+    isCartLoaded,
+    isChoosingAlternativePayment,
+    isLoggedIn,
+    reservationId,
+  ]);
+
+  useEffect(() => {
+    if (
+      !authReady ||
+      !isCartLoaded ||
+      isCheckingActiveReservation ||
+      reservationId
+    ) {
+      return;
+    }
+    if (!hasCompletedContact()) {
+      router.replace("/checkout");
+    } else if (!hasCompletedShipping()) {
+      router.replace("/checkout/shipping");
+    }
+  }, [
+    authReady,
+    isCartLoaded,
+    isCheckingActiveReservation,
+    reservationId,
+    router,
+  ]);
+
+  useEffect(() => {
+    if (
+      !authReady ||
+      !isLoggedIn ||
+      !isCartLoaded ||
+      !reservationId ||
+      !reservationExpiresAt ||
+      isChoosingAlternativePayment ||
+      !contactInfo ||
+      !shippingInfo ||
+      cart.length === 0
+    ) {
+      return;
+    }
+
+    const payload = createCheckoutPayload("bank_transfer");
+    if (
+      payload.items.some((item) => !item.variantId) ||
+      !payload.contactDetails.firstName ||
+      !payload.contactDetails.lastName ||
+      !payload.contactDetails.email ||
+      !payload.contactDetails.phone ||
+      !payload.shippingDetails.receiverName ||
+      !payload.shippingDetails.phone ||
+      !payload.shippingDetails.addressLine1 ||
+      !payload.shippingDetails.city ||
+      !payload.shippingDetails.district ||
+      !payload.shippingDetails.postalCode
+    ) {
+      return;
+    }
+
+    const serialized = JSON.stringify(payload);
+    if (lastSyncedCheckoutRef.current === serialized) return;
+    lastSyncedCheckoutRef.current = serialized;
+
+    const token = sessionStorage.getItem("vergo_access_token");
+    if (!token) return;
+    const controller = new AbortController();
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    void fetch(`${apiUrl}/orders/bank-transfer/reservations/${reservationId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: serialized,
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const body = await response.text();
+        const updated = body.trim()
+          ? (JSON.parse(body) as {
+              reservationId?: string | null;
+              expiresAt?: string | null;
+              message?: string | string[];
+            })
+          : null;
+        if (!response.ok) {
+          const message = Array.isArray(updated?.message)
+            ? updated.message.join(" ")
+            : updated?.message;
+          throw new Error(message || "Unable to update the active checkout.");
+        }
+        if (updated?.reservationId) setReservationId(updated.reservationId);
+        if (updated?.expiresAt) setReservationExpiresAt(updated.expiresAt);
+        setBankCheckoutPayload(payload);
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") return;
+        lastSyncedCheckoutRef.current = "";
+        setSubmitError(
+          error instanceof Error
+            ? error.message
+            : "Unable to update the active checkout.",
+        );
+      });
+
+    return () => controller.abort();
+  }, [
+    authReady,
+    cart.length,
+    contactInfo,
+    createCheckoutPayload,
+    isCartLoaded,
+    isChoosingAlternativePayment,
+    isLoggedIn,
+    reservationExpiresAt,
+    reservationId,
+    shippingInfo,
+  ]);
 
   const handlePlaceOrder = async () => {
     setSubmitError(null);
@@ -118,54 +398,22 @@ export default function PaymentPage() {
     setIsSubmitting(true);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-    
-    const payload = {
-      paymentMethod: paymentMethod === "cod" ? "cash on delivery" : "bank_transfer",
-      deliveryFee: deliveryFee,
-      contactDetails: {
-        firstName: contactInfo?.firstName || "",
-        lastName: contactInfo?.lastName || "",
-        email: contactInfo?.email || "",
-        phone: contactInfo?.phone || "",
-      },
-      shippingDetails: {
-        receiverName: shippingInfo?.receiverName || "",
-        phone: shippingInfo?.receiverPhone || "",
-        addressLine1: shippingInfo?.addressLine1 || "",
-        addressLine2: shippingInfo?.addressLine2 || "",
-        city: shippingInfo?.city || "",
-        district: shippingInfo?.district || "",
-        postalCode: shippingInfo?.postalCode || "",
-        deliveryNote: shippingInfo?.deliveryNote || "",
-      },
-      // Saved-address handling (registered customers only; guests never
-      // send these, so guest addresses are never persisted)
-      ...(isLoggedIn && shippingInfo?.savedAddressId
-        ? { savedAddressId: shippingInfo.savedAddressId }
-        : {}),
-      ...(isLoggedIn && !shippingInfo?.savedAddressId
-        ? {
-            saveAddress: shippingInfo?.saveAddress ?? false,
-            setAsPrimary: shippingInfo?.setAsPrimary ?? false,
-          }
-        : {}),
-      items: itemsToDisplay.map((item) => ({
-        variantId: item.product.variants.find(
-          (variant) =>
-            variant.size === item.size &&
-            (!item.color || variant.color === item.color),
-        )?.variantId,
-        quantity: item.quantity || 1,
-      })),
-    };
+
+    const payload = createCheckoutPayload(
+      paymentMethod === "cod" ? "cod" : "bank_transfer",
+    );
 
     try {
       if (payload.items.some((item) => !item.variantId)) {
         setIsSubmitting(false);
-        setSubmitError("A selected product option is no longer available. Please update your cart.");
+        setSubmitError(
+          "A selected product option is no longer available. Please update your cart.",
+        );
         return;
       }
-      const token = isLoggedIn ? sessionStorage.getItem("vergo_access_token") : null;
+      const token = isLoggedIn
+        ? sessionStorage.getItem("vergo_access_token")
+        : null;
       const response = await fetch(`${apiUrl}/orders`, {
         method: "POST",
         headers: {
@@ -179,20 +427,42 @@ export default function PaymentPage() {
       setIsSubmitting(false);
 
       if (!response.ok) {
-        const errMsg = Array.isArray(data.message) 
-          ? data.message.join(" ") 
-          : (data.message || "Failed to place order.");
+        const errMsg = Array.isArray(data.message)
+          ? data.message.join(" ")
+          : data.message || "Failed to place order.";
         setSubmitError(errMsg);
         return;
       }
 
-      const newOrderId = data.order?.orderId || data.order?.id;
-      setOrderId(newOrderId);
-
-      setShowOrderCompletedModal(true);
-    } catch (err) {
+      if (paymentMethod === "bank_transfer") {
+        const reservation = data.reservation;
+        if (!reservation?.reservationId || !reservation?.expiresAt) {
+          setSubmitError(
+            "The stock reservation response was incomplete. Please try again.",
+          );
+          return;
+        }
+        setReservationId(reservation.reservationId);
+        setReservationExpiresAt(reservation.expiresAt);
+        setBankCheckoutPayload(payload);
+        setIsChoosingAlternativePayment(false);
+        setShowOrderCompletedModal(false);
+      } else {
+        const checkoutId = data.pendingCheckout?.checkoutId;
+        if (!checkoutId) {
+          setSubmitError(
+            "The pending checkout response was incomplete. Please try again.",
+          );
+          return;
+        }
+        setOrderId(checkoutId);
+        setShowOrderCompletedModal(true);
+      }
+    } catch {
       setIsSubmitting(false);
-      setSubmitError("Network error: Could not reach the order creation service.");
+      setSubmitError(
+        "Network error: Could not reach the order creation service.",
+      );
     }
   };
 
@@ -206,20 +476,33 @@ export default function PaymentPage() {
     router.push("/");
   };
 
-  const itemsToDisplay = cart;
-  const subtotalLkr = cartSubtotal;
-  const deliveryFee = shippingInfo?.deliveryFee || 0;
-  const grandTotalLkr = subtotalLkr + deliveryFee;
-
-  if (orderId && paymentMethod === "bank_transfer" && isLoggedIn) {
+  if (
+    reservationId &&
+    reservationExpiresAt &&
+    bankCheckoutPayload &&
+    paymentMethod === "bank_transfer" &&
+    isLoggedIn
+  ) {
     return (
       <BankTransferFlow
-        orderId={orderId}
+        reservationId={reservationId}
+        reservationExpiresAt={reservationExpiresAt}
+        checkoutPayload={bankCheckoutPayload}
         grandTotalLkr={grandTotalLkr}
         formatLkr={formatLkr}
         onClose={handleFinishCheckout}
+        onExpired={() => {
+          clearCart();
+          localStorage.removeItem("vergo_checkout_contact");
+          localStorage.removeItem("vergo_checkout_shipping");
+          localStorage.removeItem("vergo_checkout_as_guest");
+        }}
         onBackToPaymentSelection={() => {
-          setOrderId(null);
+          setReservationId(null);
+          setReservationExpiresAt(null);
+          setBankCheckoutPayload(null);
+          setIsChoosingAlternativePayment(true);
+          setPaymentMethod("cod");
           setShowOrderCompletedModal(false);
         }}
       />
@@ -230,17 +513,30 @@ export default function PaymentPage() {
     <div className="checkout-wrapper">
       {/* Progress Steps */}
       <div className="checkout-progress">
-        <button type="button" className="step-item completed-step" onClick={() => router.push("/checkout")}>
+        <button
+          type="button"
+          className="step-item completed-step"
+          onClick={() => router.push("/checkout")}
+        >
           <span className="step-circle">1</span>
           <span className="step-label">Details</span>
         </button>
         <div className="progress-line"></div>
-        <button type="button" className="step-item completed-step" onClick={() => router.push("/checkout/shipping")}>
+        <button
+          type="button"
+          className="step-item completed-step"
+          onClick={() => router.push("/checkout/shipping")}
+        >
           <span className="step-circle">2</span>
           <span className="step-label">Shipping</span>
         </button>
         <div className="progress-line"></div>
-        <button type="button" className="step-item active-green" onClick={() => router.push("/checkout/payment")} aria-current="step">
+        <button
+          type="button"
+          className="step-item active-green"
+          onClick={() => router.push("/checkout/payment")}
+          aria-current="step"
+        >
           <span className="step-circle">3</span>
           <span className="step-label">Payment</span>
         </button>
@@ -282,14 +578,25 @@ export default function PaymentPage() {
               >
                 Contact Details
               </h3>
-              <p style={{ fontSize: "13px", color: "#ffffff", lineHeight: "1.5" }}>
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "#ffffff",
+                  lineHeight: "1.5",
+                }}
+              >
                 {contactInfo?.firstName} {contactInfo?.lastName}
                 <br />
                 {contactInfo?.email} | {contactInfo?.phone}
               </p>
             </div>
 
-            <hr style={{ border: "none", borderTop: "1px solid rgba(255, 255, 255, 0.05)" }} />
+            <hr
+              style={{
+                border: "none",
+                borderTop: "1px solid rgba(255, 255, 255, 0.05)",
+              }}
+            />
 
             <div>
               <h3
@@ -304,12 +611,24 @@ export default function PaymentPage() {
               >
                 Shipping Details
               </h3>
-              <p style={{ fontSize: "13px", color: "#ffffff", lineHeight: "1.5" }}>
-                <strong>Receiver:</strong> {shippingInfo?.receiverName} ({shippingInfo?.receiverPhone})
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "#ffffff",
+                  lineHeight: "1.5",
+                }}
+              >
+                <strong>Receiver:</strong> {shippingInfo?.receiverName} (
+                {shippingInfo?.receiverPhone})
                 <br />
                 <strong>Address:</strong> {shippingInfo?.addressLine1}
-                {shippingInfo?.addressLine2 ? ", " + shippingInfo?.addressLine2 : ""}, {shippingInfo?.city}, {shippingInfo?.district}
-                {shippingInfo?.postalCode ? ` (${shippingInfo?.postalCode})` : ""}
+                {shippingInfo?.addressLine2
+                  ? ", " + shippingInfo?.addressLine2
+                  : ""}
+                , {shippingInfo?.city}, {shippingInfo?.district}
+                {shippingInfo?.postalCode
+                  ? ` (${shippingInfo?.postalCode})`
+                  : ""}
                 {shippingInfo?.deliveryNote && (
                   <>
                     <br />
@@ -321,7 +640,9 @@ export default function PaymentPage() {
           </div>
 
           {/* Payment Selection */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+          >
             <h3 className="form-label">Payment Method</h3>
 
             {/* Bank Transfer Option */}
@@ -331,7 +652,10 @@ export default function PaymentPage() {
                 alignItems: "center",
                 gap: "16px",
                 padding: "20px 24px",
-                border: paymentMethod === "bank_transfer" ? "1.5px solid #00FF9D" : "1px solid rgba(255, 255, 255, 0.08)",
+                border:
+                  paymentMethod === "bank_transfer"
+                    ? "1.5px solid #00FF9D"
+                    : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
                 backgroundColor: "#0d0d0e",
                 cursor: isLoggedIn ? "pointer" : "not-allowed",
@@ -340,6 +664,7 @@ export default function PaymentPage() {
               }}
               onClick={() => {
                 if (isLoggedIn) {
+                  setIsChoosingAlternativePayment(false);
                   setPaymentMethod("bank_transfer");
                 }
               }}
@@ -357,17 +682,48 @@ export default function PaymentPage() {
                   cursor: isLoggedIn ? "pointer" : "not-allowed",
                 }}
               />
-              <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
-                <div style={{ display: "flex", justifyContent: "between", alignItems: "center" }}>
-                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#ffffff" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "4px",
+                  width: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      color: "#ffffff",
+                    }}
+                  >
                     Direct Bank Transfer
                   </span>
                 </div>
-                <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "rgba(255, 255, 255, 0.4)",
+                  }}
+                >
                   Transfer funds directly. Processing takes up to 24 hours.
                 </span>
                 {!isLoggedIn && (
-                  <span style={{ fontSize: "11px", color: "#EA4335", fontWeight: "600", marginTop: "4px" }}>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      color: "#EA4335",
+                      fontWeight: "600",
+                      marginTop: "4px",
+                    }}
+                  >
                     Please log in to use Bank Transfer.{" "}
                     <a
                       href="/auth/login"
@@ -392,13 +748,19 @@ export default function PaymentPage() {
                 alignItems: "center",
                 gap: "16px",
                 padding: "20px 24px",
-                border: paymentMethod === "cod" ? "1.5px solid #00FF9D" : "1px solid rgba(255, 255, 255, 0.08)",
+                border:
+                  paymentMethod === "cod"
+                    ? "1.5px solid #00FF9D"
+                    : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
                 backgroundColor: "#0d0d0e",
                 cursor: "pointer",
                 transition: "all 0.2s ease",
               }}
-              onClick={() => setPaymentMethod("cod")}
+              onClick={() => {
+                setIsChoosingAlternativePayment(true);
+                setPaymentMethod("cod");
+              }}
             >
               <input
                 type="radio"
@@ -412,11 +774,24 @@ export default function PaymentPage() {
                   cursor: "pointer",
                 }}
               />
-              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                <span style={{ fontSize: "13px", fontWeight: "700", color: "#ffffff" }}>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+              >
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "#ffffff",
+                  }}
+                >
                   Cash on Delivery (COD)
                 </span>
-                <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "rgba(255, 255, 255, 0.4)",
+                  }}
+                >
                   Pay cash when package is delivered to your doorstep.
                 </span>
               </div>
@@ -433,12 +808,20 @@ export default function PaymentPage() {
             <div className="summary-items-list">
               {itemsToDisplay.map((item, index) => {
                 const cleanPrice = item.product.lkrPrice
-                  ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim())
+                  ? parseFloat(
+                      item.product.lkrPrice
+                        .replace(/LKR/g, "")
+                        .replace(/,/g, "")
+                        .trim(),
+                    )
                   : 0;
                 const totalItemPrice = cleanPrice * item.quantity;
 
                 return (
-                  <div key={`${item.product.id}-${index}`} className="summary-item">
+                  <div
+                    key={`${item.product.id}-${index}`}
+                    className="summary-item"
+                  >
                     <div className="summary-item-image-wrapper">
                       {item.product.image && (
                         <Image
@@ -453,9 +836,12 @@ export default function PaymentPage() {
                     <div className="summary-item-details">
                       <h3 className="summary-item-name">{item.product.name}</h3>
                       <div className="summary-item-meta">
-                        Size: {item.size} / Color: {item.color || item.product.colors?.[0] || "Default"}
+                        Size: {item.size} / Color:{" "}
+                        {item.color || item.product.colors?.[0] || "Default"}
                       </div>
-                      <div className="summary-item-price">{formatLkr(totalItemPrice)}</div>
+                      <div className="summary-item-price">
+                        {formatLkr(totalItemPrice)}
+                      </div>
                     </div>
                   </div>
                 );
@@ -467,7 +853,9 @@ export default function PaymentPage() {
             {/* Subtotal */}
             <div className="summary-calc-row">
               <span className="summary-calc-label">Subtotal</span>
-              <span className="summary-calc-value">{formatLkr(subtotalLkr)}</span>
+              <span className="summary-calc-value">
+                {formatLkr(subtotalLkr)}
+              </span>
             </div>
 
             {/* Delivery */}
@@ -475,7 +863,9 @@ export default function PaymentPage() {
               <span className="summary-calc-label">Delivery</span>
               <span className="summary-calc-value">
                 <span className="delivery-badge">CITYPAK</span>
-                <span style={{ marginLeft: "8px" }}>{formatLkr(deliveryFee)}</span>
+                <span style={{ marginLeft: "8px" }}>
+                  {formatLkr(deliveryFee)}
+                </span>
               </span>
             </div>
 
@@ -490,20 +880,22 @@ export default function PaymentPage() {
             {/* Total */}
             <div className="summary-total-row">
               <span className="summary-total-label">Total</span>
-              <span className="summary-total-value">{formatLkr(grandTotalLkr)}</span>
+              <span className="summary-total-value">
+                {formatLkr(grandTotalLkr)}
+              </span>
             </div>
 
             {submitError && (
-              <div 
-                style={{ 
-                  color: "#EA4335", 
-                  backgroundColor: "rgba(234, 67, 53, 0.1)", 
+              <div
+                style={{
+                  color: "#EA4335",
+                  backgroundColor: "rgba(234, 67, 53, 0.1)",
                   border: "1px solid rgba(234, 67, 53, 0.2)",
-                  padding: "12px", 
-                  borderRadius: "8px", 
-                  fontSize: "12px", 
+                  padding: "12px",
+                  borderRadius: "8px",
+                  fontSize: "12px",
                   marginTop: "16px",
-                  lineHeight: "1.4"
+                  lineHeight: "1.4",
                 }}
               >
                 <strong>Order Failed:</strong> {submitError}
@@ -511,17 +903,28 @@ export default function PaymentPage() {
             )}
 
             {/* Place Order Button */}
-            <div className="submit-btn-container checkout-actions" style={{ marginTop: "24px" }}>
-              <button type="button" className="checkout-back-btn" onClick={() => router.push("/checkout/shipping")}>
+            <div
+              className="submit-btn-container checkout-actions"
+              style={{ marginTop: "24px" }}
+            >
+              <button
+                type="button"
+                className="checkout-back-btn"
+                onClick={() => router.push("/checkout/shipping")}
+              >
                 Back
               </button>
               <button
                 type="button"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCheckingActiveReservation}
                 className="submit-btn"
                 onClick={handlePlaceOrder}
               >
-                {isSubmitting ? "Processing..." : "Place Order"}
+                {isCheckingActiveReservation
+                  ? "Checking payment..."
+                  : isSubmitting
+                    ? "Processing..."
+                    : "Place Order"}
               </button>
             </div>
           </div>
@@ -549,12 +952,20 @@ export default function PaymentPage() {
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
             </div>
-            <h3 className="modal-title">Order Placed Successfully</h3>
+            <h3 className="modal-title">Checkout Submitted</h3>
             <p className="modal-message">
-              Thank you for shopping with VERGO! Your order has been placed successfully and will be processed immediately.
+              Your Cash on Delivery checkout is awaiting admin confirmation. The
+              order will be created only after approval.
               <br />
-              <span style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)", display: "block", marginTop: "8px" }}>
-                Order Reference: <strong>#{orderId}</strong>
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "rgba(255, 255, 255, 0.4)",
+                  display: "block",
+                  marginTop: "8px",
+                }}
+              >
+                Pending Checkout Reference: <strong>#{orderId}</strong>
               </span>
             </p>
             <div className="modal-buttons-container">
@@ -575,10 +986,13 @@ export default function PaymentPage() {
 }
 
 interface BankTransferFlowProps {
-  orderId: string;
+  reservationId: string;
+  reservationExpiresAt: string;
+  checkoutPayload: Record<string, unknown>;
   grandTotalLkr: number;
   formatLkr: (val: number) => string;
   onClose: () => void;
+  onExpired: () => void;
   onBackToPaymentSelection?: () => void;
 }
 
@@ -595,20 +1009,26 @@ const defaultBankDetails: BankDetails = {
 };
 
 function BankTransferFlow({
-  orderId,
+  reservationId,
+  reservationExpiresAt,
+  checkoutPayload,
   grandTotalLkr,
   formatLkr,
   onClose,
+  onExpired,
   onBackToPaymentSelection,
 }: BankTransferFlowProps) {
+  const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
+  const orderId = createdOrderId ?? reservationId;
   const [step, setStep] = useState(1);
-  const [proofExpiresAt, setProofExpiresAt] = useState(
-    () => Date.now() + 15 * 60 * 1000,
+  const [proofExpiresAt, setProofExpiresAt] = useState(() =>
+    new Date(reservationExpiresAt).getTime(),
   );
   const [timeLeft, setTimeLeft] = useState(15 * 60);
   const [proofStatus, setProofStatus] = useState<string | null>(null);
   const [showExpiredModal, setShowExpiredModal] = useState(false);
-  const [bankDetails, setBankDetails] = useState<BankDetails>(defaultBankDetails);
+  const [bankDetails, setBankDetails] =
+    useState<BankDetails>(defaultBankDetails);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // File states
@@ -617,8 +1037,12 @@ function BankTransferFlow({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
-  const [showReceiptSubmittedModal, setShowReceiptSubmittedModal] = useState(false);
-  const [submittedPaymentStatus, setSubmittedPaymentStatus] = useState("Pending Verification");
+  const [showReceiptSubmittedModal, setShowReceiptSubmittedModal] =
+    useState(false);
+  const [submittedPaymentStatus, setSubmittedPaymentStatus] = useState(
+    "Pending Verification",
+  );
+  const expiredHandledRef = useRef(false);
 
   // Cancellation states
   const [isCancelling, setIsCancelling] = useState(false);
@@ -626,9 +1050,15 @@ function BankTransferFlow({
   const [cancelSuccess, setCancelSuccess] = useState(false);
 
   // Toast state
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
 
-  const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "info" = "success",
+  ) => {
     setToast({ message, type });
   };
 
@@ -643,15 +1073,13 @@ function BankTransferFlow({
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
     const token = sessionStorage.getItem("vergo_access_token");
 
-    void fetch(`${apiUrl}/orders/${orderId}/payment-proof`, {
+    void fetch(`${apiUrl}/orders/bank-transfer/reservations/${reservationId}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(async (response) => {
         if (!response.ok) return;
         const proof = await response.json();
-        const expiresAt = new Date(
-          proof.reservationExpiresAt ?? proof.expiresAt,
-        ).getTime();
+        const expiresAt = new Date(proof.expiresAt).getTime();
         if (!Number.isNaN(expiresAt)) setProofExpiresAt(expiresAt);
         setProofStatus(proof.status ?? null);
         if (String(proof.status).toLowerCase() === "expired") {
@@ -661,7 +1089,7 @@ function BankTransferFlow({
       .catch(() => {
         // Keep the 15-minute fallback visible if the proof lookup is unavailable.
       });
-  }, [orderId]);
+  }, [reservationId]);
 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -673,7 +1101,8 @@ function BankTransferFlow({
           bankName: customization.bankName || defaultBankDetails.bankName,
           bankBranch: customization.bankBranch || defaultBankDetails.bankBranch,
           bankAccountNumber:
-            customization.bankAccountNumber || defaultBankDetails.bankAccountNumber,
+            customization.bankAccountNumber ||
+            defaultBankDetails.bankAccountNumber,
         });
       })
       .catch(() => {
@@ -690,29 +1119,38 @@ function BankTransferFlow({
     return () => clearInterval(timer);
   }, [proofExpiresAt]);
 
+  const normalizedProofStatus = proofStatus?.trim().toLowerCase();
   const isProofAwaitingUpload =
-    !proofStatus || proofStatus.toLowerCase() === "pending upload";
+    !normalizedProofStatus ||
+    normalizedProofStatus === "active" ||
+    normalizedProofStatus === "pending upload";
   const isProofExpired =
-    proofStatus?.toLowerCase() === "expired" ||
+    normalizedProofStatus === "expired" ||
     (isProofAwaitingUpload && timeLeft === 0);
 
   useEffect(() => {
     if (isProofExpired && !uploadSuccess) {
       setSelectedFile(null);
+      setDragActive(false);
+      setUploadError(null);
       setShowExpiredModal(true);
+      if (!expiredHandledRef.current) {
+        expiredHandledRef.current = true;
+        onExpired();
+      }
     }
-  }, [isProofExpired, uploadSuccess]);
+  }, [isProofExpired, onExpired, uploadSuccess]);
 
   const copyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(fieldName);
     showToast(
-      fieldName === "acc" 
-        ? "Account number copied to clipboard!" 
-        : fieldName === "ref" 
-        ? "Payment reference copied to clipboard!" 
-        : "Account details copied to clipboard!", 
-      "success"
+      fieldName === "acc"
+        ? "Account number copied to clipboard!"
+        : fieldName === "ref"
+          ? "Payment reference copied to clipboard!"
+          : "Account details copied to clipboard!",
+      "success",
     );
     setTimeout(() => setCopiedField(null), 2000);
   };
@@ -772,12 +1210,21 @@ function BankTransferFlow({
       return;
     }
 
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-    const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    const isAllowedExt = ["jpg", "jpeg", "png", "webp", "pdf"].includes(fileExtension || "");
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+    ];
+    const fileExtension = file.name.split(".").pop()?.toLowerCase();
+    const isAllowedExt = ["jpg", "jpeg", "png", "webp", "pdf"].includes(
+      fileExtension || "",
+    );
 
     if (!allowedTypes.includes(file.type) && !isAllowedExt) {
-      setUploadError("Format rejected. Please choose a JPG, PNG, WEBP, or PDF.");
+      setUploadError(
+        "Format rejected. Please choose a JPG, PNG, WEBP, or PDF.",
+      );
       setSelectedFile(null);
       return;
     }
@@ -797,23 +1244,29 @@ function BankTransferFlow({
 
     const formData = new FormData();
     formData.append("receipt", selectedFile);
+    formData.append("checkout", JSON.stringify(checkoutPayload));
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
     const token = sessionStorage.getItem("vergo_access_token");
 
     try {
-      const res = await fetch(`${apiUrl}/payment-proofs/${orderId}/upload`, {
-        method: "PATCH",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      const res = await fetch(
+        `${apiUrl}/payment-proofs/reservations/${reservationId}/upload`,
+        {
+          method: "PATCH",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: formData,
         },
-        body: formData,
-      });
+      );
 
       const data = await res.json();
 
       if (!res.ok) {
-        const errMsg = Array.isArray(data.message) ? data.message.join(" ") : data.message;
+        const errMsg = Array.isArray(data.message)
+          ? data.message.join(" ")
+          : data.message;
         if (String(errMsg).toLowerCase().includes("expired")) {
           setProofStatus("Expired");
           setShowExpiredModal(true);
@@ -822,6 +1275,12 @@ function BankTransferFlow({
       }
 
       const paymentStatus = data.status || "Pending Verification";
+      const pendingCheckoutId = data.checkoutId || data.reservationId;
+      if (!pendingCheckoutId) {
+        throw new Error("The pending checkout has no valid reference.");
+      }
+      setCreatedOrderId(pendingCheckoutId);
+      setProofStatus(paymentStatus);
       setSubmittedPaymentStatus(paymentStatus);
       setUploadSuccess(
         `Bank transfer receipt submitted successfully. Payment status: ${paymentStatus}.`,
@@ -836,6 +1295,13 @@ function BankTransferFlow({
   };
 
   const handleCancelOrder = async () => {
+    if (!createdOrderId || !uploadSuccess) {
+      showToast(
+        "Submit the payment proof before cancelling this checkout.",
+        "info",
+      );
+      return;
+    }
     setIsCancelling(true);
     setCancelError(null);
 
@@ -843,13 +1309,16 @@ function BankTransferFlow({
     const token = sessionStorage.getItem("vergo_access_token");
 
     try {
-      const res = await fetch(`${apiUrl}/orders/mine/${orderId}/cancel`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      const res = await fetch(
+        `${apiUrl}/orders/pending-checkouts/${createdOrderId}/cancel`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         },
-      });
+      );
 
       const data = await res.json();
 
@@ -859,7 +1328,9 @@ function BankTransferFlow({
 
       setCancelSuccess(true);
     } catch (err: any) {
-      setCancelError(err.message || "Cancellation failed. Please contact support.");
+      setCancelError(
+        err.message || "Cancellation failed. Please contact support.",
+      );
     } finally {
       setIsCancelling(false);
     }
@@ -874,19 +1345,43 @@ function BankTransferFlow({
 
   const renderCountdownBanner = () => {
     return (
-      <div 
-        className="bt-card bt-countdown-banner"
-      >
+      <div className="bt-card bt-countdown-banner">
         <div>
-          <div style={{ fontSize: "12px", fontWeight: "800", color: "#00FF9D", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>
+          <div
+            style={{
+              fontSize: "12px",
+              fontWeight: "800",
+              color: "#00FF9D",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              marginBottom: "4px",
+            }}
+          >
             Time remaining to upload proof
           </div>
-          <div style={{ fontSize: "36px", fontWeight: "700", color: "#ffffff", fontFamily: "monospace" }}>
+          <div
+            style={{
+              fontSize: "36px",
+              fontWeight: "700",
+              color: "#ffffff",
+              fontFamily: "monospace",
+            }}
+          >
             {timeLeft > 0 ? formatTime(timeLeft) : "EXPIRED"}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center" }}>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="36" height="36">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="rgba(255,255,255,0.2)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="36"
+            height="36"
+          >
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
@@ -897,8 +1392,8 @@ function BankTransferFlow({
 
   if (cancelSuccess) {
     return (
-      <div 
-        className="bank-transfer-container" 
+      <div
+        className="bank-transfer-container"
         style={{
           maxWidth: "600px",
           margin: "80px auto",
@@ -906,21 +1401,59 @@ function BankTransferFlow({
           borderRadius: "12px",
           border: "1px solid rgba(255,255,255,0.05)",
           padding: "40px",
-          textAlign: "center"
+          textAlign: "center",
         }}
       >
-        <div style={{ color: "#EA4335", marginBottom: "24px", display: "flex", justifyContent: "center" }}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <div
+          style={{
+            color: "#EA4335",
+            marginBottom: "24px",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="64"
+            height="64"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <circle cx="12" cy="12" r="10" />
             <line x1="15" y1="9" x2="9" y2="15" />
             <line x1="9" y1="9" x2="15" y2="15" />
           </svg>
         </div>
-        <h2 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "16px", letterSpacing: "0.02em" }}>Order Cancelled</h2>
-        <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", marginBottom: "32px", lineHeight: "1.6" }}>
-          Your order has been successfully cancelled and the reserved stock has been released.
+        <h2
+          style={{
+            fontSize: "28px",
+            fontWeight: "700",
+            marginBottom: "16px",
+            letterSpacing: "0.02em",
+          }}
+        >
+          Order Cancelled
+        </h2>
+        <p
+          style={{
+            fontSize: "14px",
+            color: "rgba(255,255,255,0.5)",
+            marginBottom: "32px",
+            lineHeight: "1.6",
+          }}
+        >
+          Your pending checkout has been cancelled and the reserved stock has
+          been released.
         </p>
-        <button onClick={onClose} className="bt-btn-primary" style={{ maxWidth: "240px", margin: "0 auto" }}>
+        <button
+          onClick={onClose}
+          className="bt-btn-primary"
+          style={{ maxWidth: "240px", margin: "0 auto" }}
+        >
           Return to Homepage
         </button>
       </div>
@@ -928,7 +1461,15 @@ function BankTransferFlow({
   }
 
   return (
-    <div className="bank-transfer-container" style={{ maxWidth: "680px", width: "100%", margin: "64px auto", padding: "0 24px" }}>
+    <div
+      className="bank-transfer-container"
+      style={{
+        maxWidth: "680px",
+        width: "100%",
+        margin: "64px auto",
+        padding: "0 24px",
+      }}
+    >
       <style>{`
         .bt-card {
           background-color: #0d0d0e;
@@ -1111,7 +1652,7 @@ function BankTransferFlow({
       {step === 1 ? (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {/* Hourglass Icon */}
-          <div 
+          <div
             style={{
               width: "72px",
               height: "72px",
@@ -1122,10 +1663,20 @@ function BankTransferFlow({
               justifyContent: "center",
               margin: "0 auto 24px auto",
               color: "#00FF9D",
-              boxShadow: "0 0 20px rgba(0, 255, 157, 0.1)"
+              boxShadow: "0 0 20px rgba(0, 255, 157, 0.1)",
             }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              width="32"
+              height="32"
+            >
               <path d="M5 2h14" />
               <path d="M5 22h14" />
               <path d="M19 2v4c0 4-4 6-4 6s4 2 4 6v4" />
@@ -1134,11 +1685,31 @@ function BankTransferFlow({
           </div>
 
           {/* Title and description */}
-          <h1 style={{ fontSize: "32px", fontWeight: "800", textTransform: "uppercase", textAlign: "center", letterSpacing: "0.05em", marginBottom: "8px", fontFamily: "'Oswald', sans-serif", color: "#ffffff" }}>
-            Order Placed
+          <h1
+            style={{
+              fontSize: "32px",
+              fontWeight: "800",
+              textTransform: "uppercase",
+              textAlign: "center",
+              letterSpacing: "0.05em",
+              marginBottom: "8px",
+              fontFamily: "'Oswald', sans-serif",
+              color: "#ffffff",
+            }}
+          >
+            Bank Transfer Pending
           </h1>
-          <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.6)", textAlign: "center", marginBottom: "32px", lineHeight: "1.5" }}>
-            Your order <strong>#{orderId}</strong> is currently pending bank transfer verification.
+          <p
+            style={{
+              fontSize: "13px",
+              color: "rgba(255, 255, 255, 0.6)",
+              textAlign: "center",
+              marginBottom: "32px",
+              lineHeight: "1.5",
+            }}
+          >
+            Your pending checkout <strong>#{orderId}</strong> is awaiting bank
+            transfer verification. No order is created until admin approval.
           </p>
 
           {/* Time remaining countdown banner */}
@@ -1147,34 +1718,90 @@ function BankTransferFlow({
           {/* Details split columns */}
           <div className="bt-split-grid">
             <div className="bt-card">
-              <div style={{ fontSize: "13px", fontWeight: "800", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: "800",
+                  color: "rgba(255,255,255,0.4)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "16px",
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#00FF9D"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                   <path d="M7 11V7a5 5 0 0 1 9.9-1" />
                 </svg>
                 Bank Details
               </div>
-              
+
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Bank Name</span>
                 <span className="bt-detail-value">{bankDetails.bankName}</span>
               </div>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Branch</span>
-                <span className="bt-detail-value">{bankDetails.bankBranch}</span>
+                <span className="bt-detail-value">
+                  {bankDetails.bankBranch}
+                </span>
               </div>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Account No.</span>
                 <span className="bt-detail-value">
                   {bankDetails.bankAccountNumber}
-                  <button className="bt-copy-btn" onClick={() => copyToClipboard(bankDetails.bankAccountNumber, "acc")}>
+                  <button
+                    className="bt-copy-btn"
+                    onClick={() =>
+                      copyToClipboard(bankDetails.bankAccountNumber, "acc")
+                    }
+                  >
                     {copiedField === "acc" ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#00FF9D"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                        />
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
                     )}
@@ -1182,31 +1809,91 @@ function BankTransferFlow({
                 </span>
               </div>
               {/* Enhanced Single-Line Monospace Reference Panel */}
-              <div style={{ 
-                marginTop: "16px", 
-                padding: "12px 16px", 
-                backgroundColor: "rgba(255, 255, 255, 0.02)", 
-                borderRadius: "8px", 
-                border: "1px solid rgba(255, 255, 255, 0.05)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "6px"
-              }}>
-                <span style={{ fontSize: "11px", fontWeight: "700", color: "rgba(255, 255, 255, 0.4)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              <div
+                style={{
+                  marginTop: "16px",
+                  padding: "12px 16px",
+                  backgroundColor: "rgba(255, 255, 255, 0.02)",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(255, 255, 255, 0.05)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    color: "rgba(255, 255, 255, 0.4)",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                  }}
+                >
                   Payment Reference
                 </span>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                  <span style={{ fontFamily: "monospace", fontSize: "13.5px", color: "#00FF9D", fontWeight: "700", letterSpacing: "normal", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    width: "100%",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: "13.5px",
+                      color: "#00FF9D",
+                      fontWeight: "700",
+                      letterSpacing: "normal",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {orderId}
                   </span>
-                  <button className="bt-copy-btn" onClick={() => copyToClipboard(orderId, "ref")} style={{ flexShrink: 0, marginLeft: "12px" }} title="Copy Reference">
+                  <button
+                    className="bt-copy-btn"
+                    onClick={() => copyToClipboard(orderId, "ref")}
+                    style={{ flexShrink: 0, marginLeft: "12px" }}
+                    title="Copy Reference"
+                  >
                     {copiedField === "ref" ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#00FF9D"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                        />
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
                     )}
@@ -1214,88 +1901,172 @@ function BankTransferFlow({
                 </div>
               </div>
 
-              <button 
-                type="button" 
-                style={{ 
-                  background: "transparent", 
-                  border: "none", 
-                  color: "#00FF9D", 
-                  fontSize: "13px", 
-                  fontWeight: "700", 
-                  textTransform: "uppercase", 
-                  letterSpacing: "0.05em", 
-                  cursor: "pointer", 
-                  padding: "0", 
-                  marginTop: "16px" 
+              <button
+                type="button"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#00FF9D",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  cursor: "pointer",
+                  padding: "0",
+                  marginTop: "16px",
                 }}
                 onClick={() => {
-                  copyToClipboard(`Bank: ${bankDetails.bankName}\nBranch: ${bankDetails.bankBranch}\nAccount: ${bankDetails.bankAccountNumber}\nReference: ${orderId}`, "all");
+                  copyToClipboard(
+                    `Bank: ${bankDetails.bankName}\nBranch: ${bankDetails.bankBranch}\nAccount: ${bankDetails.bankAccountNumber}\nReference: ${orderId}`,
+                    "all",
+                  );
                 }}
               >
                 Copy Account Details
               </button>
-            </div>            <div className="bt-card" style={{ 
-              display: "flex", 
-              flexDirection: "column", 
-              justifyContent: "center",
-              border: "1px solid rgba(0, 255, 157, 0.15)",
-              background: "linear-gradient(135deg, rgba(0, 255, 157, 0.02) 0%, rgba(13, 13, 14, 1) 100%)",
-              position: "relative",
-              overflow: "hidden"
-            }}>
+            </div>
+            <div
+              className="bt-card"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                border: "1px solid rgba(0, 255, 157, 0.15)",
+                background:
+                  "linear-gradient(135deg, rgba(0, 255, 157, 0.02) 0%, rgba(13, 13, 14, 1) 100%)",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
               {/* Subtle top indicator */}
-              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", backgroundColor: "#00FF9D" }}></div>
-              
-              <div style={{ fontSize: "12px", fontWeight: "800", color: "#00FF9D", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "2px",
+                  backgroundColor: "#00FF9D",
+                }}
+              ></div>
+
+              <div
+                style={{
+                  fontSize: "12px",
+                  fontWeight: "800",
+                  color: "#00FF9D",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  marginBottom: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <rect x="2" y="4" width="20" height="16" rx="2" />
                   <line x1="12" y1="10" x2="12" y2="14" />
                   <line x1="8" y1="12" x2="16" y2="12" />
                 </svg>
                 Transfer Amount
               </div>
-              <div style={{ fontSize: "36px", fontWeight: "800", color: "#ffffff", marginBottom: "6px", fontFamily: "'Oswald', sans-serif" }}>
+              <div
+                style={{
+                  fontSize: "36px",
+                  fontWeight: "800",
+                  color: "#ffffff",
+                  marginBottom: "6px",
+                  fontFamily: "'Oswald', sans-serif",
+                }}
+              >
                 {formatLkr(grandTotalLkr)}
               </div>
-              <div style={{ fontSize: "11px", fontWeight: "600", color: "rgba(255,255,255,0.35)", letterSpacing: "0.05em", textTransform: "uppercase", lineHeight: "1.4" }}>
+              <div
+                style={{
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  color: "rgba(255,255,255,0.35)",
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  lineHeight: "1.4",
+                }}
+              >
                 Total amount includes standard delivery fee and tax.
               </div>
             </div>
           </div>
 
           {cancelError && (
-            <div style={{ color: "#EA4335", backgroundColor: "rgba(234, 67, 53, 0.08)", border: "1px solid rgba(234, 67, 53, 0.2)", padding: "12px", borderRadius: "8px", fontSize: "12px", marginBottom: "20px", textAlign: "center" }}>
+            <div
+              style={{
+                color: "#EA4335",
+                backgroundColor: "rgba(234, 67, 53, 0.08)",
+                border: "1px solid rgba(234, 67, 53, 0.2)",
+                padding: "12px",
+                borderRadius: "8px",
+                fontSize: "12px",
+                marginBottom: "20px",
+                textAlign: "center",
+              }}
+            >
               ⚠️ {cancelError}
             </div>
           )}
 
           {/* Action buttons */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <button 
-              type="button" 
-              className="bt-btn-primary" 
-              onClick={() => setStep(2)}
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+          >
+            <button
+              type="button"
+              className="bt-btn-primary"
+              disabled={isProofExpired}
+              onClick={() => {
+                if (!isProofExpired) setStep(2);
+              }}
               style={{ padding: "18px" }}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M21 15v4a2 2 0 0 1-2-2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
-              Upload Payment Proof
+              {isProofExpired
+                ? "Payment Window Expired"
+                : "Upload Payment Proof"}
             </button>
             <div style={{ display: "flex", gap: "12px", width: "100%" }}>
-              <button 
-                type="button" 
-                className="bt-btn-secondary" 
+              <button
+                type="button"
+                className="bt-btn-secondary"
                 onClick={() => onBackToPaymentSelection?.()}
                 style={{ flex: 1, padding: "18px" }}
               >
                 Back
               </button>
-              <button 
-                type="button" 
-                className="bt-btn-cancel" 
+              <button
+                type="button"
+                className="bt-btn-cancel"
                 disabled={isCancelling}
                 onClick={handleCancelOrder}
               >
@@ -1304,14 +2075,27 @@ function BankTransferFlow({
             </div>
           </div>
 
-          <div style={{ textAlign: "center", marginTop: "32px", fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
-            Having trouble? <a href="/about" style={{ color: "#00FF9D", textDecoration: "underline" }}>Contact Support</a>
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: "32px",
+              fontSize: "12px",
+              color: "rgba(255,255,255,0.4)",
+            }}
+          >
+            Having trouble?{" "}
+            <a
+              href="/about"
+              style={{ color: "#00FF9D", textDecoration: "underline" }}
+            >
+              Contact Support
+            </a>
           </div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {/* Hourglass Icon */}
-          <div 
+          <div
             style={{
               width: "72px",
               height: "72px",
@@ -1322,10 +2106,20 @@ function BankTransferFlow({
               justifyContent: "center",
               margin: "0 auto 24px auto",
               color: "#00FF9D",
-              boxShadow: "0 0 20px rgba(0, 255, 157, 0.1)"
+              boxShadow: "0 0 20px rgba(0, 255, 157, 0.1)",
             }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              width="32"
+              height="32"
+            >
               <path d="M5 2h14" />
               <path d="M5 22h14" />
               <path d="M19 2v4c0 4-4 6-4 6s4 2 4 6v4" />
@@ -1333,11 +2127,32 @@ function BankTransferFlow({
             </svg>
           </div>
 
-          <h1 style={{ fontSize: "32px", fontWeight: "800", textTransform: "uppercase", textAlign: "center", letterSpacing: "0.05em", marginBottom: "8px", fontFamily: "'Oswald', sans-serif", color: "#ffffff" }}>
+          <h1
+            style={{
+              fontSize: "32px",
+              fontWeight: "800",
+              textTransform: "uppercase",
+              textAlign: "center",
+              letterSpacing: "0.05em",
+              marginBottom: "8px",
+              fontFamily: "'Oswald', sans-serif",
+              color: "#ffffff",
+            }}
+          >
             Pending Bank Transfer
           </h1>
-          <p style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.6)", textAlign: "center", marginBottom: "32px", lineHeight: "1.5" }}>
-            Your order <strong>#{orderId}</strong> is on hold. Please complete the bank transfer and upload your proof within 15 minutes to secure your items.
+          <p
+            style={{
+              fontSize: "13px",
+              color: "rgba(255, 255, 255, 0.6)",
+              textAlign: "center",
+              marginBottom: "32px",
+              lineHeight: "1.5",
+            }}
+          >
+            Your stock reservation <strong>#{orderId}</strong> is active. Please
+            complete the bank transfer and upload your proof within 15 minutes
+            to create the order and secure your items.
           </p>
 
           {/* Time remaining countdown banner */}
@@ -1346,48 +2161,133 @@ function BankTransferFlow({
           {/* Time Window Notice */}
           <div className="bt-warning-banner">
             <div className="bt-warning-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                 <line x1="12" y1="9" x2="12" y2="13" />
                 <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
             </div>
             <p className="bt-warning-text">
-              Stock is only held for a limited 4-hour window. Orders without proof of payment after this period will be automatically cancelled.
+              Stock is only held for 15 minutes. Orders without proof of payment
+              after this period will be automatically cancelled.
             </p>
           </div>
 
           {/* Next Steps card */}
           <div className="bt-card" style={{ marginBottom: "32px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "12px", marginBottom: "16px" }}>
-              <span style={{ fontSize: "14px", fontWeight: "800", color: "#00FF9D", letterSpacing: "0.1em" }}>NEXT STEPS</span>
-              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", fontWeight: "700" }}>Step 1 of 2</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                paddingBottom: "12px",
+                marginBottom: "16px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "14px",
+                  fontWeight: "800",
+                  color: "#00FF9D",
+                  letterSpacing: "0.1em",
+                }}
+              >
+                NEXT STEPS
+              </span>
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "rgba(255,255,255,0.4)",
+                  fontWeight: "700",
+                }}
+              >
+                Step 1 of 2
+              </span>
             </div>
-            <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", margin: "0 0 20px 0", lineHeight: "1.6" }}>
-              Please transfer the total amount to the following bank account and upload a clear screenshot of the transaction receipt.
+            <p
+              style={{
+                fontSize: "13px",
+                color: "rgba(255,255,255,0.6)",
+                margin: "0 0 20px 0",
+                lineHeight: "1.6",
+              }}
+            >
+              Please transfer the total amount to the following bank account and
+              upload a clear screenshot of the transaction receipt.
             </p>
 
-            <div style={{ backgroundColor: "#050506", padding: "8px 16px", borderRadius: "8px" }}>
+            <div
+              style={{
+                backgroundColor: "#050506",
+                padding: "8px 16px",
+                borderRadius: "8px",
+              }}
+            >
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Bank Name</span>
                 <span className="bt-detail-value">{bankDetails.bankName}</span>
               </div>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Branch</span>
-                <span className="bt-detail-value">{bankDetails.bankBranch}</span>
+                <span className="bt-detail-value">
+                  {bankDetails.bankBranch}
+                </span>
               </div>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Account No.</span>
                 <span className="bt-detail-value">
                   {bankDetails.bankAccountNumber}
-                  <button className="bt-copy-btn" onClick={() => copyToClipboard(bankDetails.bankAccountNumber, "acc")}>
+                  <button
+                    className="bt-copy-btn"
+                    onClick={() =>
+                      copyToClipboard(bankDetails.bankAccountNumber, "acc")
+                    }
+                  >
                     {copiedField === "acc" ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#00FF9D"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                        />
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
                     )}
@@ -1395,32 +2295,92 @@ function BankTransferFlow({
                 </span>
               </div>
               {/* Enhanced Single-Line Monospace Reference Panel */}
-              <div style={{ 
-                marginTop: "12px", 
-                marginBottom: "12px",
-                padding: "10px 14px", 
-                backgroundColor: "rgba(255, 255, 255, 0.02)", 
-                borderRadius: "8px", 
-                border: "1px solid rgba(255, 255, 255, 0.05)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "4px"
-              }}>
-                <span style={{ fontSize: "11px", fontWeight: "700", color: "rgba(255, 255, 255, 0.4)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              <div
+                style={{
+                  marginTop: "12px",
+                  marginBottom: "12px",
+                  padding: "10px 14px",
+                  backgroundColor: "rgba(255, 255, 255, 0.02)",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(255, 255, 255, 0.05)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "4px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    color: "rgba(255, 255, 255, 0.4)",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                  }}
+                >
                   Payment Reference
                 </span>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                  <span style={{ fontFamily: "monospace", fontSize: "13.5px", color: "#00FF9D", fontWeight: "700", letterSpacing: "normal", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    width: "100%",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: "13.5px",
+                      color: "#00FF9D",
+                      fontWeight: "700",
+                      letterSpacing: "normal",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {orderId}
                   </span>
-                  <button className="bt-copy-btn" onClick={() => copyToClipboard(orderId, "ref")} style={{ flexShrink: 0, marginLeft: "12px" }} title="Copy Reference">
+                  <button
+                    className="bt-copy-btn"
+                    onClick={() => copyToClipboard(orderId, "ref")}
+                    style={{ flexShrink: 0, marginLeft: "12px" }}
+                    title="Copy Reference"
+                  >
                     {copiedField === "ref" ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#00FF9D"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                        />
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
                     )}
@@ -1429,14 +2389,34 @@ function BankTransferFlow({
               </div>
               <div className="bt-detail-row">
                 <span className="bt-detail-label">Total Amount</span>
-                <span className="bt-detail-value" style={{ color: "#00FF9D", fontSize: "15px" }}>{formatLkr(grandTotalLkr)}</span>
+                <span
+                  className="bt-detail-value"
+                  style={{ color: "#00FF9D", fontSize: "15px" }}
+                >
+                  {formatLkr(grandTotalLkr)}
+                </span>
               </div>
             </div>
           </div>
 
           {/* Upload Receipt Area */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "24px" }}>
-            <span style={{ fontSize: "12px", fontWeight: "800", color: "rgba(255, 255, 255, 0.4)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              marginBottom: "24px",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "12px",
+                fontWeight: "800",
+                color: "rgba(255, 255, 255, 0.4)",
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+              }}
+            >
               Upload Receipt
             </span>
             <input
@@ -1453,35 +2433,70 @@ function BankTransferFlow({
               onDragOver={isProofExpired ? undefined : handleDrag}
               onDragLeave={isProofExpired ? undefined : handleDrag}
               onDrop={isProofExpired ? undefined : handleDrop}
-              onClick={() => !isProofExpired && document.getElementById("bt-file-picker")?.click()}
+              onClick={() =>
+                !isProofExpired &&
+                document.getElementById("bt-file-picker")?.click()
+              }
               aria-disabled={isProofExpired}
-              style={isProofExpired ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+              style={
+                isProofExpired
+                  ? { opacity: 0.45, cursor: "not-allowed" }
+                  : undefined
+              }
             >
-              <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(255,255,255,0.03)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="rgba(255,255,255,0.4)"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  width="20"
+                  height="20"
+                >
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               </div>
-              <div style={{ fontSize: "14px", fontWeight: "600", color: "#ffffff" }}>
+              <div
+                style={{
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: "#ffffff",
+                }}
+              >
                 Drag & drop receipt here
               </div>
-              <div style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)" }}>
+              <div
+                style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)" }}
+              >
                 PNG, JPG or PDF up to 5MB
               </div>
-              <button 
+              <button
                 type="button"
                 className="bt-copy-btn"
-                style={{ 
-                  backgroundColor: "#121214", 
-                  color: "#ffffff", 
-                  border: "1px solid rgba(255, 255, 255, 0.08)", 
-                  borderRadius: "6px", 
-                  padding: "8px 16px", 
-                  fontSize: "13px", 
+                style={{
+                  backgroundColor: "#121214",
+                  color: "#ffffff",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "6px",
+                  padding: "8px 16px",
+                  fontSize: "13px",
                   fontWeight: "700",
-                  marginTop: "8px"
+                  marginTop: "8px",
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1496,24 +2511,69 @@ function BankTransferFlow({
             </div>
 
             {selectedFile && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(255,255,255,0.02)", padding: "12px 16px", borderRadius: "8px", marginTop: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00FF9D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  backgroundColor: "rgba(255,255,255,0.02)",
+                  padding: "12px 16px",
+                  borderRadius: "8px",
+                  marginTop: "8px",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                }}
+              >
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "10px" }}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#00FF9D"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
                   <div>
-                    <div style={{ fontSize: "13px", color: "#ffffff", fontWeight: "600", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div
+                      style={{
+                        fontSize: "13px",
+                        color: "#ffffff",
+                        fontWeight: "600",
+                        maxWidth: "300px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {selectedFile.name}
                     </div>
-                    <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "rgba(255,255,255,0.4)",
+                      }}
+                    >
                       {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                     </div>
                   </div>
                 </div>
-                <button 
-                  type="button" 
-                  style={{ background: "transparent", border: "none", color: "#EA4335", cursor: "pointer", fontSize: "13px", fontWeight: "600" }}
+                <button
+                  type="button"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#EA4335",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                  }}
                   onClick={() => setSelectedFile(null)}
                 >
                   Remove
@@ -1522,8 +2582,28 @@ function BankTransferFlow({
             )}
 
             {uploadError && (
-              <div style={{ color: "#EA4335", fontSize: "12px", fontWeight: "600", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div
+                style={{
+                  color: "#EA4335",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  marginTop: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -1533,8 +2613,28 @@ function BankTransferFlow({
             )}
 
             {uploadSuccess && (
-              <div style={{ color: "#00FF9D", fontSize: "13px", fontWeight: "600", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div
+                style={{
+                  color: "#00FF9D",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  marginTop: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
                 {uploadSuccess}
@@ -1543,19 +2643,30 @@ function BankTransferFlow({
           </div>
 
           {/* Submit buttons */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <button 
-              type="button" 
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+          >
+            <button
+              type="button"
               className="bt-btn-primary"
-              disabled={!selectedFile || isUploading || !!uploadSuccess || isProofExpired}
+              disabled={
+                !selectedFile ||
+                isUploading ||
+                !!uploadSuccess ||
+                isProofExpired
+              }
               onClick={handleUploadSubmit}
               style={{ padding: "18px" }}
             >
-              {isProofExpired ? "Payment Window Expired" : isUploading ? "Uploading receipt..." : "Submit Payment Proof"}
+              {isProofExpired
+                ? "Payment Window Expired"
+                : isUploading
+                  ? "Uploading receipt..."
+                  : "Submit Payment Proof"}
             </button>
-            <button 
-              type="button" 
-              className="bt-btn-secondary" 
+            <button
+              type="button"
+              className="bt-btn-secondary"
               disabled={isUploading}
               onClick={uploadSuccess ? onClose : () => setStep(1)}
               style={{ padding: "18px" }}
@@ -1566,10 +2677,13 @@ function BankTransferFlow({
         </div>
       )}
 
-
-
       {showExpiredModal && (
-        <div className="modal-overlay" role="alertdialog" aria-modal="true" aria-labelledby="payment-expired-title">
+        <div
+          className="modal-overlay"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="payment-expired-title"
+        >
           <div className="modal-box">
             <div className="modal-icon-container" style={{ color: "#EA4335" }}>
               <svg
@@ -1589,12 +2703,19 @@ function BankTransferFlow({
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
             </div>
-            <h3 id="payment-expired-title" className="modal-title">Payment Time Expired</h3>
+            <h3 id="payment-expired-title" className="modal-title">
+              Payment Time Expired
+            </h3>
             <p className="modal-message">
-              The 15-minute window to upload your bank-transfer proof has ended. This order is expired and its reserved stock has been released.
+              The 15-minute window to upload your bank-transfer proof has ended.
+              This checkout is expired and its reserved stock has been released.
             </p>
             <div className="modal-buttons-container">
-              <button type="button" className="modal-primary-btn" onClick={onClose}>
+              <button
+                type="button"
+                className="modal-primary-btn"
+                onClick={onClose}
+              >
                 Go to Homepage
               </button>
             </div>
@@ -1603,7 +2724,12 @@ function BankTransferFlow({
       )}
 
       {showReceiptSubmittedModal && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="receipt-submitted-title">
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="receipt-submitted-title"
+        >
           <div className="modal-box">
             <div className="modal-icon-container" style={{ color: "#00FF9D" }}>
               <svg
@@ -1622,9 +2748,12 @@ function BankTransferFlow({
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
             </div>
-            <h3 id="receipt-submitted-title" className="modal-title">Receipt Submitted Successfully</h3>
+            <h3 id="receipt-submitted-title" className="modal-title">
+              Receipt Submitted Successfully
+            </h3>
             <p className="modal-message">
-              Your bank transfer receipt has been received and is now waiting for verification.
+              Your bank transfer receipt has been received and is now waiting
+              for verification.
               <span
                 style={{
                   display: "block",
@@ -1643,8 +2772,15 @@ function BankTransferFlow({
               >
                 Payment Status: {submittedPaymentStatus}
               </span>
-              <span style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.4)", display: "block", marginTop: "12px" }}>
-                Order Reference: <strong>#{orderId}</strong>
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "rgba(255, 255, 255, 0.4)",
+                  display: "block",
+                  marginTop: "12px",
+                }}
+              >
+                Pending Checkout Reference: <strong>#{orderId}</strong>
               </span>
             </p>
             <div className="modal-buttons-container">
@@ -1666,19 +2802,52 @@ function BankTransferFlow({
         <div className={`toast-notification toast-${toast.type}`}>
           <div className="toast-content">
             {toast.type === "success" && (
-              <svg className="toast-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                className="toast-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             )}
             {toast.type === "error" && (
-              <svg className="toast-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                className="toast-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
             )}
             {toast.type === "info" && (
-              <svg className="toast-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                className="toast-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="16" x2="12" y2="12" />
                 <line x1="12" y1="8" x2="12.01" y2="8" />

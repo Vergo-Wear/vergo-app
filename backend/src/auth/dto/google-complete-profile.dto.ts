@@ -25,7 +25,4 @@ export class GoogleCompleteProfileDto {
   @IsOptional()
   phone?: string;
 
-  @IsString()
-  @IsOptional()
-  defaultShippingAddress?: string;
 }

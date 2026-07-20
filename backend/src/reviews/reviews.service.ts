@@ -1,5 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SaveReviewDto } from './dto/save-review.dto';
 
@@ -10,7 +14,7 @@ export class ReviewsService {
   async findForProduct(productId: string) {
     const reviews = await this.prisma.review.findMany({
       where: { productId },
-      include: { customer: true },
+      include: { customer: true, images: true },
       orderBy: { createdAt: 'desc' },
     });
     return reviews.map((review) => ({
@@ -20,7 +24,7 @@ export class ReviewsService {
       reviewerName: `${review.customer.firstName} ${review.customer.lastName.charAt(0)}.`,
       comment: review.comment,
       date: review.createdAt.toISOString(),
-      images: Array.isArray(review.images) ? review.images : [],
+      images: review.images.map((image) => image.imageUrl),
       isVerified: true,
     }));
   }
@@ -30,23 +34,43 @@ export class ReviewsService {
       where: { profileId },
     });
     if (!customer) throw new NotFoundException('Customer profile not found.');
-    const review = await this.prisma.review.upsert({
-      where: {
-        productId_customerId: { productId, customerId: customer.customerId },
-      },
-      update: {
-        rating: dto.rating,
-        comment: dto.comment.trim(),
-        images: dto.images as Prisma.InputJsonValue,
-      },
-      create: {
-        productId,
-        customerId: customer.customerId,
-        rating: dto.rating,
-        comment: dto.comment.trim(),
-        images: dto.images as Prisma.InputJsonValue,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const purchased = await tx.orders.findFirst({
+        where: {
+          customerId: customer.customerId,
+          orderStatus: { in: ['Delivered', 'Completed'] },
+          orderItems: { some: { variant: { productId } } },
+        },
+        select: { orderId: true },
+      });
+      if (!purchased) {
+        throw new ForbiddenException(
+          'You can review this product after a purchased order is delivered.',
+        );
+      }
+      const existing = await tx.review.findUnique({
+        where: {
+          productId_customerId: { productId, customerId: customer.customerId },
+        },
+        select: { reviewId: true },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'You have already reviewed this product.',
+        );
+      }
+      return tx.review.create({
+        data: {
+          productId,
+          customerId: customer.customerId,
+          rating: dto.rating,
+          comment: dto.comment.trim(),
+          images: {
+            create: dto.images.map((imageUrl) => ({ imageUrl })),
+          },
+        },
+        include: { images: true },
+      });
     });
-    return review;
   }
 }

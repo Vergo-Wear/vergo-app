@@ -262,19 +262,47 @@ button.step-item:focus-visible {
 }
 
 .checkout-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
 }
 
 .checkout-actions .submit-btn {
-  flex: 1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   justify-content: center;
+}
+
+.shipping-payment-submit {
+  position: relative;
+}
+
+.shipping-payment-submit-sizer {
+  visibility: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shipping-payment-submit-label {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 .checkout-back-btn {
   min-height: 48px;
   padding: 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
@@ -284,20 +312,48 @@ button.step-item:focus-visible {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
 }
 
 .checkout-back-btn:hover,
 .checkout-back-btn:focus-visible {
   border-color: #00FF9D;
   color: #00FF9D;
+  background: rgba(0, 255, 157, 0.05);
   outline: none;
+}
+
+.checkout-back-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(0, 255, 157, 0.15);
+}
+
+.checkout-back-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  transition: transform 0.2s ease;
+}
+
+.checkout-back-btn:hover .checkout-back-icon,
+.checkout-back-btn:focus-visible .checkout-back-icon {
+  transform: translateX(-2px);
 }
 
 @media (max-width: 480px) {
   .checkout-actions {
-    flex-direction: column-reverse;
+    grid-template-columns: 1fr;
+  }
+
+  .checkout-actions .submit-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .checkout-back-btn {
+    grid-row: 2;
+    width: 100%;
   }
 }
 

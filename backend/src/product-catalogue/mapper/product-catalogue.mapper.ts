@@ -16,7 +16,7 @@ export const productWithRelations =
           inventory: {
             include: {
               stockReservations: {
-                where: { status: 'Active' },
+                where: { status: { in: ['Active', 'Pending Verification'] } },
                 select: { quantity: true },
               },
             },

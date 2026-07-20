@@ -27,7 +27,4 @@ export class CreateCustomerDto {
   @IsNotEmpty()
   email: string;
 
-  @IsString()
-  @IsOptional()
-  defaultShippingAddress?: string;
 }

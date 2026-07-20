@@ -1,6 +1,7 @@
 import Navbar from "@/components/Navbar/Navbar";
 import Footer from "@/components/Footer/Footer";
 import { CartProvider } from "@/context/CartContext";
+import { StoreRouteGuard } from "@/components/auth/RoleRouteGuard";
 
 export default function StoreLayout({
   children,
@@ -8,10 +9,12 @@ export default function StoreLayout({
   children: React.ReactNode;
 }) {
   return (
-    <CartProvider>
-      <Navbar />
-      <main className="flex-grow">{children}</main>
-      <Footer />
-    </CartProvider>
+    <StoreRouteGuard>
+      <CartProvider>
+        <Navbar />
+        <main className="flex-grow">{children}</main>
+        <Footer />
+      </CartProvider>
+    </StoreRouteGuard>
   );
 }

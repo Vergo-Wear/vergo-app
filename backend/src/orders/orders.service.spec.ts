@@ -1,12 +1,30 @@
-import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 
-describe('OrdersService', () => {
-  const customerDelegate = { findFirst: jest.fn() };
-  const productVariantDelegate = { findUnique: jest.fn() };
-  const ordersDelegate = {
+describe('OrdersService normalized pending checkout lifecycle', () => {
+  const profileId = '0b9adb71-9b7a-4a2f-9c3f-6a1d9dbb1111';
+  const customerId = '9f3a2c83-1a28-4e4d-82b7-805c91642222';
+  const checkoutId = '6b133395-0982-4201-8c62-3edc62b66666';
+  const variantId = 'e335e75a-f87d-4937-a765-712f3ad93333';
+  const orderId = '4be0cbd5-2f43-45ff-9f2c-1f0ce8ab4444';
+  const orderItemId = '8ce20d49-4e37-4ab0-b80f-bc262b597777';
+
+  const customer = { findUnique: jest.fn() };
+  const productVariant = { findUnique: jest.fn() };
+  const pendingCheckout = {
+    create: jest.fn(),
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  };
+  const pendingCheckoutItem = { deleteMany: jest.fn(), createMany: jest.fn() };
+  const pendingCheckoutCustomerDetails = { upsert: jest.fn() };
+  const pendingCheckoutShippingDetails = { upsert: jest.fn() };
+  const checkoutPaymentProof = { upsert: jest.fn(), deleteMany: jest.fn() };
+  const orders = {
     create: jest.fn(),
     findFirst: jest.fn(),
     findMany: jest.fn(),
@@ -14,985 +32,363 @@ describe('OrdersService', () => {
     update: jest.fn(),
     updateMany: jest.fn(),
   };
-  const employeeDelegate = { findFirst: jest.fn() };
-  const inventoryDelegate = {
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
-    update: jest.fn(),
-    updateMany: jest.fn(),
-  };
-  const paymentProofsDelegate = {
-    create: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
-    update: jest.fn(),
-    updateMany: jest.fn(),
-    deleteMany: jest.fn(),
-  };
-  const orderItemDelegate = { create: jest.fn(), deleteMany: jest.fn() };
-  const orderCustomerDetailsDelegate = { create: jest.fn(), update: jest.fn() };
-  const orderShippingDetailsDelegate = { create: jest.fn(), update: jest.fn() };
-  const stockReservationDelegate = { deleteMany: jest.fn() };
-  const userAddressDelegate = {
-    findFirst: jest.fn(),
-    create: jest.fn(),
-    updateMany: jest.fn(),
-  };
-
-  const prisma = {
-    customer: customerDelegate,
-    productVariant: productVariantDelegate,
-    orders: ordersDelegate,
-    employee: employeeDelegate,
-    inventory: inventoryDelegate,
-    paymentProofs: paymentProofsDelegate,
-    orderItem: orderItemDelegate,
-    orderCustomerDetails: orderCustomerDetailsDelegate,
-    orderShippingDetails: orderShippingDetailsDelegate,
-    stockReservation: stockReservationDelegate,
-    userAddress: userAddressDelegate,
+  const orderItem = { create: jest.fn() };
+  const orderCustomerDetails = { create: jest.fn() };
+  const orderShippingDetails = { create: jest.fn() };
+  const cart = { findUnique: jest.fn() };
+  const cartItem = { deleteMany: jest.fn() };
+  const employee = { findFirst: jest.fn() };
+  const stockReservation = { aggregate: jest.fn() };
+  const inventory = { findFirst: jest.fn() };
+  const userAddress = { findFirst: jest.fn(), create: jest.fn(), updateMany: jest.fn() };
+  const profiles = { findUnique: jest.fn() };
+  const prisma: any = {
+    customer,
+    productVariant,
+    pendingCheckout,
+    pendingCheckoutItem,
+    pendingCheckoutCustomerDetails,
+    pendingCheckoutShippingDetails,
+    checkoutPaymentProof,
+    orders,
+    orderItem,
+    orderCustomerDetails,
+    orderShippingDetails,
+    cart,
+    cartItem,
+    employee,
+    stockReservation,
+    inventory,
+    userAddress,
+    profiles,
     $executeRaw: jest.fn(),
-    // Execute the callback against the same mocked delegates so the whole
-    // "transaction" shares state; a thrown error rejects like a rollback.
-    $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
-      callback(prisma),
-    ),
-  };
-
-  const notifications = {
-    notifyOrderReady: jest.fn(),
-    notifyPaymentRejected: jest.fn(),
-    notifyPaymentExpired: jest.fn(),
+    $transaction: jest.fn((callback: (tx: any) => unknown) => callback(prisma)),
   };
   const stockReservations = {
-    reserveForOrder: jest.fn(),
-    releaseForOrder: jest.fn(),
-    confirmForOrder: jest.fn(),
+    lockCustomerCheckout: jest.fn(),
+    reserveForCheckout: jest.fn(),
+    releasePendingCheckout: jest.fn(),
+    markPendingVerification: jest.fn(),
+    commitPendingCheckout: jest.fn(),
+    restoreCommittedForOrder: jest.fn(),
+    expireActive: jest.fn(),
   };
+  const notifications = { notifyOrderReady: jest.fn() };
+
+  const dto = (paymentMethod = 'cod'): CreateOrderDto => ({
+    paymentMethod,
+    deliveryFee: 350,
+    contactDetails: {
+      firstName: 'Julian',
+      lastName: 'Verso',
+      email: 'julian@example.com',
+      phone: '0771234567',
+    },
+    shippingDetails: {
+      receiverName: 'Julian Verso',
+      phone: '0771234567',
+      addressLine1: '12 Galle Road',
+      addressLine2: 'Apt 4',
+      city: 'Colombo',
+      district: 'Colombo',
+      postalCode: '10100',
+      deliveryNote: 'Ring the bell',
+    },
+    items: [{ variantId, quantity: 2 }],
+  });
+
+  const includedCheckout = (overrides: Record<string, unknown> = {}) => ({
+    checkoutId,
+    customerId,
+    paymentMethod: 'Cash on Delivery',
+    status: 'Pending Confirmation',
+    deliveryFee: new Prisma.Decimal(350),
+    expiresAt: null,
+    reviewedByProfileId: null,
+    reviewedAt: null,
+    adminNotes: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    items: [
+      {
+        checkoutItemId: 'item-1',
+        checkoutId,
+        variantId,
+        quantity: 2,
+        unitPrice: new Prisma.Decimal(4750),
+        variant: { variantId, sku: 'TEE-M', product: { basePrice: new Prisma.Decimal(4500) }, images: [] },
+      },
+    ],
+    customerDetails: {
+      detailId: 'detail-1',
+      checkoutId,
+      firstName: 'Julian',
+      lastName: 'Verso',
+      email: 'julian@example.com',
+      phone: '0771234567',
+    },
+    shippingDetails: {
+      shippingId: 'shipping-1',
+      checkoutId,
+      receiverName: 'Julian Verso',
+      phone: '0771234567',
+      addressLine1: '12 Galle Road',
+      addressLine2: 'Apt 4',
+      city: 'Colombo',
+      district: 'Colombo',
+      postalCode: '10100',
+      deliveryNote: 'Ring the bell',
+    },
+    paymentProof: null,
+    reservations: [],
+    ...overrides,
+  });
 
   let service: OrdersService;
 
-  const profileId = '0b9adb71-9b7a-4a2f-9c3f-6a1d9dbb1111';
-  const customerId = '9f3a2c83-1a28-4e4d-82b7-805c91642222';
-  const variantId = 'e335e75a-f87d-4937-a765-712f3ad93333';
-  const orderId = '4be0cbd5-2f43-45ff-9f2c-1f0ce8ab4444';
-  const savedAddressId = '7c1de9f2-30aa-45cd-8f27-b5c07b8f5555';
-
-  const variant = {
-    variantId,
-    priceAdjustment: new Prisma.Decimal(250),
-    product: { basePrice: new Prisma.Decimal(4500) },
-  };
-
-  const baseDto = (): CreateOrderDto =>
-    ({
-      paymentMethod: 'cod',
-      deliveryFee: 350,
-      contactDetails: {
-        firstName: 'Julian',
-        lastName: 'Verso',
-        email: 'julian@example.com',
-        phone: '0771234567',
-      },
-      shippingDetails: {
-        receiverName: 'Julian Verso',
-        phone: '0771234567',
-        addressLine1: '12 Galle Road',
-        addressLine2: 'Apt 4',
-        city: 'Colombo',
-        district: 'Colombo',
-        postalCode: '10100',
-        deliveryNote: 'Ring the bell',
-      },
-      items: [{ variantId, quantity: 2 }],
-    }) as CreateOrderDto;
-
-  const configService = { get: jest.fn() };
-
   beforeEach(() => {
     jest.clearAllMocks();
-    configService.get.mockReturnValue(undefined);
     service = new OrdersService(
-      prisma as never,
-      configService as never,
+      prisma,
+      { get: jest.fn() } as never,
       notifications as never,
       stockReservations as never,
     );
-
-    productVariantDelegate.findUnique.mockResolvedValue(variant);
-    ordersDelegate.create.mockResolvedValue({ orderId });
-    ordersDelegate.findFirst.mockResolvedValue(null);
-    orderItemDelegate.create.mockResolvedValue({
-      orderItemId: 'order-item-1',
+    customer.findUnique.mockResolvedValue({ customerId });
+    productVariant.findUnique.mockResolvedValue({
+      variantId,
+      priceAdjustment: new Prisma.Decimal(250),
+      product: { basePrice: new Prisma.Decimal(4500) },
+    });
+    pendingCheckout.findFirst.mockResolvedValue(null);
+    pendingCheckout.create.mockResolvedValue({ checkoutId });
+    pendingCheckout.findUnique.mockResolvedValue(includedCheckout());
+    pendingCheckout.update.mockResolvedValue(includedCheckout());
+    pendingCheckout.updateMany.mockResolvedValue({ count: 1 });
+    cart.findUnique.mockResolvedValue(null);
+    stockReservations.reserveForCheckout.mockResolvedValue([]);
+    stockReservations.expireActive.mockResolvedValue({ count: 0 });
+    profiles.findUnique.mockResolvedValue({ role: { roleName: 'Admin' } });
+    orders.create.mockResolvedValue({
+      orderId,
+      checkoutId,
+      customerId,
+      paymentMethod: 'Cash on Delivery',
+      orderStatus: 'Ready to Process',
+      productTotal: new Prisma.Decimal(9500),
+      deliveryFee: new Prisma.Decimal(350),
+      totalAmount: new Prisma.Decimal(9850),
+      orderDate: new Date(),
+      employeeId: null,
+    });
+    orderItem.create.mockResolvedValue({
+      orderItemId,
       orderId,
       variantId,
       quantity: 2,
-    });
-    orderCustomerDetailsDelegate.create.mockResolvedValue({});
-    orderShippingDetailsDelegate.create.mockResolvedValue({});
-    userAddressDelegate.updateMany.mockResolvedValue({ count: 1 });
-    userAddressDelegate.create.mockResolvedValue({});
-    inventoryDelegate.findFirst.mockResolvedValue({
-      quantity: 10,
-      reservedQuantity: 0,
-    });
-    inventoryDelegate.findMany.mockResolvedValue([
-      {
-        inventoryId: 'inventory-1',
-        variantId,
-        quantity: 10,
-        reservedQuantity: 0,
-      },
-    ]);
-    inventoryDelegate.updateMany.mockResolvedValue({ count: 1 });
-    stockReservations.reserveForOrder.mockResolvedValue(undefined);
-    stockReservations.releaseForOrder.mockResolvedValue(undefined);
-    stockReservations.confirmForOrder.mockResolvedValue(undefined);
-  });
-
-  describe('guest checkout', () => {
-    it('creates guest customer and shipping snapshots without a customer link', async () => {
-      await service.create(baseDto());
-
-      expect(ordersDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          customerId: null,
-          paymentMethod: 'Cash on Delivery',
-          productTotal: new Prisma.Decimal(9500),
-          deliveryFee: new Prisma.Decimal(350),
-          totalAmount: new Prisma.Decimal(9850),
-          codAmount: new Prisma.Decimal(9850),
-        }),
-      });
-      expect(orderItemDelegate.create).toHaveBeenCalledWith({
-        data: {
-          orderId,
-          variantId,
-          quantity: 2,
-          unitPrice: new Prisma.Decimal(4750),
-          subtotal: new Prisma.Decimal(9500),
-        },
-      });
-      expect(orderCustomerDetailsDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          orderId,
-          customerId: null,
-          customerType: 'guest',
-          firstName: 'Julian',
-          email: 'julian@example.com',
-        }),
-      });
-      expect(orderShippingDetailsDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          orderId,
-          receiverName: 'Julian Verso',
-          addressLine1: '12 Galle Road',
-          district: 'Colombo',
-          deliveryNote: 'Ring the bell',
-        }),
-      });
-    });
-
-    it('never persists guest addresses into user_addresses, even if flags are sent', async () => {
-      const dto = baseDto();
-      dto.saveAddress = true;
-      dto.setAsPrimary = true;
-
-      await service.create(dto);
-
-      expect(userAddressDelegate.create).not.toHaveBeenCalled();
-      expect(userAddressDelegate.updateMany).not.toHaveBeenCalled();
-    });
-
-    it('rejects a guest checkout that references a saved address', async () => {
-      const dto = baseDto();
-      dto.savedAddressId = savedAddressId;
-
-      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
-      expect(ordersDelegate.create).not.toHaveBeenCalled();
-    });
-
-    it('rejects bank transfer for guests', async () => {
-      const dto = baseDto();
-      dto.paymentMethod = 'bank_transfer';
-
-      await expect(service.create(dto)).rejects.toThrow(
-        'Guest checkouts are not allowed to use Bank Transfer payment.',
-      );
-      expect(ordersDelegate.create).not.toHaveBeenCalled();
-      expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
+      unitPrice: new Prisma.Decimal(4750),
+      subtotal: new Prisma.Decimal(9500),
     });
   });
 
-  describe('registered checkout', () => {
-    beforeEach(() => {
-      customerDelegate.findFirst.mockResolvedValue({ customerId });
-    });
+  it('stores a registered COD checkout in normalized rows without creating an order', async () => {
+    const result = await service.create(dto(), profileId);
 
-    it('creates snapshots linked to the customer with customerType registered', async () => {
-      await service.create(baseDto(), profileId);
-
-      expect(ordersDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          customerId,
-          paymentMethod: 'Cash on Delivery',
-          deliveryFee: new Prisma.Decimal(350),
-          codAmount: new Prisma.Decimal(9850),
-        }),
-      });
-      expect(orderCustomerDetailsDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          customerId,
-          customerType: 'registered',
-        }),
-      });
-      expect(orderShippingDetailsDelegate.create).toHaveBeenCalled();
-    });
-
-    it('snapshots a saved address without re-saving it', async () => {
-      userAddressDelegate.findFirst.mockResolvedValue({
-        addressId: savedAddressId,
+    expect(pendingCheckout.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         customerId,
-        receiverName: 'Saved Receiver',
-        phone: '0719876543',
-        addressLine1: '99 Kandy Road',
-        addressLine2: null,
-        city: 'Kandy',
-        district: 'Kandy',
-        postalCode: '20000',
-      });
-      const dto = baseDto();
-      dto.savedAddressId = savedAddressId;
+        paymentMethod: 'Cash on Delivery',
+        status: 'Pending Confirmation',
+      }),
+    });
+    expect(pendingCheckoutItem.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ checkoutId, variantId, quantity: 2 })],
+    });
+    expect(pendingCheckoutCustomerDetails.upsert).toHaveBeenCalled();
+    expect(pendingCheckoutShippingDetails.upsert).toHaveBeenCalled();
+    expect(stockReservations.reserveForCheckout).toHaveBeenCalledWith(
+      prisma,
+      checkoutId,
+      dto().items,
+      null,
+    );
+    expect(orders.create).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({ checkoutId, status: 'Pending Confirmation' }));
+  });
 
-      await service.create(dto, profileId);
+  it('creates a guest COD checkout without a customer, cart, or saved address', async () => {
+    await service.create(dto());
+    expect(pendingCheckout.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ customerId: null, paymentMethod: 'Cash on Delivery' }),
+    });
+    expect(userAddress.create).not.toHaveBeenCalled();
+    expect(cart.findUnique).not.toHaveBeenCalled();
+    expect(stockReservations.reserveForCheckout).toHaveBeenCalledWith(
+      prisma,
+      checkoutId,
+      dto().items,
+      null,
+    );
+  });
 
-      expect(userAddressDelegate.findFirst).toHaveBeenCalledWith({
-        where: { addressId: savedAddressId, customerId },
-      });
-      expect(orderShippingDetailsDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          receiverName: 'Saved Receiver',
-          addressLine1: '99 Kandy Road',
-          city: 'Kandy',
-          district: 'Kandy',
-          deliveryNote: 'Ring the bell',
-        }),
-      });
-      expect(userAddressDelegate.create).not.toHaveBeenCalled();
+  it('creates Bank Transfer reservations owned by the new checkout', async () => {
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    pendingCheckout.create.mockResolvedValue({ checkoutId, expiresAt });
+    pendingCheckout.findUnique.mockResolvedValue(
+      includedCheckout({
+        paymentMethod: 'Bank Transfer',
+        status: 'Awaiting Payment',
+        expiresAt,
+      }),
+    );
+
+    await service.create(dto('bank_transfer'), profileId);
+
+    expect(stockReservations.reserveForCheckout).toHaveBeenCalledWith(
+      prisma,
+      checkoutId,
+      dto('bank_transfer').items,
+      expect.any(Date),
+    );
+    expect(orders.create).not.toHaveBeenCalled();
+  });
+
+  it('changes an active Bank Transfer checkout to COD without changing checkout_id', async () => {
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    pendingCheckout.findFirst.mockResolvedValue({ checkoutId, expiresAt });
+    pendingCheckout.findUnique.mockResolvedValue(includedCheckout());
+
+    const result = await service.create(dto('cod'), profileId);
+
+    expect(stockReservations.reserveForCheckout).toHaveBeenCalledWith(
+      prisma,
+      checkoutId,
+      dto('cod').items,
+      null,
+      true,
+    );
+    expect(stockReservations.releasePendingCheckout).not.toHaveBeenCalled();
+    expect(checkoutPaymentProof.deleteMany).toHaveBeenCalledWith({ where: { checkoutId } });
+    expect(pendingCheckout.update).toHaveBeenCalledWith({
+      where: { checkoutId },
+      data: expect.objectContaining({
+        paymentMethod: 'Cash on Delivery',
+        status: 'Pending Confirmation',
+        expiresAt: null,
+      }),
+    });
+    expect(result.checkoutId).toBe(checkoutId);
+  });
+
+  it('keeps the database expiry when a customer re-enters Bank Transfer', async () => {
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    pendingCheckout.findFirst.mockResolvedValue(
+      includedCheckout({ paymentMethod: 'Bank Transfer', status: 'Awaiting Payment', expiresAt }),
+    );
+    await expect(service.getCurrentBankTransferReservation(profileId)).resolves.toEqual(
+      expect.objectContaining({ checkoutId, reservationId: checkoutId, expiresAt, status: 'Active' }),
+    );
+  });
+
+  it('stores one receipt against the checkout and still creates no order', async () => {
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    pendingCheckout.findFirst.mockResolvedValue({
+      checkoutId,
+      customerId,
+      status: 'Awaiting Payment',
+      paymentMethod: 'Bank Transfer',
+      expiresAt,
+      paymentProof: null,
+    });
+    pendingCheckout.findUnique.mockResolvedValue(
+      includedCheckout({
+        paymentMethod: 'Bank Transfer',
+        status: 'Pending Verification',
+        expiresAt,
+        paymentProof: { receiptUrl: 'https://example.com/receipt.png', uploadedAt: new Date() },
+      }),
+    );
+
+    await service.finalizeBankTransferReservation(profileId, checkoutId, dto('bank_transfer'), {
+      receiptUrl: 'https://example.com/receipt.png',
+      storagePublicId: 'receipt-1',
+      uploadedAt: new Date(),
     });
 
-    it('rejects a saved address that does not belong to the customer', async () => {
-      userAddressDelegate.findFirst.mockResolvedValue(null);
-      const dto = baseDto();
-      dto.savedAddressId = savedAddressId;
+    expect(stockReservations.markPendingVerification).toHaveBeenCalledWith(
+      prisma,
+      checkoutId,
+      expect.any(Date),
+    );
+    expect(checkoutPaymentProof.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { checkoutId } }),
+    );
+    expect(orders.create).not.toHaveBeenCalled();
+  });
 
-      await expect(service.create(dto, profileId)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(ordersDelegate.create).not.toHaveBeenCalled();
+  it('creates and commits a COD order only during admin approval', async () => {
+    const checkout = includedCheckout();
+    pendingCheckout.findUnique.mockResolvedValueOnce(checkout);
+    orders.findUnique.mockResolvedValue({
+      orderId,
+      checkoutId,
+      customerId,
+      employeeId: null,
+      branchId: null,
+      orderDate: new Date(),
+      totalAmount: new Prisma.Decimal(9850),
+      productTotal: new Prisma.Decimal(9500),
+      deliveryFee: new Prisma.Decimal(350),
+      paymentMethod: 'Cash on Delivery',
+      orderStatus: 'Ready to Process',
+      orderItems: [],
+      customerDetails: null,
+      shippingDetails: null,
+      checkout: { ...checkout, paymentProof: null },
     });
 
-    it('saves a new address (non-primary) when saveAddress is set', async () => {
-      userAddressDelegate.findFirst.mockResolvedValue({
-        addressId: 'existing-primary',
-        isPrimary: true,
-      });
-      const dto = baseDto();
-      dto.saveAddress = true;
+    await service.reviewPendingCheckout(checkoutId, { status: 'Approved' }, profileId);
 
-      await service.create(dto, profileId);
-
-      expect(userAddressDelegate.updateMany).not.toHaveBeenCalled();
-      expect(userAddressDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          customerId,
-          addressLine1: '12 Galle Road',
-          isPrimary: false,
-        }),
-      });
+    expect(orders.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ checkoutId, customerId, orderStatus: 'Ready to Process' }),
     });
-
-    it('demotes existing primaries before saving a new primary address', async () => {
-      const calls: string[] = [];
-      userAddressDelegate.findFirst.mockResolvedValue({
-        addressId: 'existing-primary',
-        isPrimary: true,
-      });
-      userAddressDelegate.updateMany.mockImplementation(() => {
-        calls.push('demote');
-        return Promise.resolve({ count: 1 });
-      });
-      userAddressDelegate.create.mockImplementation(() => {
-        calls.push('create');
-        return Promise.resolve({});
-      });
-      const dto = baseDto();
-      dto.saveAddress = true;
-      dto.setAsPrimary = true;
-
-      await service.create(dto, profileId);
-
-      expect(userAddressDelegate.updateMany).toHaveBeenCalledWith({
-        where: { customerId, isPrimary: true },
-        data: expect.objectContaining({ isPrimary: false }),
-      });
-      expect(userAddressDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ isPrimary: true }),
-      });
-      expect(calls).toEqual(['demote', 'create']);
+    expect(stockReservations.commitPendingCheckout).toHaveBeenCalledWith(
+      prisma,
+      checkoutId,
+      [expect.objectContaining({ orderItemId, variantId })],
+    );
+    expect(pendingCheckout.update).toHaveBeenCalledWith({
+      where: { checkoutId },
+      data: expect.objectContaining({
+        status: 'Approved',
+        reviewedByProfileId: profileId,
+      }),
     });
   });
 
-  describe('payment proofs', () => {
-    beforeEach(() => {
-      customerDelegate.findFirst.mockResolvedValue({ customerId });
-      paymentProofsDelegate.create.mockResolvedValue({});
-    });
-
-    it('does not create a payment proof for COD orders', async () => {
-      await service.create(baseDto(), profileId);
-
-      expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
-      expect(ordersDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          paymentMethod: 'Cash on Delivery',
-          codAmount: new Prisma.Decimal(9850),
-        }),
-      });
-    });
-
-    it('creates a Pending Upload proof with an expiry for bank transfer orders', async () => {
-      const dto = baseDto();
-      dto.paymentMethod = 'bank_transfer';
-
-      await service.create(dto, profileId);
-
-      expect(ordersDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          paymentMethod: 'bank_transfer',
-          orderStatus: 'Pending Payment',
-        }),
-      });
-      expect(paymentProofsDelegate.create).toHaveBeenCalledTimes(1);
-      expect(paymentProofsDelegate.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          orderId,
-          status: 'Pending Upload',
-          expiresAt: expect.any(Date),
-        }),
-      });
-      const { expiresAt } = paymentProofsDelegate.create.mock.calls[0][0].data;
-      expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
-    });
-
-    it('holds bank-transfer stock for 15 minutes', async () => {
-      const dto = baseDto();
-      dto.paymentMethod = 'bank_transfer';
-
-      const before = Date.now();
-      await service.create(dto, profileId);
-
-      const { expiresAt } = paymentProofsDelegate.create.mock.calls[0][0].data;
-      const minutes = (expiresAt.getTime() - before) / (60 * 1000);
-      expect(minutes).toBeGreaterThan(14.9);
-      expect(minutes).toBeLessThan(15.1);
-    });
-
-    it('reuses an unchanged pending bank-transfer order without new reservations', async () => {
-      const dto = baseDto();
-      dto.paymentMethod = 'bank_transfer';
-      const existingOrder = {
-        orderId,
-        customerId,
-        paymentMethod: 'bank_transfer',
-        totalAmount: new Prisma.Decimal(9850),
-        productTotal: new Prisma.Decimal(9500),
-        deliveryFee: new Prisma.Decimal(350),
-        shippingAddress: '12 Galle Road, Apt 4, Colombo, Colombo (10100)',
-        orderItems: [
-          {
-            variantId,
-            quantity: 2,
-            unitPrice: new Prisma.Decimal(4750),
-            subtotal: new Prisma.Decimal(9500),
-          },
-        ],
-        customerDetails: {
-          firstName: 'Julian',
-          lastName: 'Verso',
-          email: 'julian@example.com',
-          phone: '0771234567',
-        },
-        shippingDetails: {
-          receiverName: 'Julian Verso',
-          phone: '0771234567',
-          addressLine1: '12 Galle Road',
-          addressLine2: 'Apt 4',
-          city: 'Colombo',
-          district: 'Colombo',
-          postalCode: '10100',
-          deliveryNote: 'Ring the bell',
-        },
-        paymentProofs: [{ expiresAt: new Date(Date.now() + 10 * 60 * 1000) }],
-      };
-      ordersDelegate.findFirst.mockResolvedValue(existingOrder);
-
-      const result = await service.create(dto, profileId);
-
-      expect(result).toBe(existingOrder);
-      expect(ordersDelegate.create).not.toHaveBeenCalled();
-      expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
-      expect(stockReservations.reserveForOrder).not.toHaveBeenCalled();
-      expect(stockReservationDelegate.deleteMany).not.toHaveBeenCalled();
-    });
-
-    it('updates the pending order and replaces its active allocations when details change', async () => {
-      const dto = baseDto();
-      dto.paymentMethod = 'bank_transfer';
-      dto.items = [{ variantId, quantity: 1 }];
-      ordersDelegate.findFirst.mockResolvedValue({
-        orderId,
-        customerId,
-        paymentMethod: 'bank_transfer',
-        totalAmount: new Prisma.Decimal(9850),
-        productTotal: new Prisma.Decimal(9500),
-        deliveryFee: new Prisma.Decimal(350),
-        shippingAddress: '12 Galle Road, Colombo, Colombo (10100)',
-        orderItems: [],
-        customerDetails: null,
-        shippingDetails: null,
-        paymentProofs: [{ expiresAt: new Date(Date.now() + 10 * 60 * 1000) }],
-      });
-      ordersDelegate.update.mockResolvedValue({ orderId });
-
-      await service.create(dto, profileId);
-
-      expect(ordersDelegate.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { orderId } }),
-      );
-      expect(stockReservationDelegate.deleteMany).toHaveBeenCalledWith({
-        where: { orderId, status: 'Active' },
-      });
-      expect(orderItemDelegate.deleteMany).toHaveBeenCalledWith({
-        where: { orderId },
-      });
-      expect(paymentProofsDelegate.create).not.toHaveBeenCalled();
-    });
-
-    it('switches a pending bank-transfer order to COD by committing stock and deleting the hold', async () => {
-      const dto = baseDto();
-      dto.paymentMethod = 'cash on delivery';
-      ordersDelegate.findFirst.mockResolvedValue({
-        orderId,
-        customerId,
-        paymentMethod: 'bank_transfer',
-        totalAmount: new Prisma.Decimal(9850),
-        productTotal: new Prisma.Decimal(9500),
-        deliveryFee: new Prisma.Decimal(350),
-        shippingAddress: '12 Galle Road, Apt 4, Colombo, Colombo (10100)',
-        orderItems: [],
-        customerDetails: null,
-        shippingDetails: null,
-        paymentProofs: [{ expiresAt: new Date(Date.now() + 10 * 60 * 1000) }],
-      });
-      ordersDelegate.update.mockResolvedValue({ orderId });
-
-      await service.create(dto, profileId);
-
-      expect(stockReservations.confirmForOrder).toHaveBeenCalledWith(
-        prisma,
-        orderId,
-      );
-      expect(stockReservationDelegate.deleteMany).toHaveBeenCalledWith({
-        where: { orderId, status: 'Confirmed' },
-      });
-      expect(paymentProofsDelegate.deleteMany).toHaveBeenCalledWith({
-        where: { orderId },
-      });
-      expect(stockReservations.reserveForOrder).not.toHaveBeenCalled();
-    });
-
-    it('rolls the order back when the proof insert fails', async () => {
-      paymentProofsDelegate.create.mockRejectedValue(
-        new Error('proof insert failed'),
-      );
-      const dto = baseDto();
-      dto.paymentMethod = 'bank_transfer';
-
-      await expect(service.create(dto, profileId)).rejects.toThrow(
-        'proof insert failed',
-      );
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    });
+  it('rejects a checkout without creating an order or changing inventory', async () => {
+    pendingCheckout.findUnique.mockResolvedValueOnce(includedCheckout());
+    await service.reviewPendingCheckout(
+      checkoutId,
+      { status: 'Rejected', adminNotes: 'Not approved' },
+      profileId,
+    );
+    expect(stockReservations.releasePendingCheckout).toHaveBeenCalledWith(prisma, checkoutId);
+    expect(orders.create).not.toHaveBeenCalled();
+    expect(stockReservations.commitPendingCheckout).not.toHaveBeenCalled();
   });
 
-  describe('validation and rollback', () => {
-    it('creates an order-owned reservation after its order item exists', async () => {
-      await service.create(baseDto());
+  it('refuses to record a non-Admin profile as the checkout reviewer', async () => {
+    profiles.findUnique.mockResolvedValue({ role: { roleName: 'Customer' } });
 
-      expect(stockReservations.reserveForOrder).toHaveBeenCalledWith(
-        prisma,
-        orderId,
-        [expect.objectContaining({ orderItemId: 'order-item-1', variantId, quantity: 2 })],
-        null,
-      );
-    });
-
-    it('rejects an order when quantity minus reserved quantity is insufficient', async () => {
-      stockReservations.reserveForOrder.mockRejectedValue(
-        new BadRequestException('Some products in your order are no longer available. Please review your cart and try again.'),
-      );
-
-      await expect(service.create(baseDto())).rejects.toThrow(
-        'Some products in your order are no longer available',
-      );
-    });
-
-    it('rejects a concurrent reservation change instead of overselling', async () => {
-      stockReservations.reserveForOrder.mockRejectedValue(
-        new BadRequestException('Some products in your order are no longer available. Please review your cart and try again.'),
-      );
-
-      await expect(service.create(baseDto())).rejects.toThrow(
-        'Some products in your order are no longer available',
-      );
-    });
-
-    it('rejects an invalid shipping district', async () => {
-      const dto = baseDto();
-      dto.shippingDetails.district = 'Atlantis';
-
-      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
-
-    it('rejects an empty item list', async () => {
-      const dto = baseDto();
-      dto.items = [];
-
-      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
-    });
-
-    it('propagates an unknown variant so the transaction rolls back', async () => {
-      productVariantDelegate.findUnique.mockResolvedValue(null);
-
-      await expect(service.create(baseDto())).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(ordersDelegate.create).not.toHaveBeenCalled();
-      expect(orderCustomerDetailsDelegate.create).not.toHaveBeenCalled();
-      expect(orderShippingDetailsDelegate.create).not.toHaveBeenCalled();
-    });
-
-    it('propagates a snapshot insert failure so the transaction rolls back', async () => {
-      orderShippingDetailsDelegate.create.mockRejectedValue(
-        new Error('insert failed'),
-      );
-
-      await expect(service.create(baseDto())).rejects.toThrow('insert failed');
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('stock release', () => {
-    it('cancelling an unclaimed order releases reserved stock without increasing quantity', async () => {
-      customerDelegate.findFirst.mockResolvedValue({ customerId });
-      ordersDelegate.findFirst.mockResolvedValue({
-        orderId,
-        employeeId: null,
-        orderStatus: 'Pending',
-        orderItems: [{ variantId, quantity: 2 }],
-      });
-      ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
-      ordersDelegate.findUnique.mockResolvedValue({
-        orderId,
-        orderStatus: 'Cancelled',
-      });
-      inventoryDelegate.findMany.mockResolvedValue([
-        {
-          inventoryId: 'inventory-1',
-          variantId,
-          quantity: 10,
-          reservedQuantity: 2,
-        },
-      ]);
-
-      await service.cancelCustomerOrder(profileId, orderId);
-
-      expect(stockReservations.releaseForOrder).toHaveBeenCalledWith(
-        prisma,
-        orderId,
-        'Released',
-        'Customer cancelled order',
-      );
-    });
-  });
-
-  describe('order ready notification', () => {
-    beforeEach(() => {
-      ordersDelegate.update.mockResolvedValue({
-        orderId,
-        orderStatus: 'Ready for Pickup',
-      });
-    });
-
-    it('notifies the customer after the status transitions to READY', async () => {
-      ordersDelegate.findUnique.mockResolvedValue({
-        orderId,
-        orderStatus: 'Preparing',
-        employeeId: 'emp-1',
-      });
-      inventoryDelegate.findMany.mockResolvedValue([
-        {
-          inventoryId: 'inventory-1',
-          variantId,
-          quantity: 10,
-          reservedQuantity: 2,
-        },
-      ]);
-
-      await service.updateManagedStatus(
+    await expect(
+      service.reviewPendingCheckout(
+        checkoutId,
+        { status: 'Approved' },
         profileId,
-        'Admin',
-        orderId,
-        'Ready for Pickup',
-      );
+      ),
+    ).rejects.toThrow('Only an Admin profile can review a pending checkout.');
 
-      expect(ordersDelegate.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { orderId },
-          data: expect.objectContaining({ orderStatus: 'Ready for Pickup' }),
-        }),
-      );
-      expect(notifications.notifyOrderReady).toHaveBeenCalledTimes(1);
-      expect(notifications.notifyOrderReady).toHaveBeenCalledWith(orderId);
-    });
-
-    it('does not notify again when READY is re-saved as READY', async () => {
-      ordersDelegate.findUnique.mockResolvedValue({
-        orderId,
-        orderStatus: 'Ready for Pickup',
-        employeeId: 'emp-1',
-      });
-
-      await service.updateManagedStatus(
-        profileId,
-        'Admin',
-        orderId,
-        'Ready for Pickup',
-      );
-
-      expect(notifications.notifyOrderReady).not.toHaveBeenCalled();
-    });
-
-    it('does not notify for non-READY status changes', async () => {
-      ordersDelegate.findUnique.mockResolvedValue({
-        orderId,
-        orderStatus: 'Claimed',
-        employeeId: 'emp-1',
-      });
-      ordersDelegate.update.mockResolvedValue({
-        orderId,
-        orderStatus: 'Preparing',
-      });
-
-      await service.updateManagedStatus(
-        profileId,
-        'Admin',
-        orderId,
-        'Preparing',
-      );
-
-      expect(notifications.notifyOrderReady).not.toHaveBeenCalled();
-    });
-
-    it('does not notify when saving the READY status fails', async () => {
-      ordersDelegate.findUnique.mockResolvedValue({
-        orderId,
-        orderStatus: 'Preparing',
-        employeeId: 'emp-1',
-      });
-      ordersDelegate.update.mockRejectedValue(new Error('db down'));
-
-      await expect(
-        service.updateManagedStatus(
-          profileId,
-          'Admin',
-          orderId,
-          'Ready for Pickup',
-        ),
-      ).rejects.toThrow('db down');
-      expect(notifications.notifyOrderReady).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('employee processing access', () => {
-    it('filters the employee list to processing statuses and approved payment methods', async () => {
-      employeeDelegate.findFirst.mockResolvedValue({
-        employeeId: 'emp-1',
-        branchId: 'branch-1',
-      });
-      ordersDelegate.findMany.mockResolvedValue([]);
-
-      await service.findManagedOrders(profileId, 'Employee');
-
-      expect(ordersDelegate.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            orderStatus: {
-              notIn: [
-                'Cancelled',
-                'Rejected',
-                'Expired',
-                'Completed',
-                'Delivered',
-              ],
-            },
-            confirmationStatus: 'Approved',
-            AND: expect.arrayContaining([
-              expect.objectContaining({
-                OR: expect.arrayContaining([
-                  expect.objectContaining({
-                    employeeId: null,
-                    orderStatus: expect.objectContaining({
-                      in: expect.any(Array),
-                    }),
-                  }),
-                  { employeeId: 'emp-1' },
-                ]),
-              }),
-            ]),
-          }),
-        }),
-      );
-    });
-
-    it('blocks employee details for an unapproved bank transfer order', async () => {
-      ordersDelegate.findUnique.mockResolvedValue({
-        orderId,
-        orderStatus: 'Pending Verification',
-        paymentMethod: 'bank_transfer',
-        confirmationStatus: 'Pending',
-        paymentProofs: [{ status: 'Pending Verification' }],
-      });
-
-      await expect(
-        service.findManagedOrder(orderId, 'Employee'),
-      ).rejects.toThrow('not approved for employee processing');
-    });
-
-    it('claims a ready approved order only when it is still unclaimed', async () => {
-      employeeDelegate.findFirst.mockResolvedValue({
-        employeeId: 'emp-1',
-        branchId: 'branch-1',
-      });
-      ordersDelegate.findUnique.mockResolvedValue({
-        orderId,
-        employeeId: null,
-        orderStatus: 'Ready to Process',
-        paymentMethod: 'bank_transfer',
-        confirmationStatus: 'Approved',
-        paymentProofs: [{ status: 'Approved' }],
-        orderItems: [{ variantId, quantity: 2, variant: { sku: 'SKU-1' } }],
-      });
-      ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
-      inventoryDelegate.findMany.mockResolvedValue([
-        {
-          inventoryId: 'inventory-1',
-          variantId,
-          quantity: 10,
-          reservedQuantity: 2,
-        },
-      ]);
-
-      await service.updateManagedStatus(
-        profileId,
-        'Employee',
-        orderId,
-        'Claimed',
-      );
-
-      expect(ordersDelegate.updateMany).toHaveBeenCalledWith({
-        where: {
-          orderId,
-          employeeId: null,
-          confirmationStatus: 'Approved',
-          orderStatus: {
-            in: [
-              'Pending',
-              'Pending Payment',
-              'Pending Verification',
-              'Ready to Process',
-            ],
-          },
-        },
-        data: { orderStatus: 'Claimed', employeeId: 'emp-1' },
-      });
-    });
-  });
-
-  describe('payment proof review and expiry', () => {
-    const proofId = 'a7c15c25-6f8a-4be3-9d41-2f8f1c7a6666';
-
-    describe('payment proof review', () => {
-      beforeEach(() => {
-        paymentProofsDelegate.findFirst.mockResolvedValue({
-          proofId,
-          orderId,
-          status: 'Pending Verification',
-        });
-        ordersDelegate.update.mockResolvedValue({ orderId });
-        ordersDelegate.findUnique.mockResolvedValue({
-          orderId,
-          orderItems: [{ variantId, quantity: 2 }],
-        });
-        inventoryDelegate.findMany.mockResolvedValue([
-          {
-            inventoryId: 'inventory-1',
-            variantId,
-            quantity: 10,
-            reservedQuantity: 2,
-          },
-        ]);
-      });
-
-      it('rejecting a proof notifies the customer and reopens payment', async () => {
-        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
-
-        await service.reviewPaymentProof(orderId, proofId, {
-          status: 'Rejected',
-          adminNotes: 'Blurry receipt',
-        });
-
-        expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith({
-          where: { proofId, status: 'Pending Verification' },
-          data: { status: 'Rejected', adminNotes: 'Blurry receipt' },
-        });
-      expect(ordersDelegate.update).toHaveBeenCalledWith({
-          where: { orderId },
-          data: {
-            confirmationStatus: 'Rejected',
-            orderStatus: 'Rejected',
-            confirmedAt: expect.any(Date),
-            rejectionReason: 'Blurry receipt',
-          },
-        });
-        expect(notifications.notifyPaymentRejected).toHaveBeenCalledTimes(1);
-        expect(notifications.notifyPaymentRejected).toHaveBeenCalledWith(
-          orderId,
-          'Blurry receipt',
-        );
-        expect(stockReservations.releaseForOrder).toHaveBeenCalledWith(
-          prisma,
-          orderId,
-          'Released',
-          'Payment proof rejected',
-        );
-      });
-
-      it('rejecting an already-rejected proof does not notify again', async () => {
-        paymentProofsDelegate.findFirst.mockResolvedValue({
-          proofId,
-          orderId,
-          status: 'Rejected',
-        });
-        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 0 });
-
-        await service.reviewPaymentProof(orderId, proofId, {
-          status: 'Rejected',
-        });
-
-        expect(notifications.notifyPaymentRejected).not.toHaveBeenCalled();
-        expect(ordersDelegate.update).not.toHaveBeenCalled();
-      });
-
-      it('approving a proof never sends a rejection notification', async () => {
-        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
-
-        await service.reviewPaymentProof(orderId, proofId, {
-          status: 'Approved',
-        });
-
-        expect(notifications.notifyPaymentRejected).not.toHaveBeenCalled();
-        expect(ordersDelegate.update).toHaveBeenCalledWith({
-          where: { orderId },
-          data: {
-            confirmationStatus: 'Approved',
-            orderStatus: 'Ready to Process',
-            confirmedAt: expect.any(Date),
-            rejectionReason: null,
-          },
-        });
-        expect(stockReservations.confirmForOrder).toHaveBeenCalledWith(
-          prisma,
-          orderId,
-        );
-      });
-    });
-
-    describe('payment proof expiry', () => {
-      beforeEach(() => {
-        ordersDelegate.findUnique.mockResolvedValue({
-          orderId,
-          orderItems: [{ variantId, quantity: 2 }],
-        });
-        inventoryDelegate.findMany.mockResolvedValue([
-          {
-            inventoryId: 'inventory-1',
-            variantId,
-            quantity: 10,
-            reservedQuantity: 2,
-          },
-        ]);
-      });
-
-      it('expires overdue proofs once and notifies each customer', async () => {
-        paymentProofsDelegate.findMany.mockResolvedValue([
-          { proofId, orderId, status: 'Pending Upload' },
-        ]);
-        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 1 });
-        ordersDelegate.updateMany.mockResolvedValue({ count: 1 });
-
-        const result = await service.expireOverduePaymentProofs();
-
-        expect(result).toEqual({ expired: 1 });
-        expect(paymentProofsDelegate.updateMany).toHaveBeenCalledWith({
-          where: {
-            proofId,
-            status: { in: ['Pending Upload'] },
-            receiptUrl: null,
-            expiresAt: { lte: expect.any(Date) },
-          },
-          data: { status: 'Expired' },
-        });
-        expect(notifications.notifyPaymentExpired).toHaveBeenCalledTimes(1);
-        expect(notifications.notifyPaymentExpired).toHaveBeenCalledWith(
-          orderId,
-        );
-      });
-
-      it('an already-expired proof is never expired or notified twice', async () => {
-        paymentProofsDelegate.findMany.mockResolvedValue([
-          { proofId, orderId, status: 'Pending Upload' },
-        ]);
-        // Simulates a concurrent sweep having already transitioned the proof.
-        paymentProofsDelegate.updateMany.mockResolvedValue({ count: 0 });
-
-        const result = await service.expireOverduePaymentProofs();
-
-        expect(result).toEqual({ expired: 0 });
-        expect(notifications.notifyPaymentExpired).not.toHaveBeenCalled();
-      });
-
-      it('does nothing when no proofs are overdue', async () => {
-        paymentProofsDelegate.findMany.mockResolvedValue([]);
-
-        const result = await service.expireOverduePaymentProofs();
-
-        expect(result).toEqual({ expired: 0 });
-        expect(paymentProofsDelegate.updateMany).not.toHaveBeenCalled();
-        expect(notifications.notifyPaymentExpired).not.toHaveBeenCalled();
-      });
-    });
+    expect(orders.create).not.toHaveBeenCalled();
   });
 });

@@ -59,7 +59,6 @@ export class CustomersService {
         lastName: dto.lastName,
         phone: dto.phone,
         email: dto.email,
-        defaultShippingAddress: dto.defaultShippingAddress,
       },
     });
 
@@ -125,9 +124,6 @@ export class CustomersService {
         ...(dto.lastName !== undefined && { lastName: dto.lastName }),
         ...(dto.phone !== undefined && { phone: dto.phone }),
         ...(dto.email !== undefined && { email: dto.email }),
-        ...(dto.defaultShippingAddress !== undefined && {
-          defaultShippingAddress: dto.defaultShippingAddress,
-        }),
       },
     });
 

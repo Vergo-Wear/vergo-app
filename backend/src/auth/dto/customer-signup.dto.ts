@@ -43,7 +43,4 @@ export class CustomerSignupDto {
   })
   mobileNumber?: string;
 
-  @IsString()
-  @IsOptional()
-  defaultShippingAddress?: string;
 }

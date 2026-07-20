@@ -14,7 +14,9 @@ const CATALOGUE_INCLUDE = {
       inventory: {
         include: {
           stockReservations: {
-            where: { status: 'Active' },
+            where: {
+              status: { in: ['Active', 'Pending Verification'] as string[] },
+            },
             select: { quantity: true },
           },
         },

@@ -3,10 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useCart } from "@/context/CartContext";
 
 export default function CartPage() {
   const router = useRouter();
+  const [isCheckingCheckout, setIsCheckingCheckout] = useState(false);
   const {
     cart,
     updateQuantity,
@@ -16,8 +18,45 @@ export default function CartPage() {
     formatLkr,
   } = useCart();
 
-  const handleCheckout = () => {
-    // Proceed to checkout logic (can navigate to checkout page or alert for now)
+  const handleCheckout = async () => {
+    if (isCheckingCheckout) return;
+    setIsCheckingCheckout(true);
+
+    const token = sessionStorage.getItem("vergo_access_token");
+    const isCustomer =
+      sessionStorage.getItem("vergo_is_logged_in") === "true" && Boolean(token);
+    if (isCustomer && token) {
+      try {
+        const apiUrl =
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+        const response = await fetch(
+          `${apiUrl}/orders/bank-transfer/reservations/current`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        const body = await response.text();
+        const current = body.trim()
+          ? (JSON.parse(body) as {
+              reservationId?: string | null;
+              expiresAt?: string | null;
+            })
+          : null;
+        if (
+          response.ok &&
+          current?.reservationId &&
+          current.expiresAt &&
+          new Date(current.expiresAt).getTime() > Date.now()
+        ) {
+          router.push("/checkout/payment");
+          return;
+        }
+      } catch (error) {
+        console.warn(
+          "Unable to check the active Bank Transfer checkout.",
+          error,
+        );
+      }
+    }
+
     router.push("/checkout");
   };
 
@@ -26,7 +65,9 @@ export default function CartPage() {
       <div className="cart-page-container">
         {/* Breadcrumbs */}
         <nav className="cart-breadcrumbs" aria-label="Breadcrumb">
-          <Link href="/" className="cart-breadcrumb-link">HOME</Link>
+          <Link href="/" className="cart-breadcrumb-link">
+            HOME
+          </Link>
           <span className="cart-breadcrumb-separator">›</span>
           <span className="cart-breadcrumb-current">YOUR CART</span>
         </nav>
@@ -58,7 +99,8 @@ export default function CartPage() {
             </svg>
             <h2 className="empty-cart-title">Your Cart is Empty</h2>
             <p className="empty-cart-message">
-              Looks like you haven't added anything to your cart yet. Explore our latest collections to find your perfect fit.
+              Looks like you haven't added anything to your cart yet. Explore
+              our latest collections to find your perfect fit.
             </p>
             <Link href="/collection" className="empty-cart-btn">
               Explore Collection
@@ -114,14 +156,16 @@ export default function CartPage() {
                                 item.product.id,
                                 item.size,
                                 item.quantity - 1,
-                                item.color
+                                item.color,
                               )
                             }
                             aria-label="Decrease quantity"
                           >
                             -
                           </button>
-                          <span className="quantity-value">{item.quantity}</span>
+                          <span className="quantity-value">
+                            {item.quantity}
+                          </span>
                           <button
                             type="button"
                             className="quantity-btn"
@@ -130,7 +174,7 @@ export default function CartPage() {
                                 item.product.id,
                                 item.size,
                                 item.quantity + 1,
-                                item.color
+                                item.color,
                               )
                             }
                             aria-label="Increase quantity"
@@ -151,7 +195,9 @@ export default function CartPage() {
                   <button
                     type="button"
                     className="cart-item-remove-btn"
-                    onClick={() => removeFromCart(item.product.id, item.size, item.color)}
+                    onClick={() =>
+                      removeFromCart(item.product.id, item.size, item.color)
+                    }
                     aria-label="Remove item"
                   >
                     <svg
@@ -181,14 +227,18 @@ export default function CartPage() {
 
                 <div className="summary-row">
                   <span className="summary-label">SUBTOTAL</span>
-                  <span className="summary-value">{formatLkr(cartSubtotal)}</span>
+                  <span className="summary-value">
+                    {formatLkr(cartSubtotal)}
+                  </span>
                 </div>
 
                 <div className="summary-row">
                   <span className="summary-label">
                     DELIVERY <span className="delivery-badge">CITYPAK</span>
                   </span>
-                  <span className="summary-value calculated-next">Calculated next</span>
+                  <span className="summary-value calculated-next">
+                    Calculated next
+                  </span>
                 </div>
 
                 <div className="summary-row">
@@ -207,8 +257,11 @@ export default function CartPage() {
                   type="button"
                   onClick={handleCheckout}
                   className="checkout-btn"
+                  disabled={isCheckingCheckout}
                 >
-                  PROCEED TO CHECKOUT
+                  {isCheckingCheckout
+                    ? "CHECKING CHECKOUT..."
+                    : "PROCEED TO CHECKOUT"}
                 </button>
 
                 {/* Payment Options Icons */}

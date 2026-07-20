@@ -17,7 +17,4 @@ export class UpdateCustomerDto {
   @IsOptional()
   email?: string;
 
-  @IsString()
-  @IsOptional()
-  defaultShippingAddress?: string;
 }

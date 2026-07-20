@@ -57,7 +57,7 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { customerId },
+          where: { order: { customerId } },
           orderBy: { createdAt: 'desc' },
         }),
       );
@@ -70,7 +70,7 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { notificationId, customerId },
+          where: { notificationId, order: { customerId } },
         }),
       );
     });
@@ -103,7 +103,7 @@ describe('NotificationsService', () => {
       const result = await service.markAsRead(profileId, notificationId);
 
       expect(notificationDelegate.updateMany).toHaveBeenCalledWith({
-        where: { notificationId, customerId },
+        where: { notificationId, order: { customerId } },
         data: { isRead: true },
       });
       expect(result).toEqual(
@@ -130,7 +130,6 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          customerId,
           orderId,
           type: NotificationType.ORDER_READY,
           title: 'Order Ready for Collection',
@@ -170,7 +169,6 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          customerId,
           orderId,
           type: NotificationType.PAYMENT_REJECTED,
           title: 'Payment Rejected',
@@ -210,7 +208,6 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          customerId,
           orderId,
           type: NotificationType.PAYMENT_EXPIRED,
           title: 'Payment Expired',

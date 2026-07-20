@@ -38,12 +38,17 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   const token = () => sessionStorage.getItem("vergo_access_token");
   const addNotification = (title: string, message: string, type: NotificationItem["type"]) => setNotifications((current) => [{ id: crypto.randomUUID(), title, message, timestamp: new Date().toLocaleTimeString(), type, read: false }, ...current]);
   const mapOrder = (order: RawOrder): OrderItem | null => {
+    if (order.confirmationStatus !== "Approved") return null;
     const name = order.customerDetails ? `${order.customerDetails.firstName} ${order.customerDetails.lastName}` : "Guest";
     const status = order.orderStatus === "Claimed by Employee"
       ? "Claimed"
-      : order.confirmationStatus === "Approved" && ["Pending", "Pending Payment", "Pending Verification", "Ready to Process"].includes(order.orderStatus || "")
+      : order.orderStatus === "Ready to Process"
         ? "Ready to Pick"
-        : order.orderStatus;
+        : order.orderStatus === "Ready"
+          ? "Ready for Pickup"
+          : order.orderStatus === "Sent for Delivery"
+            ? "Sent"
+            : order.orderStatus;
     const supported = ["Ready to Pick", "Claimed", "Preparing", "Ready for Pickup", "Sent"];
     if (!supported.includes(status || "")) return null;
     return { id: order.orderId, customerName: name, customerEmail: order.customerDetails?.email || "", customerPhone: order.customerDetails?.phone || "", customerAddress: order.shippingAddress, timestamp: order.orderDate ? new Date(order.orderDate).toLocaleString() : "", paymentMethod: order.paymentMethod.toLowerCase().includes("bank") ? "BANK" : "COD", status: status as OrderItem["status"], dbStatus: order.orderStatus || "Pending", valuation: Number(order.totalAmount), initials: name.split(" ").map((part) => part[0]).join("").slice(0, 2), claimedBy: order.employeeId ? "Employee" : null, stockAvailable: order.stockAvailable ?? false, stockShortages: order.stockShortages ?? [], itemsList: order.orderItems.map((item) => ({ description: item.variant?.product?.name || "Product", size: item.variant?.size || "Not specified", color: item.variant?.color || "Not specified", qty: item.quantity, unitPrice: Number(item.unitPrice), sku: item.variant?.sku || "" })) };
