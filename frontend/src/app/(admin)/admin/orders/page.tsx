@@ -35,9 +35,9 @@ interface PaymentProof {
 interface Order {
     order_id: string;
     payment_method: "Cash On Delivery" | "Bank Transfer";
-    order_status: "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
+    order_status: "Pending" | "Ready to Process" | "Processing" | "Shipped" | "Delivered" | "Cancelled" | "Rejected";
     total_amount: number;
-    confirmation_status: "Pending" | "Confirmed";
+    confirmation_status: "Pending" | "Confirmed" | "Rejected";
     order_date: string;
     payment_proofs?: PaymentProof;
     order_customer_details: OrderCustomerDetails;
@@ -102,9 +102,9 @@ const MOCK_ORDERS: Order[] = [
     {
         order_id: "ORD-99325",
         payment_method: "Bank Transfer",
-        order_status: "Pending",
+        order_status: "Rejected",
         total_amount: 9000,
-        confirmation_status: "Pending",
+        confirmation_status: "Rejected",
         order_date: "2026-07-17T08:10:00Z",
         payment_proofs: { status: "Rejected", receipt_url: "/placeholder-receipt.jpg", uploaded_at: "2026-07-17T09:00:00Z", rejected_reason: "Blurred receipt image, unable to read transaction ID.", acted_by: "Jane D.", acted_at: "2026-07-17T09:30:00Z" },
         order_customer_details: { first_name: "Emily", last_name: "W", email: "emily@example.com", phone: "+94 77 999 8888" },
@@ -138,7 +138,6 @@ const MOCK_ORDERS: Order[] = [
         delivery_fee: 500
     },
 ];
-
 // --- ICONS ---
 const Icons = {
     BadgeInfo: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
@@ -154,7 +153,6 @@ const Icons = {
     Cross: () => <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>,
 };
 
-
 export default function OrdersDashboard() {
     const { searchQuery, addNotification } = useAdmin();
 
@@ -168,53 +166,73 @@ export default function OrdersDashboard() {
 
     // Modals & Drawers State
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-    const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null);
+    const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(null);
     const [shippingModalOrder, setShippingModalOrder] = useState<Order | null>(null);
     const [customerDrawerOrder, setCustomerDrawerOrder] = useState<Order | null>(null);
-    const [confirmAction, setConfirmAction] = useState<{ action: 'approveCOD' | 'approvePayment' | 'rejectPayment', orderId: string } | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{ action: 'confirmCOD' | 'rejectCOD' | 'approvePayment' | 'rejectPayment', orderId: string } | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
-    // Admin Verification Form States inside Drawer
+    // Admin Verification Form States inside Dialog
     const [rejectReason, setRejectReason] = useState("");
     const [adminNotes, setAdminNotes] = useState("");
 
     // --- ACTIONS ---
-    const handleApproveCOD = (orderId: string) => {
-        setOrders(prev => prev.map(o => o.order_id === orderId ? { ...o, confirmation_status: "Confirmed", order_status: "Processing" } : o));
+    const handleConfirmCOD = (orderId: string) => {
+        setOrders(prev => prev.map(o => o.order_id === orderId ? { ...o, confirmation_status: "Confirmed", order_status: "Ready to Process" } : o));
         addNotification(`COD Confirmed for ${orderId}`, "success");
+        setSelectedOrder((prev: any) => prev && prev.order_id === orderId ? { ...prev, confirmation_status: "Confirmed", order_status: "Ready to Process" } : prev);
+    };
+
+    const handleRejectCOD = (orderId: string) => {
+        setOrders(prev => prev.map(o => o.order_id === orderId ? { ...o, confirmation_status: "Rejected", order_status: "Rejected" } : o));
+        addNotification(`COD Rejected for ${orderId}. Notification queued for customer. Email trigger prepared.`, "success");
+        setSelectedOrder((prev: any) => prev && prev.order_id === orderId ? { ...prev, confirmation_status: "Rejected", order_status: "Rejected" } : prev);
     };
 
     const handleApprovePayment = (orderId: string) => {
         setOrders(prev => prev.map(o => o.order_id === orderId && o.payment_proofs ? {
             ...o,
             payment_proofs: { ...o.payment_proofs, status: "Approved", acted_by: "Admin", acted_at: new Date().toISOString() },
-            order_status: "Processing"
+            order_status: "Ready to Process"
         } : o));
         addNotification(`Bank Transfer Approved for ${orderId}`, "success");
         setSelectedOrder(prev => prev && prev.order_id === orderId ? {
             ...prev,
             payment_proofs: { ...prev.payment_proofs!, status: "Approved", acted_by: "Admin", acted_at: new Date().toISOString() },
-            order_status: "Processing"
+            order_status: "Ready to Process"
         } : prev);
     };
 
     const handleRejectPayment = (orderId: string) => {
-        if (!rejectReason.trim()) {
-            addNotification("Please provide a reject reason.", "error");
-            return;
-        }
         setOrders(prev => prev.map(o => o.order_id === orderId && o.payment_proofs ? {
             ...o,
             payment_proofs: { ...o.payment_proofs, status: "Rejected", rejected_reason: rejectReason, acted_by: "Admin", acted_at: new Date().toISOString() },
-            order_status: "Cancelled"
+            order_status: "Rejected"
         } : o));
-        addNotification(`Bank Transfer Rejected for ${orderId}`, "success");
+        addNotification(`Bank Transfer Rejected for ${orderId}. Notification queued for customer. Email trigger prepared.`, "success");
         setSelectedOrder(prev => prev && prev.order_id === orderId ? {
             ...prev,
             payment_proofs: { ...prev.payment_proofs!, status: "Rejected", rejected_reason: rejectReason, acted_by: "Admin", acted_at: new Date().toISOString() },
-            order_status: "Cancelled"
+            order_status: "Rejected"
         } : prev);
-        setRejectReason("");
-        setAdminNotes("");
+    };
+
+    const confirmActionProcessor = () => {
+        if (!confirmAction) return;
+        const { action, orderId } = confirmAction;
+
+        setIsProcessing(true);
+        setTimeout(() => {
+            if (action === 'confirmCOD') handleConfirmCOD(orderId);
+            else if (action === 'rejectCOD') handleRejectCOD(orderId);
+            else if (action === 'approvePayment') handleApprovePayment(orderId);
+            else if (action === 'rejectPayment') handleRejectPayment(orderId);
+
+            setIsProcessing(false);
+            setConfirmAction(null);
+            setRejectReason("");
+            setAdminNotes("");
+        }, 1000);
     };
 
 
@@ -267,8 +285,6 @@ export default function OrdersDashboard() {
         orders.forEach(o => { const s = getDerivedStatus(o); if (counts[s] !== undefined) counts[s]++; });
         return counts;
     }, [orders]);
-
-
     return (
         <div className="space-y-8 select-none">
 
@@ -286,47 +302,64 @@ export default function OrdersDashboard() {
                     <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/10 shadow-2xl rounded-xl overflow-hidden animate-slide-in">
                         <div className="px-6 py-4 border-b border-white/10">
                             <h2 className="text-white font-bold tracking-widest uppercase text-sm">
-                                {confirmAction.action === 'rejectPayment' ? "Reject Order" : "Approve Order"}
+                                {confirmAction.action === 'approvePayment' && "Approve Payment?"}
+                                {confirmAction.action === 'rejectPayment' && "Reject Payment?"}
+                                {confirmAction.action === 'confirmCOD' && "Confirm COD?"}
+                                {confirmAction.action === 'rejectCOD' && "Reject COD?"}
                             </h2>
                         </div>
                         <div className="p-6">
-                            <p className="text-[#8e8e93] text-xs mb-4">
-                                Are you sure you want to proceed with {confirmAction.action === 'rejectPayment' ? "rejection" : "approval"} for order <span className="text-white font-mono-meta bg-white/5 px-1 rounded">{confirmAction.orderId}</span>?
-                            </p>
+                            {(confirmAction.action === 'approvePayment' || confirmAction.action === 'confirmCOD') ? (
+                                <p className="text-[#8e8e93] text-xs mb-4">
+                                    {confirmAction.action === 'approvePayment'
+                                        ? "This payment receipt has been verified. The order will become Ready to Process and will be available for employee processing."
+                                        : "This will mark the Cash on Delivery request as confirmed. The order will become Ready to Process."
+                                    }
+                                </p>
+                            ) : (
+                                <p className="text-[#ef4444] text-xs mb-4 font-bold border border-[#ef4444]/20 bg-[#ef4444]/5 p-3 rounded">
+                                    Reserved stock will be released automatically.
+                                </p>
+                            )}
 
-                            {confirmAction.action === 'rejectPayment' && (
-                                <div className="mb-4">
-                                    <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">Reject Reason <span className="text-[#ef4444]">*</span></label>
-                                    <input
-                                        type="text"
-                                        value={rejectReason}
-                                        onChange={(e) => setRejectReason(e.target.value)}
-                                        placeholder="Required for rejection..."
-                                        className="w-full bg-[#161616] border border-white/10 rounded px-3 py-2 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white/30"
-                                    />
+                            {(confirmAction.action === 'rejectPayment' || confirmAction.action === 'rejectCOD') && (
+                                <div className="space-y-4 mb-4">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">Reject Reason <span className="text-[#ef4444]">*</span></label>
+                                        <input
+                                            type="text"
+                                            value={rejectReason}
+                                            onChange={(e) => setRejectReason(e.target.value)}
+                                            placeholder="Required for rejection..."
+                                            className="w-full bg-[#161616] border border-white/10 rounded px-3 py-2 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white/30"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">Admin Notes</label>
+                                        <textarea
+                                            value={adminNotes}
+                                            onChange={(e) => setAdminNotes(e.target.value)}
+                                            placeholder="Internal notes..."
+                                            className="w-full bg-[#161616] border border-white/10 rounded px-3 py-2 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white/30 h-16 resize-none custom-scrollbar"
+                                        />
+                                    </div>
                                 </div>
                             )}
 
-                            <div className="flex gap-3 mt-6">
-                                <button onClick={() => setConfirmAction(null)} className="flex-1 bg-transparent border border-white/10 hover:bg-white/5 text-white font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest">
+                            <div className="flex gap-3 mt-4">
+                                <button disabled={isProcessing} onClick={() => setConfirmAction(null)} className="disabled:opacity-50 flex-1 bg-transparent border border-white/10 hover:bg-white/5 text-white font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest">
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        if (confirmAction.action === 'approveCOD') handleApproveCOD(confirmAction.orderId);
-                                        else if (confirmAction.action === 'approvePayment') handleApprovePayment(confirmAction.orderId);
-                                        else if (confirmAction.action === 'rejectPayment') handleRejectPayment(confirmAction.orderId);
-
-                                        if (confirmAction.action !== 'rejectPayment' || rejectReason.trim()) {
-                                            setConfirmAction(null);
-                                        }
-                                    }}
-                                    className={`flex-1 font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest ${confirmAction.action === 'rejectPayment'
-                                        ? "bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                                        : "bg-[#10b981] hover:bg-[#059669] text-black"
-                                        }`}
+                                    disabled={isProcessing || ((confirmAction.action === 'rejectPayment' || confirmAction.action === 'rejectCOD') && !rejectReason.trim())}
+                                    onClick={confirmActionProcessor}
+                                    className={`flex-1 font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                        (confirmAction.action === 'rejectPayment' || confirmAction.action === 'rejectCOD')
+                                            ? "bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                                            : "bg-[#10b981] hover:bg-[#059669] text-black"
+                                    }`}
                                 >
-                                    Confirm {confirmAction.action === 'rejectPayment' ? "Reject" : "Approve"}
+                                    {isProcessing ? "Processing..." : (confirmAction.action === 'rejectPayment' || confirmAction.action === 'rejectCOD') ? "Reject" : "Approve"}
                                 </button>
                             </div>
                         </div>
@@ -491,7 +524,7 @@ export default function OrdersDashboard() {
                                             <td className="px-3 py-3">
                                                 {order.payment_proofs?.receipt_url ? (
                                                     <button
-                                                        onClick={() => setReceiptModalUrl(order.payment_proofs!.receipt_url!)}
+                                                        onClick={() => setReceiptModalOrder(order)}
                                                         className="inline-flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-1.5 rounded transition-colors font-bold text-[9px] uppercase tracking-widest"
                                                     >
                                                         <Icons.Receipt /> View Receipt
@@ -519,13 +552,22 @@ export default function OrdersDashboard() {
                                                     </button>
 
                                                     {status === "Waiting COD" && (
-                                                        <button
-                                                            onClick={() => setConfirmAction({ action: 'approveCOD', orderId: order.order_id })}
-                                                            title="Approve COD"
-                                                            className="flex items-center justify-center w-8 h-8 bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] rounded transition-colors border border-[#10b981]/30"
-                                                        >
-                                                            <Icons.CheckCircle />
-                                                        </button>
+                                                        <>
+                                                            <button
+                                                                onClick={() => setConfirmAction({ action: 'confirmCOD', orderId: order.order_id })}
+                                                                title="Confirm COD"
+                                                                className="flex items-center justify-center w-8 h-8 bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] rounded transition-colors border border-[#10b981]/30"
+                                                            >
+                                                                <Icons.CheckCircle />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setRejectReason(""); setConfirmAction({ action: 'rejectCOD', orderId: order.order_id }); }}
+                                                                title="Reject COD"
+                                                                className="flex items-center justify-center w-8 h-8 bg-[#ef4444]/20 hover:bg-[#ef4444]/30 text-[#ef4444] rounded transition-colors border border-[#ef4444]/30"
+                                                            >
+                                                                <Icons.Cross />
+                                                            </button>
+                                                        </>
                                                     )}
 
                                                     {status === "Pending Verification" && (
@@ -659,7 +701,7 @@ export default function OrdersDashboard() {
                                         {selectedOrder.payment_proofs.expires_at && <p className="text-xs text-[#8e8e93] font-mono-meta mb-3">Expires: {new Date(selectedOrder.payment_proofs.expires_at).toLocaleString()}</p>}
                                         {selectedOrder.payment_proofs.receipt_url && (
                                             <button
-                                                onClick={() => setReceiptModalUrl(selectedOrder.payment_proofs!.receipt_url!)}
+                                                onClick={() => setReceiptModalOrder(selectedOrder)}
                                                 className="bg-white/10 hover:bg-white/20 text-white text-[10px] uppercase tracking-widest font-bold px-3 py-1.5 rounded transition-colors w-full flex justify-center items-center gap-2"
                                             >
                                                 <Icons.Eye /> Preview Receipt
@@ -669,87 +711,66 @@ export default function OrdersDashboard() {
                                 )}
                             </section>
 
-                            {/* Admin Verification Section Controls */}
-                            {getDerivedStatus(selectedOrder) === "Pending Verification" && (
-                                <section className="bg-[#121212] border border-[#f59e0b]/30 p-5 rounded-xl mt-6 relative overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-[#f59e0b]" />
-                                    <h3 className="text-xs font-bold text-white tracking-widest uppercase mb-4 flex items-center gap-2">
-                                        <Icons.BadgeInfo /> Admin Verification
-                                    </h3>
+                            {/* Admin Log History (replaces old verification form) */}
+                            {((selectedOrder.payment_method === "Bank Transfer" && (getDerivedStatus(selectedOrder) === "Approved" || getDerivedStatus(selectedOrder) === "Rejected")) ||
+                                (selectedOrder.payment_method === "Cash On Delivery" && selectedOrder.confirmation_status !== "Pending")) && (
+                                    <section className={`border p-5 rounded-xl mt-6 relative overflow-hidden ${getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed"
+                                        ? "bg-[#121212] border-[#10b981]/10"
+                                        : "bg-[#121212] border-[#ef4444]/10"
+                                        }`}>
+                                        <div className={`absolute top-0 left-0 w-1 h-full ${getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed"
+                                            ? "bg-[#10b981]"
+                                            : "bg-[#ef4444]"
+                                            }`} />
 
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">Admin Notes (Internal)</label>
-                                            <textarea
-                                                value={adminNotes}
-                                                onChange={(e) => setAdminNotes(e.target.value)}
-                                                placeholder="Add any internal notes regarding this slip..."
-                                                className="w-full bg-[#0d0d0d] border border-white/10 rounded px-3 py-2 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white/30 h-16 resize-none custom-scrollbar"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">Reject Reason <span className="text-[#ef4444]">*</span></label>
-                                            <input
-                                                type="text"
-                                                value={rejectReason}
-                                                onChange={(e) => setRejectReason(e.target.value)}
-                                                placeholder="Required if rejecting (e.g., Blurred image, wrong amount)"
-                                                className="w-full bg-[#0d0d0d] border border-white/10 rounded px-3 py-2 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white/30"
-                                            />
+                                        <h3 className="text-xs font-bold text-white tracking-widest uppercase mb-4 flex items-center gap-2">
+                                            {getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed"
+                                                ? <Icons.CheckCircle /> : <Icons.XCircle />
+                                            }
+                                            {getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed"
+                                                ? "Approval Verification Log" : "Rejection Verification Log"
+                                            }
+                                        </h3>
+
+                                        <div className="grid grid-cols-2 gap-4 text-xs font-mono-meta mb-3 bg-[#161616] p-3 rounded">
+                                            <div>
+                                                <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">Final Status</p>
+                                                <div className="inline-block mt-0.5">
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded tracking-wide border uppercase ${getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed"
+                                                        ? statusConfig["Approved"].bg + " " + statusConfig["Approved"].color + " " + statusConfig["Approved"].border
+                                                        : statusConfig["Rejected"].bg + " " + statusConfig["Rejected"].color + " " + statusConfig["Rejected"].border
+                                                        }`}>
+                                                        {getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed" ? "Approved" : "Rejected"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
+                                                    {getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed" ? "Approved By" : "Rejected By"}
+                                                </p>
+                                                <p className="text-white">Admin</p>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
+                                                    {getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed" ? "Approved Time" : "Rejected Time"}
+                                                </p>
+                                                <p className="text-white">
+                                                    {selectedOrder.payment_proofs?.acted_at
+                                                        ? new Date(selectedOrder.payment_proofs.acted_at).toLocaleString()
+                                                        : new Date().toLocaleString()
+                                                    }
+                                                </p>
+                                            </div>
                                         </div>
 
-                                        <div className="flex gap-3 pt-2">
-                                            <button
-                                                onClick={() => handleRejectPayment(selectedOrder.order_id)}
-                                                className="flex-1 bg-transparent border border-[#ef4444]/30 hover:bg-[#ef4444]/10 text-[#ef4444] font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest"
-                                            >
-                                                Reject Payment
-                                            </button>
-                                            <button
-                                                onClick={() => handleApprovePayment(selectedOrder.order_id)}
-                                                className="flex-1 bg-[#10b981] hover:bg-[#059669] text-black font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest shadow-lg shadow-[#10b981]/20"
-                                            >
-                                                Approve Payment
-                                            </button>
-                                        </div>
-                                    </div>
-                                </section>
-                            )}
-
-                            {/* Post-Approval / Rejection Logs */}
-                            {(getDerivedStatus(selectedOrder) === "Approved" || getDerivedStatus(selectedOrder) === "Rejected") && selectedOrder.payment_proofs?.acted_by && (
-                                <section className="bg-[#121212] border border-white/5 p-5 rounded-xl mt-6 relative overflow-hidden">
-                                    <div className={`absolute top-0 left-0 w-1 h-full ${getDerivedStatus(selectedOrder) === "Approved" ? "bg-[#10b981]" : "bg-[#ef4444]"}`} />
-                                    <h3 className="text-xs font-bold text-white tracking-widest uppercase mb-4 flex items-center gap-2">
-                                        {getDerivedStatus(selectedOrder) === "Approved" ? <Icons.CheckCircle /> : <Icons.XCircle />}
-                                        Verification Log
-                                    </h3>
-
-                                    <div className="grid grid-cols-2 gap-4 text-xs font-mono-meta mb-3 bg-[#161616] p-3 rounded">
-                                        <div>
-                                            <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">Final Status</p>
-                                            <p className={getDerivedStatus(selectedOrder) === "Approved" ? "text-[#10b981] font-bold" : "text-[#ef4444] font-bold"}>
-                                                {getDerivedStatus(selectedOrder)}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">Acted By</p>
-                                            <p className="text-white">{selectedOrder.payment_proofs.acted_by}</p>
-                                        </div>
-                                        <div className="col-span-2">
-                                            <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">Date & Time</p>
-                                            <p className="text-white">{new Date(selectedOrder.payment_proofs.acted_at!).toLocaleString()}</p>
-                                        </div>
-                                    </div>
-
-                                    {selectedOrder.payment_proofs.rejected_reason && (
-                                        <div className="bg-[#ef4444]/10 border border-[#ef4444]/20 p-3 rounded mt-3">
-                                            <p className="text-[#ef4444] uppercase tracking-wider text-[9px] mb-1 font-bold">Rejection Reason</p>
-                                            <p className="text-[#fca5a5] text-xs font-medium">{selectedOrder.payment_proofs.rejected_reason}</p>
-                                        </div>
-                                    )}
-                                </section>
-                            )}
+                                        {selectedOrder.payment_proofs?.rejected_reason && (
+                                            <div className="bg-[#ef4444]/10 border border-[#ef4444]/20 p-3 rounded mt-3">
+                                                <p className="text-[#ef4444] uppercase tracking-wider text-[9px] mb-1 font-bold">Reject Reason</p>
+                                                <p className="text-[#fca5a5] text-xs font-medium">{selectedOrder.payment_proofs.rejected_reason}</p>
+                                            </div>
+                                        )}
+                                    </section>
+                                )}
 
                             <div className="bg-[#121212] p-4 rounded text-center text-[10px] text-[#555] uppercase tracking-widest mt-8">
                                 End of Record
@@ -761,20 +782,39 @@ export default function OrdersDashboard() {
             )}
 
             {/* RECEIPT IMAGE MODAL */}
-            {receiptModalUrl && (
+            {receiptModalOrder && (
                 <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-4">
                     <div className="absolute top-6 right-6">
-                        <button onClick={() => setReceiptModalUrl(null)} className="text-white/50 hover:text-white transition-colors bg-white/5 p-2 rounded-full">
+                        <button onClick={() => setReceiptModalOrder(null)} className="text-white/50 hover:text-white transition-colors bg-white/5 p-2 rounded-full">
                             <Icons.Close />
                         </button>
                     </div>
                     <div className="bg-[#121212] p-2 rounded-xl border border-white/10 flex flex-col items-center">
-                        <div className="w-[400px] h-[600px] rounded-lg bg-[#161616] flex items-center justify-center border border-white/5 relative overflow-hidden">
+                        <div className="w-[450px] bg-[#161616] rounded-t-lg pt-4 px-6 border-b border-white/5 text-center">
+                            <h3 className="text-white font-bold tracking-widest uppercase text-sm">Receipt Preview</h3>
+                            <div className="text-[10px] text-[#8e8e93] font-mono-meta mt-2 mb-4 grid grid-cols-2 gap-2 text-left">
+                                <div>
+                                    <span className="text-[#555] uppercase tracking-wider">Method:</span>
+                                    <p className="text-white mt-0.5">{receiptModalOrder.payment_method}</p>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-[#555] uppercase tracking-wider">Status:</span>
+                                    <p className="text-white mt-0.5">{getDerivedStatus(receiptModalOrder)}</p>
+                                </div>
+                                <div className="col-span-2 border-t border-white/5 pt-2 mt-1">
+                                    <span className="text-[#555] uppercase tracking-wider">Uploaded:</span>
+                                    <p className="text-white mt-0.5">
+                                        {receiptModalOrder.payment_proofs?.uploaded_at ? new Date(receiptModalOrder.payment_proofs.uploaded_at).toLocaleString() : new Date().toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="w-[450px] h-[500px] rounded-b-lg bg-[#161616] flex items-center justify-center relative overflow-hidden">
                             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-                            <div className="text-center z-10">
+                            <div className="text-center z-10 flex flex-col items-center justify-center text-[#555]">
                                 <Icons.Receipt />
-                                <p className="text-xs text-[#8e8e93] mt-4 font-mono-meta">RECEIPT PREVIEW</p>
-                                <p className="text-[10px] text-[#555] mt-1">{receiptModalUrl}</p>
+                                <p className="text-xs text-[#8e8e93] mt-4 font-mono-meta">IMAGE NOT FOUND</p>
+                                <p className="text-[10px] text-[#555] mt-1">{receiptModalOrder.payment_proofs?.receipt_url}</p>
                             </div>
                         </div>
                     </div>
