@@ -169,7 +169,6 @@ describe('UserRole (Service & Controller)', () => {
         lastName: 'Doe',
         phone: '98765432',
         email: 'customer@test.com',
-        defaultShippingAddress: '123 St',
         createdAt: new Date(),
       };
 

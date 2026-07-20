@@ -12,17 +12,28 @@ export default function Newsletter() {
   const [subtitle, setSubtitle] = useState("Join our decentralized mailing list. Get early access to drops and real-time inventory verification alerts.");
 
   useEffect(() => {
-    fetch(`${API_URL}/customization`)
-      .then((res) => {
-        if (res.ok) return res.json();
-      })
-      .then((data) => {
-        if (data) {
-          if (data.newsletterTitle) setTitle(data.newsletterTitle);
-          if (data.newsletterSubtitle) setSubtitle(data.newsletterSubtitle);
-        }
-      })
-      .catch((err) => console.error("Failed to load newsletter customizations", err));
+    const controller = new AbortController();
+
+    const loadCustomization = async () => {
+      try {
+        const response = await fetch(`${API_URL}/customization`, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (data.newsletterTitle) setTitle(data.newsletterTitle);
+        if (data.newsletterSubtitle) setSubtitle(data.newsletterSubtitle);
+      } catch {
+        // Customization is optional. Keep the default newsletter copy when the
+        // backend is unavailable or the response cannot be read.
+      }
+    };
+
+    void loadCustomization();
+
+    return () => controller.abort();
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {

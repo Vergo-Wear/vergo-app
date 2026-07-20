@@ -354,7 +354,21 @@ export default function CheckoutPage() {
             {/* Continue Button */}
             <div className="submit-btn-container checkout-actions">
               <button type="button" className="checkout-back-btn" onClick={() => router.push("/cart")}>
-                Back to Cart
+                <svg
+                  className="checkout-back-icon"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M15.5 10H4.5M9 4.5 3.5 10 9 15.5"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span>Back to Cart</span>
               </button>
               <button
                 type="submit"

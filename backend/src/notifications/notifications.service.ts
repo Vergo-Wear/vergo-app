@@ -36,7 +36,7 @@ export class NotificationsService {
   async findCustomerNotifications(profileId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     return this.prisma.notification.findMany({
-      where: { customerId },
+      where: { order: { customerId } },
       select: notificationSelect,
       orderBy: { createdAt: 'desc' },
     });
@@ -46,7 +46,7 @@ export class NotificationsService {
   async findCustomerNotification(profileId: string, notificationId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     const notification = await this.prisma.notification.findFirst({
-      where: { notificationId, customerId },
+      where: { notificationId, order: { customerId } },
       select: notificationSelect,
     });
     if (!notification) throw new NotFoundException('Notification not found.');
@@ -57,7 +57,7 @@ export class NotificationsService {
   async unreadCount(profileId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     const count = await this.prisma.notification.count({
-      where: { customerId, isRead: false },
+      where: { order: { customerId }, isRead: false },
     });
     return { count };
   }
@@ -69,33 +69,33 @@ export class NotificationsService {
   async markAsRead(profileId: string, notificationId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     const result = await this.prisma.notification.updateMany({
-      where: { notificationId, customerId },
+      where: { notificationId, order: { customerId } },
       data: { isRead: true },
     });
     if (result.count === 0) {
       throw new NotFoundException('Notification not found.');
     }
     return this.prisma.notification.findFirst({
-      where: { notificationId, customerId },
+      where: { notificationId, order: { customerId } },
       select: notificationSelect,
     });
   }
 
   /**
-   * Creates a notification record linked to exactly one customer and one
-   * order. When `once` is set, the notification is skipped if the same
+   * Creates a notification linked to exactly one order. Customer ownership is
+   * derived from orders.customer_id so the relationship cannot drift. When
+   * `once` is set, the notification is skipped if the same
    * order already has a notification of that type (duplicate-event guard;
    * ORDER_READY additionally has a partial unique index in the database).
    */
   private async createNotification(params: {
-    customerId: string;
     orderId: string;
     type: NotificationType;
     title: string;
     message: string;
     once?: boolean;
   }) {
-    const { customerId, orderId, type, title, message, once } = params;
+    const { orderId, type, title, message, once } = params;
     if (once) {
       const existing = await this.prisma.notification.findFirst({
         where: { orderId, type },
@@ -110,7 +110,7 @@ export class NotificationsService {
     }
     try {
       return await this.prisma.notification.create({
-        data: { customerId, orderId, type, title, message },
+        data: { orderId, type, title, message },
       });
     } catch (error: unknown) {
       // P2002 = unique constraint violation (concurrent duplicate event).
@@ -150,7 +150,6 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
-        customerId: customer.customerId,
         orderId,
         type: NotificationType.ORDER_READY,
         title: 'Order Ready for Collection',
@@ -179,7 +178,6 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
-        customerId: customer.customerId,
         orderId,
         type: NotificationType.PAYMENT_REJECTED,
         title: 'Payment Rejected',
@@ -208,7 +206,6 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
-        customerId: customer.customerId,
         orderId,
         type: NotificationType.PAYMENT_EXPIRED,
         title: 'Payment Expired',

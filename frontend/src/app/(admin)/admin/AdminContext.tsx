@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 export interface InventoryItem { inventoryId?: string; sku: string; name: string; location: string; inStock: number; status: "VERIFYING" | "PENDING" | "PROCESSING" | "SHIPPED"; reorderLevel?: number }
 export interface StockAlert { id: string; sku: string; name: string; node: string; units: number; status: "critical" | "warning" }
@@ -18,7 +18,7 @@ interface AdminContextType {
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -29,16 +29,16 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [transferModalOpen, setTransferModalOpen] = useState(false);
 
-  const addNotification = (message: string, type: ToastNotification["type"]) => {
+  const addNotification = useCallback((message: string, type: ToastNotification["type"]) => {
     const id = crypto.randomUUID();
     setNotifications((current) => [...current, { id, message, type }]);
     window.setTimeout(() => setNotifications((current) => current.filter((item) => item.id !== id)), 4000);
-  };
+  }, []);
   const removeNotification = (id: string) => setNotifications((current) => current.filter((item) => item.id !== id));
 
   useEffect(() => {
     const token = sessionStorage.getItem("vergo_access_token");
-    if (!token) return;
+    if (!token || !API_URL) return;
     fetch(`${API_URL}/admin/overview`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error("Unable to retrieve admin data.");
@@ -54,7 +54,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
   const persistQuantity = (item: InventoryItem, quantity: number) => {
     const token = sessionStorage.getItem("vergo_access_token");
-    if (!token || !item.inventoryId) return;
+    if (!token || !item.inventoryId || !API_URL) return;
     fetch(`${API_URL}/admin/inventory/${item.inventoryId}`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ quantity }) })
       .catch(() => addNotification("Unable to update inventory.", "error"));
   };

@@ -26,7 +26,6 @@ export interface UserIdentificationResult {
     lastName: string;
     phone: string | null;
     email: string;
-    defaultShippingAddress: string | null;
     createdAt: Date | null;
   } | null;
   employee?: {
@@ -138,7 +137,6 @@ export class UserRoleService {
               lastName: customer.lastName,
               phone: customer.phone,
               email: customer.email,
-              defaultShippingAddress: customer.defaultShippingAddress,
               createdAt: customer.createdAt,
             }
           : null,

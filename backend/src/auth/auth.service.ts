@@ -53,7 +53,6 @@ export class AuthService {
       username,
       phone,
       mobileNumber,
-      defaultShippingAddress,
     } = dto;
 
     // Normalize phone: strip leading 0, prepend +94
@@ -155,9 +154,6 @@ export class AuthService {
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             phone: resolvedPhone,
-            defaultShippingAddress: defaultShippingAddress
-              ? defaultShippingAddress.trim()
-              : null,
           },
           create: {
             profileId: userId,
@@ -165,9 +161,6 @@ export class AuthService {
             lastName: lastName.trim(),
             phone: resolvedPhone,
             email: email.trim().toLowerCase(),
-            defaultShippingAddress: defaultShippingAddress
-              ? defaultShippingAddress.trim()
-              : null,
           },
         });
 
@@ -462,7 +455,6 @@ export class AuthService {
       lastName,
       username,
       phone,
-      defaultShippingAddress,
     } = dto;
 
     let user;
@@ -625,9 +617,6 @@ export class AuthService {
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             phone: resolvedPhone,
-            defaultShippingAddress: defaultShippingAddress
-              ? defaultShippingAddress.trim()
-              : null,
           },
           create: {
             profileId: userId,
@@ -635,9 +624,6 @@ export class AuthService {
             lastName: lastName.trim(),
             phone: resolvedPhone,
             email,
-            defaultShippingAddress: defaultShippingAddress
-              ? defaultShippingAddress.trim()
-              : null,
           },
         });
 
