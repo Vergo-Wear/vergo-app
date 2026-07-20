@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo } from "react";
+import Image from "next/image";
 import { useAdmin } from "../AdminContext";
 
 // --- TYPES ---
@@ -152,7 +153,6 @@ const Icons = {
     Cross: () => <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>,
 };
 
-
 export default function OrdersDashboard() {
     const { searchQuery, addNotification } = useAdmin();
 
@@ -285,8 +285,6 @@ export default function OrdersDashboard() {
         orders.forEach(o => { const s = getDerivedStatus(o); if (counts[s] !== undefined) counts[s]++; });
         return counts;
     }, [orders]);
-
-
     return (
         <div className="space-y-8 select-none">
 
@@ -355,10 +353,11 @@ export default function OrdersDashboard() {
                                 <button
                                     disabled={isProcessing || ((confirmAction.action === 'rejectPayment' || confirmAction.action === 'rejectCOD') && !rejectReason.trim())}
                                     onClick={confirmActionProcessor}
-                                    className={`flex-1 font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${(confirmAction.action === 'rejectPayment' || confirmAction.action === 'rejectCOD')
-                                        ? "bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                                        : "bg-[#10b981] hover:bg-[#059669] text-black"
-                                        }`}
+                                    className={`flex-1 font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                        (confirmAction.action === 'rejectPayment' || confirmAction.action === 'rejectCOD')
+                                            ? "bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                                            : "bg-[#10b981] hover:bg-[#059669] text-black"
+                                    }`}
                                 >
                                     {isProcessing ? "Processing..." : (confirmAction.action === 'rejectPayment' || confirmAction.action === 'rejectCOD') ? "Reject" : "Approve"}
                                 </button>
@@ -631,7 +630,7 @@ export default function OrdersDashboard() {
                                         <div key={i} className="flex justify-between items-center bg-[#161616] p-3 rounded">
                                             <div>
                                                 <p className="text-white font-medium text-xs">{item.name}</p>
-                                                <p className="text-[#8e8e93] text-[10px] mt-1 font-mono-meta">Qty: {item.quantity} Ã— {item.price.toLocaleString()} LKR</p>
+                                                <p className="text-[#8e8e93] text-[10px] mt-1 font-mono-meta">Qty: {item.quantity} × {item.price.toLocaleString()} LKR</p>
                                             </div>
                                             <p className="text-white font-bold font-mono-meta">{(item.quantity * item.price).toLocaleString()} LKR</p>
                                         </div>
@@ -741,7 +740,7 @@ export default function OrdersDashboard() {
                                                         ? statusConfig["Approved"].bg + " " + statusConfig["Approved"].color + " " + statusConfig["Approved"].border
                                                         : statusConfig["Rejected"].bg + " " + statusConfig["Rejected"].color + " " + statusConfig["Rejected"].border
                                                         }`}>
-                                                        {getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed" ? "Approved Badge" : "Rejected Badge"}
+                                                        {getDerivedStatus(selectedOrder) === "Approved" || selectedOrder.confirmation_status === "Confirmed" ? "Approved" : "Rejected"}
                                                     </span>
                                                 </div>
                                             </div>
