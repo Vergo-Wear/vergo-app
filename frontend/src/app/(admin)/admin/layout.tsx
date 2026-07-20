@@ -60,6 +60,24 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   // Profile logout toggle state & dynamic user details state
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const [adminUser, setAdminUser] = useState<{ name: string; role: string } | null>(null);
+  const [accessChecked, setAccessChecked] = useState(false);
+
+  // Route protection: only authenticated Admin users may view the dashboard
+  useEffect(() => {
+    const token = sessionStorage.getItem("vergo_access_token");
+    const stored = sessionStorage.getItem("vergo_user");
+    let role: string | null = null;
+    try {
+      role = stored ? (JSON.parse(stored).role as string) : null;
+    } catch {
+      role = null;
+    }
+    if (!token || role !== "Admin") {
+      window.location.replace("/auth/login");
+      return;
+    }
+    setAccessChecked(true);
+  }, []);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("vergo_user");
@@ -200,6 +218,11 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       ),
     },
   ];
+
+  // Render nothing until the Admin access check has passed
+  if (!accessChecked) {
+    return <div className="flex h-screen w-screen bg-[#050505]" />;
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#050505] text-[#f5f5f7] antialiased">
