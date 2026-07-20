@@ -254,8 +254,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 key={item.name}
                 href={item.path}
                 className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${isActive
-                    ? "bg-[rgba(255,255,255,0.08)] text-white"
-                    : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
+                  ? "bg-[rgba(255,255,255,0.08)] text-white"
+                  : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
                   }`}
               >
                 {item.icon}
@@ -275,8 +275,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 key={item.name}
                 href={item.path}
                 className={`flex items-center justify-between px-4 py-3 rounded-md text-sm font-medium transition-all ${isActive
-                    ? "bg-[rgba(255,255,255,0.08)] text-white"
-                    : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
+                  ? "bg-[rgba(255,255,255,0.08)] text-white"
+                  : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
                   }`}
               >
                 <div className="flex items-center gap-3">
@@ -347,7 +347,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             </span>
             <input
               type="text"
-              placeholder="Search SKU or Node..."
+              placeholder={pathname === "/admin/orders" ? "Search Orders (ID, Name, Phone)..." : "Search SKU or Node..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded-md pl-9 pr-4 py-1.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white/20 transition-all font-mono-meta"
@@ -364,16 +364,28 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            {/* Transfer Stock Action Button */}
-            <button
-              onClick={() => setTransferModalOpen(true)}
-              className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] font-bold text-xs tracking-[0.15em] px-4 py-2 rounded-md transition-all shadow-md shadow-white/5 uppercase flex items-center gap-2 cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              <span>TRANSFER STOCK</span>
-            </button>
+            {/* Header Action Button (Contextual) */}
+            {pathname === "/admin/orders" ? (
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] font-bold text-xs tracking-[0.15em] px-4 py-2 rounded-md transition-all shadow-md shadow-white/5 uppercase flex items-center gap-2 cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>REFRESH DATA</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setTransferModalOpen(true)}
+                className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] font-bold text-xs tracking-[0.15em] px-4 py-2 rounded-md transition-all shadow-md shadow-white/5 uppercase flex items-center gap-2 cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                <span>TRANSFER STOCK</span>
+              </button>
+            )}
           </div>
         </header>
 
