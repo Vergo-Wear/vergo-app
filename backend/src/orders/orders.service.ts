@@ -907,7 +907,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         where: { id: reviewerProfileId },
         select: { role: { select: { roleName: true } } },
       });
-      if (reviewer?.role.roleName.toLowerCase() !== 'admin') {
+      if (reviewer?.role?.roleName.toLowerCase() !== 'admin') {
         throw new ForbiddenException(
           'Only an Admin profile can review a pending checkout.',
         );
