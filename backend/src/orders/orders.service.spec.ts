@@ -73,7 +73,10 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     restoreCommittedForOrder: jest.fn(),
     expireActive: jest.fn(),
   };
-  const notifications = { notifyOrderReady: jest.fn() };
+  const notifications = {
+    notifyOrderReady: jest.fn(),
+    notifyCheckoutReviewed: jest.fn(),
+  };
 
   const dto = (paymentMethod = 'cod'): CreateOrderDto => ({
     paymentMethod,

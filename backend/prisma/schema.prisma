@@ -65,6 +65,7 @@ model Customer {
   reviews          Review[]
   addresses        UserAddress[]
   pendingCheckouts PendingCheckout[]
+  notifications    Notification[]
 
   @@map("customer")
   @@schema("public")
@@ -444,6 +445,7 @@ model PendingCheckout {
   shippingDetails PendingCheckoutShippingDetails?
   paymentProof    CheckoutPaymentProof?
   reservations    StockReservation[]
+  notifications   Notification[]
 
   @@index([customerId, status])
   @@index([status, createdAt])
@@ -570,7 +572,9 @@ model OrderShippingDetails {
 
 model Notification {
   notificationId String   @id @default(dbgenerated("gen_random_uuid()")) @map("notification_id") @db.Uuid
-  orderId        String   @map("order_id") @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  orderId        String?  @map("order_id") @db.Uuid
+  checkoutId     String?  @map("checkout_id") @db.Uuid
   type           String
   title          String
   message        String
@@ -578,9 +582,13 @@ model Notification {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  order Orders @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  customer Customer         @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
+  order    Orders?          @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  checkout PendingCheckout? @relation(fields: [checkoutId], references: [checkoutId], onDelete: Cascade)
 
+  @@index([customerId, isRead])
   @@index([orderId])
+  @@index([checkoutId])
   @@map("notification")
   @@schema("public")
 }

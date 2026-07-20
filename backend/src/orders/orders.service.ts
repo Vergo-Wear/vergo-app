@@ -768,7 +768,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   async findPendingCheckouts() {
     const checkouts = await this.prisma.pendingCheckout.findMany({
-      where: { status: { in: ['Pending Confirmation', 'Pending Verification'] } },
+      // Approved checkouts are represented by their final orders. All other
+      // checkout states remain visible to Admins as database-backed history.
+      where: { status: { not: 'Approved' } },
       include: this.checkoutInclude,
       orderBy: { createdAt: 'desc' },
     });
@@ -902,7 +904,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     dto: ReviewPaymentProofDto,
     reviewerProfileId: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const reviewed = await this.prisma.$transaction(async (tx) => {
       const reviewer = await tx.profiles.findUnique({
         where: { id: reviewerProfileId },
         select: { role: { select: { roleName: true } } },
@@ -961,6 +963,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       });
       return this.presentOrder(order);
     });
+    await this.notifications.notifyCheckoutReviewed(checkoutId);
+    return reviewed;
   }
 
   /** Removes expired holds, marks their checkout expired, and clears DB carts. */

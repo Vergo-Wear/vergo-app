@@ -8,7 +8,8 @@ import "@/styles/notifications.css";
 
 interface CustomerNotification {
   notificationId: string;
-  orderId: string;
+  orderId: string | null;
+  checkoutId: string | null;
   type: string;
   title: string;
   message: string;
@@ -20,7 +21,9 @@ const formatOrderNumber = (orderId: string) =>
   `#${orderId.slice(0, 8).toUpperCase()}`;
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<CustomerNotification[]>([]);
+  const [notifications, setNotifications] = useState<CustomerNotification[]>(
+    [],
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
@@ -28,8 +31,10 @@ export default function NotificationsPage() {
   useEffect(() => {
     authenticatedFetch("/notifications", { cache: "no-store" })
       .then(async (response) => {
-        if (!response) throw new Error("Please sign in to view your notifications.");
-        if (!response.ok) throw new Error("Unable to retrieve your notifications.");
+        if (!response)
+          throw new Error("Please sign in to view your notifications.");
+        if (!response.ok)
+          throw new Error("Unable to retrieve your notifications.");
         setNotifications((await response.json()) as CustomerNotification[]);
       })
       .catch((reason: Error) => setError(reason.message))
@@ -68,15 +73,21 @@ export default function NotificationsPage() {
         </div>
         <div className="orders-header">
           <h1 className="orders-title">NOTIFICATIONS</h1>
-          <p className="orders-subtitle">Updates about your orders and payments.</p>
+          <p className="orders-subtitle">
+            Updates about your orders and payments.
+          </p>
         </div>
 
-        {isLoading && <div className="empty-orders-container">Loading notifications...</div>}
+        {isLoading && (
+          <div className="empty-orders-container">Loading notifications...</div>
+        )}
         {error && (
           <div className="empty-orders-container">
             <h2 className="empty-orders-title">Notifications Unavailable</h2>
             <p className="empty-orders-desc">{error}</p>
-            <Link href="/auth/login" className="shop-now-btn">Log In</Link>
+            <Link href="/auth/login" className="shop-now-btn">
+              Log In
+            </Link>
           </div>
         )}
         {!isLoading && !error && notifications.length === 0 && (
@@ -85,7 +96,9 @@ export default function NotificationsPage() {
             <p className="empty-orders-desc">
               Order and payment updates will appear here.
             </p>
-            <Link href="/profile/orders" className="shop-now-btn">View Orders</Link>
+            <Link href="/profile/orders" className="shop-now-btn">
+              View Orders
+            </Link>
           </div>
         )}
 
@@ -106,12 +119,19 @@ export default function NotificationsPage() {
               <p className="notification-message">{notification.message}</p>
               <div className="notification-meta">
                 <div className="notification-meta-info">
-                  <Link
-                    href={`/profile/orders/${notification.orderId}`}
-                    className="notification-order-link"
-                  >
-                    ORDER {formatOrderNumber(notification.orderId)}
-                  </Link>
+                  {notification.orderId ? (
+                    <Link
+                      href={`/profile/orders/${notification.orderId}`}
+                      className="notification-order-link"
+                    >
+                      ORDER {formatOrderNumber(notification.orderId)}
+                    </Link>
+                  ) : (
+                    <span className="notification-order-link">
+                      CHECKOUT{" "}
+                      {formatOrderNumber(notification.checkoutId || "")}
+                    </span>
+                  )}
                   <span>
                     {new Date(notification.createdAt).toLocaleString("en-US", {
                       dateStyle: "medium",

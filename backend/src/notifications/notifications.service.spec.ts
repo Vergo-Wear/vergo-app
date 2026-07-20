@@ -5,6 +5,7 @@ import { NotificationType } from './notification-type';
 describe('NotificationsService', () => {
   const customerDelegate = { findFirst: jest.fn() };
   const ordersDelegate = { findUnique: jest.fn() };
+  const pendingCheckoutDelegate = { findUnique: jest.fn() };
   const notificationDelegate = {
     findMany: jest.fn(),
     findFirst: jest.fn(),
@@ -16,6 +17,7 @@ describe('NotificationsService', () => {
   const prisma = {
     customer: customerDelegate,
     orders: ordersDelegate,
+    pendingCheckout: pendingCheckoutDelegate,
     notification: notificationDelegate,
   };
 
@@ -57,7 +59,7 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { order: { customerId } },
+          where: { customerId },
           orderBy: { createdAt: 'desc' },
         }),
       );
@@ -70,7 +72,7 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { notificationId, order: { customerId } },
+          where: { notificationId, customerId },
         }),
       );
     });
@@ -103,7 +105,7 @@ describe('NotificationsService', () => {
       const result = await service.markAsRead(profileId, notificationId);
 
       expect(notificationDelegate.updateMany).toHaveBeenCalledWith({
-        where: { notificationId, order: { customerId } },
+        where: { notificationId, customerId },
         data: { isRead: true },
       });
       expect(result).toEqual(
@@ -228,6 +230,51 @@ describe('NotificationsService', () => {
       await expect(
         service.notifyPaymentExpired(orderId),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('notifyCheckoutReviewed', () => {
+    it('notifies a registered customer after COD approval', async () => {
+      pendingCheckoutDelegate.findUnique.mockResolvedValue({
+        checkoutId: '6b133395-0982-4201-8c62-3edc62b66666',
+        customerId,
+        paymentMethod: 'Cash on Delivery',
+        status: 'Approved',
+        adminNotes: null,
+        customer: orderWithCustomer.customer,
+        order: { orderId },
+      });
+
+      await service.notifyCheckoutReviewed(
+        '6b133395-0982-4201-8c62-3edc62b66666',
+      );
+
+      expect(notificationDelegate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          customerId,
+          orderId,
+          type: NotificationType.COD_CONFIRMED,
+          title: 'COD Order Confirmed',
+        }),
+      });
+    });
+
+    it('skips a guest checkout', async () => {
+      pendingCheckoutDelegate.findUnique.mockResolvedValue({
+        checkoutId: '6b133395-0982-4201-8c62-3edc62b66666',
+        customerId: null,
+        paymentMethod: 'Cash on Delivery',
+        status: 'Rejected',
+        adminNotes: null,
+        customer: null,
+        order: null,
+      });
+
+      await service.notifyCheckoutReviewed(
+        '6b133395-0982-4201-8c62-3edc62b66666',
+      );
+
+      expect(notificationDelegate.create).not.toHaveBeenCalled();
     });
   });
 });

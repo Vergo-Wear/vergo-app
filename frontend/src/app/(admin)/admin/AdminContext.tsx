@@ -7,6 +7,21 @@ export interface StockAlert { id: string; sku: string; name: string; node: strin
 export interface EmployeeRank { id: string; rank: number; name: string; avatar: string; status: "ON SHIFT" | "OFF SHIFT"; parcels: number }
 export interface DashboardStats { completedUnits: number; activeNodes: number; activeStaff: number; pendingShipments: number }
 export interface ToastNotification { id: string; message: string; type: "success" | "error" | "info" }
+export interface CustomerDistributionRow { district: string; city: string; customers: number; orders: number; revenue: number; percentage: number }
+export interface ForecastMonth { month: string; predictedOrders: number; predictedRevenue: number }
+export interface AdminAnalytics {
+  customerDistribution: CustomerDistributionRow[];
+  customerSummary: { totalCustomers: number; districts: number; cities: number; coveredOrders: number };
+  nextYearForecast: {
+    year: number;
+    predictedOrders: number;
+    predictedRevenue: number;
+    orderTrendPercent: number;
+    revenueTrendPercent: number;
+    methodology: string;
+    monthly: ForecastMonth[];
+  };
+}
 
 export interface AdminAlert {
   id: string;
@@ -19,7 +34,7 @@ export interface AdminAlert {
 }
 
 interface AdminContextType {
-  inventory: InventoryItem[]; alerts: StockAlert[]; employees: EmployeeRank[]; stats: DashboardStats; notifications: ToastNotification[];
+  inventory: InventoryItem[]; alerts: StockAlert[]; employees: EmployeeRank[]; stats: DashboardStats; analytics: AdminAnalytics; notifications: ToastNotification[];
   orders: any[]; adminAlerts: AdminAlert[];
   searchQuery: string; statusFilter: string; transferModalOpen: boolean;
   setSearchQuery: (query: string) => void; setStatusFilter: (filter: string) => void; setTransferModalOpen: (open: boolean) => void;
@@ -32,11 +47,25 @@ interface AdminContextType {
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const EMPTY_ANALYTICS: AdminAnalytics = {
+  customerDistribution: [],
+  customerSummary: { totalCustomers: 0, districts: 0, cities: 0, coveredOrders: 0 },
+  nextYearForecast: {
+    year: new Date().getFullYear() + 1,
+    predictedOrders: 0,
+    predictedRevenue: 0,
+    orderTrendPercent: 0,
+    revenueTrendPercent: 0,
+    methodology: "Not enough order history is available for a projection.",
+    monthly: [],
+  },
+};
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [employees, setEmployees] = useState<EmployeeRank[]>([]);
   const [stats, setStats] = useState<DashboardStats>({ completedUnits: 0, activeNodes: 0, activeStaff: 0, pendingShipments: 0 });
+  const [analytics, setAnalytics] = useState<AdminAnalytics>(EMPTY_ANALYTICS);
   const [notifications, setNotifications] = useState<ToastNotification[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,6 +91,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         setInventory(data.inventory.map((item: InventoryItem) => ({ ...item, status: item.inStock <= (item.reorderLevel || 0) ? "PENDING" : "PROCESSING" })));
         setEmployees(data.employees.map((employee: { id: string; name: string; status: string }, index: number) => ({ id: employee.id, rank: index + 1, name: employee.name, avatar: employee.name.split(" ").map((part) => part[0]).join("").slice(0, 2), status: employee.status === "active" ? "ON SHIFT" : "OFF SHIFT", parcels: 0 })));
         setStats(data.stats);
+        setAnalytics(data.analytics || EMPTY_ANALYTICS);
       })
       .catch((error: Error) => addNotification(error.message, "error"));
   }, []);
@@ -176,7 +206,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     });
   }, [orders, inventory]);
 
-  return <AdminContext.Provider value={{ inventory, alerts, employees, stats, notifications, orders, adminAlerts, searchQuery, statusFilter, transferModalOpen, setSearchQuery, setStatusFilter, setTransferModalOpen, addNotification, removeNotification, transferStock, toggleEmployeeShift, restockItem, shipPendingItem, removeEmployee, addEmployee }}>{children}</AdminContext.Provider>;
+  return <AdminContext.Provider value={{ inventory, alerts, employees, stats, analytics, notifications, orders, adminAlerts, searchQuery, statusFilter, transferModalOpen, setSearchQuery, setStatusFilter, setTransferModalOpen, addNotification, removeNotification, transferStock, toggleEmployeeShift, restockItem, shipPendingItem, removeEmployee, addEmployee }}>{children}</AdminContext.Provider>;
 }
 
 export function useAdmin() {

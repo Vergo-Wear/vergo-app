@@ -7,6 +7,7 @@ import { NotificationType, orderNumber } from './notification-type';
 const notificationSelect = {
   notificationId: true,
   orderId: true,
+  checkoutId: true,
   type: true,
   title: true,
   message: true,
@@ -36,7 +37,7 @@ export class NotificationsService {
   async findCustomerNotifications(profileId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     return this.prisma.notification.findMany({
-      where: { order: { customerId } },
+      where: { customerId },
       select: notificationSelect,
       orderBy: { createdAt: 'desc' },
     });
@@ -46,7 +47,7 @@ export class NotificationsService {
   async findCustomerNotification(profileId: string, notificationId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     const notification = await this.prisma.notification.findFirst({
-      where: { notificationId, order: { customerId } },
+      where: { notificationId, customerId },
       select: notificationSelect,
     });
     if (!notification) throw new NotFoundException('Notification not found.');
@@ -57,7 +58,7 @@ export class NotificationsService {
   async unreadCount(profileId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     const count = await this.prisma.notification.count({
-      where: { order: { customerId }, isRead: false },
+      where: { customerId, isRead: false },
     });
     return { count };
   }
@@ -69,14 +70,14 @@ export class NotificationsService {
   async markAsRead(profileId: string, notificationId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     const result = await this.prisma.notification.updateMany({
-      where: { notificationId, order: { customerId } },
+      where: { notificationId, customerId },
       data: { isRead: true },
     });
     if (result.count === 0) {
       throw new NotFoundException('Notification not found.');
     }
     return this.prisma.notification.findFirst({
-      where: { notificationId, order: { customerId } },
+      where: { notificationId, customerId },
       select: notificationSelect,
     });
   }
@@ -89,16 +90,23 @@ export class NotificationsService {
    * ORDER_READY additionally has a partial unique index in the database).
    */
   private async createNotification(params: {
-    orderId: string;
+    customerId: string;
+    orderId?: string | null;
+    checkoutId?: string | null;
     type: NotificationType;
     title: string;
     message: string;
     once?: boolean;
   }) {
-    const { orderId, type, title, message, once } = params;
+    const { customerId, orderId, checkoutId, type, title, message, once } =
+      params;
     if (once) {
       const existing = await this.prisma.notification.findFirst({
-        where: { orderId, type },
+        where: {
+          orderId: orderId ?? undefined,
+          checkoutId: checkoutId ?? undefined,
+          type,
+        },
         select: { notificationId: true },
       });
       if (existing) {
@@ -110,7 +118,7 @@ export class NotificationsService {
     }
     try {
       return await this.prisma.notification.create({
-        data: { orderId, type, title, message },
+        data: { customerId, orderId, checkoutId, type, title, message },
       });
     } catch (error: unknown) {
       // P2002 = unique constraint violation (concurrent duplicate event).
@@ -150,6 +158,7 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
+        customerId: customer.customerId,
         orderId,
         type: NotificationType.ORDER_READY,
         title: 'Order Ready for Collection',
@@ -178,6 +187,7 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
+        customerId: customer.customerId,
         orderId,
         type: NotificationType.PAYMENT_REJECTED,
         title: 'Payment Rejected',
@@ -206,6 +216,7 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
+        customerId: customer.customerId,
         orderId,
         type: NotificationType.PAYMENT_EXPIRED,
         title: 'Payment Expired',
@@ -219,6 +230,78 @@ export class NotificationsService {
     } catch (error) {
       this.logger.error(
         `Failed to create PAYMENT_EXPIRED notification for order ${orderId}`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Notifies an account customer immediately after an Admin approves or
+   * rejects their pending checkout. Guest checkouts have no customerId and
+   * are deliberately skipped.
+   */
+  async notifyCheckoutReviewed(checkoutId: string): Promise<void> {
+    try {
+      const checkout = await this.prisma.pendingCheckout.findUnique({
+        where: { checkoutId },
+        select: {
+          checkoutId: true,
+          customerId: true,
+          paymentMethod: true,
+          status: true,
+          adminNotes: true,
+          customer: {
+            select: { customerId: true, firstName: true, email: true },
+          },
+          order: { select: { orderId: true } },
+        },
+      });
+      if (!checkout?.customerId || !checkout.customer) return;
+
+      const isBank = checkout.paymentMethod.toLowerCase().includes('bank');
+      const approved = checkout.status === 'Approved';
+      const type = approved
+        ? isBank
+          ? NotificationType.PAYMENT_APPROVED
+          : NotificationType.COD_CONFIRMED
+        : isBank
+          ? NotificationType.PAYMENT_REJECTED
+          : NotificationType.COD_REJECTED;
+      const reference = checkout.order?.orderId
+        ? orderNumber(checkout.order.orderId)
+        : `#${checkout.checkoutId.slice(0, 8).toUpperCase()}`;
+      const title = approved
+        ? isBank
+          ? 'Payment Approved'
+          : 'COD Order Confirmed'
+        : isBank
+          ? 'Payment Rejected'
+          : 'COD Order Rejected';
+      const message = approved
+        ? `${isBank ? 'Your bank transfer payment' : 'Your Cash on Delivery order'} ${reference} has been approved and is ready for processing.`
+        : `${isBank ? 'Your bank transfer payment' : 'Your Cash on Delivery order'} ${reference} has been rejected.${checkout.adminNotes ? ` Reason: ${checkout.adminNotes}` : ''}`;
+
+      await this.createNotification({
+        customerId: checkout.customerId,
+        orderId: checkout.order?.orderId ?? null,
+        checkoutId,
+        type,
+        title,
+        message,
+        once: true,
+      });
+
+      if (isBank && !approved) {
+        await this.email.sendPaymentRejectedEmail({
+          to: checkout.customer.email,
+          customerName: checkout.customer.firstName,
+          orderNumber: reference,
+          reason: checkout.adminNotes,
+        });
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to create checkout review notification for ${checkoutId}`,
         error,
       );
     }
