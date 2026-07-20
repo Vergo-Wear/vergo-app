@@ -53,26 +53,17 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const token = sessionStorage.getItem("vergo_access_token");
     if (!token || !API_URL) return;
-
-    Promise.all([
-      fetch(`${API_URL}/admin/overview`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
-        .then((response) => {
-          if (!response.ok) throw new Error("Unable to retrieve admin overview data.");
-          return response.json();
-        }),
-      fetch(`${API_URL}/orders/manage`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
-        .then((response) => {
-          if (!response.ok) throw new Error("Unable to retrieve managed orders.");
-          return response.json();
-        })
-    ])
-    .then(([overviewData, ordersData]) => {
-      setInventory(overviewData.inventory.map((item: InventoryItem) => ({ ...item, status: item.inStock <= (item.reorderLevel || 0) ? "PENDING" : "PROCESSING" })));
-      setEmployees(overviewData.employees.map((employee: { id: string; name: string; status: string }, index: number) => ({ id: employee.id, rank: index + 1, name: employee.name, avatar: employee.name.split(" ").map((part) => part[0]).join("").slice(0, 2), status: employee.status === "active" ? "ON SHIFT" : "OFF SHIFT", parcels: 0 })));
-      setStats(overviewData.stats);
-      setOrders(ordersData);
-    })
-    .catch((error: Error) => addNotification(error.message, "error"));
+    fetch(`${API_URL}/admin/overview`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to retrieve admin data.");
+        return response.json();
+      })
+      .then((data) => {
+        setInventory(data.inventory.map((item: InventoryItem) => ({ ...item, status: item.inStock <= (item.reorderLevel || 0) ? "PENDING" : "PROCESSING" })));
+        setEmployees(data.employees.map((employee: { id: string; name: string; status: string }, index: number) => ({ id: employee.id, rank: index + 1, name: employee.name, avatar: employee.name.split(" ").map((part) => part[0]).join("").slice(0, 2), status: employee.status === "active" ? "ON SHIFT" : "OFF SHIFT", parcels: 0 })));
+        setStats(data.stats);
+      })
+      .catch((error: Error) => addNotification(error.message, "error"));
   }, []);
 
   const persistQuantity = (item: InventoryItem, quantity: number) => {
