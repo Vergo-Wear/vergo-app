@@ -142,6 +142,30 @@ describe('Auth Module (Controller & Service)', () => {
       });
     });
 
+    it('should replace an unusable Supabase error message with a safe fallback', async () => {
+      prismaMock.customer.findUnique.mockResolvedValue(null);
+      prismaMock.profiles.findUnique.mockResolvedValue(null);
+      prismaMock.customer.findFirst.mockResolvedValue(null);
+      prismaMock.role.findFirst.mockResolvedValue({
+        roleId: 'role-id-123',
+        roleName: 'Customer',
+      });
+
+      supabaseMock.adminClient.auth.admin.createUser.mockResolvedValue({
+        data: { user: null },
+        error: {
+          name: 'AuthApiError',
+          status: 500,
+          code: 'unexpected_failure',
+          message: '{}',
+        },
+      });
+
+      await expect(service.customerSignup(signupDto)).rejects.toThrow(
+        'Failed to register user in Supabase Auth.',
+      );
+    });
+
     it('should delete Supabase user if database operation fails', async () => {
       prismaMock.customer.findUnique.mockResolvedValue(null);
       prismaMock.profiles.findUnique.mockResolvedValue(null);

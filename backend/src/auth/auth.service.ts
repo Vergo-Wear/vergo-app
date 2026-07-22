@@ -119,9 +119,22 @@ export class AuthService {
       });
 
     if (authError || !authData.user) {
-      this.logger.error(`Supabase Auth signup failed: ${authError?.message}`);
+      const rawMessage = authError?.message?.trim();
+      const usableMessage =
+        rawMessage && rawMessage !== '{}' && rawMessage !== '[object Object]'
+          ? rawMessage
+          : null;
+
+      this.logger.error(
+        `Supabase Auth signup failed: ${JSON.stringify({
+          name: authError?.name,
+          status: authError?.status,
+          code: authError?.code,
+          message: rawMessage || null,
+        })}`,
+      );
       throw new BadRequestException(
-        authError?.message || 'Failed to register user in Supabase Auth.',
+        usableMessage || 'Failed to register user in Supabase Auth.',
       );
     }
 
