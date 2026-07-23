@@ -50,10 +50,14 @@ export default function PaymentPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Form state
-  const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [paymentMethod, setPaymentMethod] = useState<
+    "" | "cod" | "bank_transfer"
+  >("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOrderCompletedModal, setShowOrderCompletedModal] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showPaymentSelectionToast, setShowPaymentSelectionToast] =
+    useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   const [reservationExpiresAt, setReservationExpiresAt] = useState<
@@ -141,7 +145,6 @@ export default function PaymentPage() {
         isCustomer &&
         !forcedGuest;
       setIsLoggedIn(loggedIn);
-      setPaymentMethod(loggedIn ? "bank_transfer" : "cod");
 
       const storedContact = localStorage.getItem("vergo_checkout_contact");
       const storedShipping = localStorage.getItem("vergo_checkout_shipping");
@@ -389,8 +392,13 @@ export default function PaymentPage() {
   const handlePlaceOrder = async () => {
     setSubmitError(null);
 
+    if (!paymentMethod) {
+      setShowPaymentSelectionToast(true);
+      return;
+    }
+
     if (!isLoggedIn && paymentMethod === "bank_transfer") {
-      setPaymentMethod("cod");
+      setPaymentMethod("");
       setSubmitError("Please log in to use Bank Transfer.");
       return;
     }
@@ -466,6 +474,15 @@ export default function PaymentPage() {
     }
   };
 
+  useEffect(() => {
+    if (!showPaymentSelectionToast) return;
+    const timer = window.setTimeout(
+      () => setShowPaymentSelectionToast(false),
+      3000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [showPaymentSelectionToast]);
+
   const handleFinishCheckout = () => {
     clearCart();
     // Clean up temporary checkout states
@@ -502,7 +519,7 @@ export default function PaymentPage() {
           setReservationExpiresAt(null);
           setBankCheckoutPayload(null);
           setIsChoosingAlternativePayment(true);
-          setPaymentMethod("cod");
+          setPaymentMethod("");
           setShowOrderCompletedModal(false);
         }}
       />
@@ -655,7 +672,9 @@ export default function PaymentPage() {
                 border:
                   paymentMethod === "bank_transfer"
                     ? "1.5px solid #00FF9D"
-                    : "1px solid rgba(255, 255, 255, 0.08)",
+                    : showPaymentSelectionToast && !paymentMethod
+                      ? "1.5px solid #ff453a"
+                      : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
                 backgroundColor: "#0d0d0e",
                 cursor: isLoggedIn ? "pointer" : "not-allowed",
@@ -665,6 +684,7 @@ export default function PaymentPage() {
               onClick={() => {
                 if (isLoggedIn) {
                   setIsChoosingAlternativePayment(false);
+                  setShowPaymentSelectionToast(false);
                   setPaymentMethod("bank_transfer");
                 }
               }}
@@ -751,7 +771,9 @@ export default function PaymentPage() {
                 border:
                   paymentMethod === "cod"
                     ? "1.5px solid #00FF9D"
-                    : "1px solid rgba(255, 255, 255, 0.08)",
+                    : showPaymentSelectionToast && !paymentMethod
+                      ? "1.5px solid #ff453a"
+                      : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
                 backgroundColor: "#0d0d0e",
                 cursor: "pointer",
@@ -759,6 +781,7 @@ export default function PaymentPage() {
               }}
               onClick={() => {
                 setIsChoosingAlternativePayment(true);
+                setShowPaymentSelectionToast(false);
                 setPaymentMethod("cod");
               }}
             >
@@ -924,12 +947,43 @@ export default function PaymentPage() {
                   ? "Checking payment..."
                   : isSubmitting
                     ? "Processing..."
-                    : "Place Order"}
+                    : paymentMethod === "bank_transfer"
+                      ? "Proceed"
+                      : "Submit"}
               </button>
             </div>
           </div>
         </aside>
       </main>
+
+      {showPaymentSelectionToast && !paymentMethod && (
+        <div
+          className="toast-notification toast-error"
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="toast-content">
+            <svg
+              className="toast-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span>Please select a payment method to continue.</span>
+          </div>
+        </div>
+      )}
 
       {/* Success Order Completed Modal */}
       {showOrderCompletedModal && (

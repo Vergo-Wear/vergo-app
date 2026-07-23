@@ -61,7 +61,7 @@ export default function OrderHistoryPage() {
         <div className="orders-header">
           <h1 className="orders-title">ORDER HISTORY</h1>
           <p className="orders-subtitle">
-            Track or view details of your purchases.
+            View pending confirmations, approved orders, and delivery progress.
           </p>
         </div>
 
@@ -88,7 +88,6 @@ export default function OrderHistoryPage() {
             </Link>
           </div>
         )}
-
         <div className="orders-list">
           {orders.map((order) => {
             const firstItem = order.orderItems[0];
@@ -157,17 +156,14 @@ export default function OrderHistoryPage() {
                     {displayStatus}
                   </span>
                 </div>
-                {productContent &&
-                  (order.pendingCheckout ? (
-                    <div className="order-card-body">{productContent}</div>
-                  ) : (
-                    <Link
-                      href={`/profile/orders/${order.orderId}`}
-                      className="order-card-body"
-                    >
-                      {productContent}
-                    </Link>
-                  ))}
+                {productContent && (
+                  <Link
+                    href={`/profile/orders/${order.orderId}`}
+                    className="order-card-body"
+                  >
+                    {productContent}
+                  </Link>
+                )}
                 <div className="order-card-footer">
                   <div className="order-total-section">
                     <span className="order-total-label">TOTAL AMOUNT</span>
@@ -178,22 +174,20 @@ export default function OrderHistoryPage() {
                       })}
                     </span>
                   </div>
-                  {!order.pendingCheckout && (
-                    <div className="order-actions-container">
-                      <Link
-                        href={`/profile/orders/${order.orderId}`}
-                        className="order-action-btn btn-view-details"
-                      >
-                        View Details
-                      </Link>
-                      <Link
-                        href={`/profile/orders/${order.orderId}/track`}
-                        className="order-action-btn btn-track-package"
-                      >
-                        Track Package
-                      </Link>
-                    </div>
-                  )}
+                  <div className="order-actions-container">
+                    <Link
+                      href={`/profile/orders/${order.orderId}`}
+                      className="order-action-btn btn-view-details"
+                    >
+                      View Details
+                    </Link>
+                    <Link
+                      href={`/profile/orders/${order.orderId}/track`}
+                      className="order-action-btn btn-track-package"
+                    >
+                      Track Package
+                    </Link>
+                  </div>
                 </div>
               </div>
             );

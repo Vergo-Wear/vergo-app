@@ -523,24 +523,6 @@ button.step-item:focus-visible {
   letter-spacing: -0.01em;
 }
 
-.summary-payment-icons {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 28px;
-  color: rgba(255, 255, 255, 0.15);
-}
-
-.summary-payment-icon {
-  width: 20px;
-  height: 20px;
-  transition: color 0.2s ease;
-}
-
-.summary-payment-icon:hover {
-  color: rgba(255, 255, 255, 0.4);
-}
-
 /* Existing Customer Modal */
 .modal-overlay {
   position: fixed;
@@ -1351,7 +1333,7 @@ button.step-item:focus-visible {
 /* Toast Notifications */
 .toast-notification {
   position: fixed;
-  bottom: 24px;
+  top: 96px;
   right: 24px;
   z-index: 2000;
   padding: 16px 24px;
@@ -1401,7 +1383,7 @@ button.step-item:focus-visible {
 
 @keyframes toastFadeIn {
   from {
-    transform: translateY(20px) scale(0.95);
+    transform: translateY(-20px) scale(0.95);
     opacity: 0;
   }
   to {

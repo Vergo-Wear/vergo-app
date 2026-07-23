@@ -40,10 +40,20 @@ describe('EmployeesService — createEmployeeAccount', () => {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
+      },
+      attendance: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
       },
       role: { findFirst: jest.fn() },
       branch: { findUnique: jest.fn(), findMany: jest.fn() },
-      profiles: { findUnique: jest.fn(), upsert: jest.fn() },
+      profiles: {
+        findUnique: jest.fn(),
+        upsert: jest.fn(),
+        update: jest.fn(),
+      },
       $transaction: jest.fn((callback: any) => callback(prismaMock)),
     };
 
@@ -99,8 +109,9 @@ describe('EmployeesService — createEmployeeAccount', () => {
 
   it('creates auth user, profile with Employee role, and branch-linked employee', async () => {
     arrangeHappyPath();
+    const adminProfileId = 'admin-profile-uuid';
 
-    const result = await service.createEmployeeAccount(dto);
+    const result = await service.createEmployeeAccount(dto, adminProfileId);
 
     expect(supabaseMock.adminClient.auth.admin.createUser).toHaveBeenCalledWith(
       expect.objectContaining({ email: dto.email, email_confirm: true }),
@@ -128,6 +139,7 @@ describe('EmployeesService — createEmployeeAccount', () => {
         data: expect.objectContaining({
           profileId: authUserId,
           branchId: dto.branchId,
+          createdByProfileId: adminProfileId,
           position: dto.position,
         }),
       }),
@@ -293,5 +305,66 @@ describe('EmployeesService — createEmployeeAccount', () => {
     expect(prismaMock.branch.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { name: 'asc' } }),
     );
+  });
+
+  describe('attendance availability transaction', () => {
+    const employeeId = 'employee-uuid';
+    const profileId = 'profile-uuid';
+
+    it('checks in and marks the employee available in the same transaction', async () => {
+      prismaMock.employee.findUnique.mockResolvedValue({
+        employeeId,
+        profileId,
+      });
+      prismaMock.attendance.findFirst.mockResolvedValue(null);
+      prismaMock.attendance.create.mockResolvedValue({
+        attendanceId: 'attendance-1',
+        employeeId,
+        status: 'PRESENT',
+      });
+
+      await service.checkIn(profileId);
+
+      expect(prismaMock.attendance.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          employeeId,
+          checkIn: expect.any(Date),
+          status: 'PRESENT',
+        }),
+      });
+      expect(prismaMock.employee.update).toHaveBeenCalledWith({
+        where: { employeeId },
+        data: { availabilityStatus: 'AVAILABLE' },
+      });
+    });
+
+    it('checks out the open session and marks the employee off duty', async () => {
+      prismaMock.employee.findUnique.mockResolvedValue({
+        employeeId,
+        profileId,
+      });
+      prismaMock.attendance.findFirst.mockResolvedValue({
+        attendanceId: 'attendance-1',
+        employeeId,
+        checkIn: new Date(),
+        checkOut: null,
+      });
+      prismaMock.attendance.update.mockResolvedValue({
+        attendanceId: 'attendance-1',
+        employeeId,
+        checkOut: new Date(),
+      });
+
+      await service.checkOut(profileId);
+
+      expect(prismaMock.attendance.update).toHaveBeenCalledWith({
+        where: { attendanceId: 'attendance-1' },
+        data: { checkOut: expect.any(Date) },
+      });
+      expect(prismaMock.employee.update).toHaveBeenCalledWith({
+        where: { employeeId },
+        data: { availabilityStatus: 'OFF_DUTY' },
+      });
+    });
   });
 });

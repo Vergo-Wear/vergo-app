@@ -38,6 +38,7 @@ describe('NotificationsService', () => {
     customerId,
     customer: {
       customerId,
+      profileId,
       firstName: 'Julian',
       email: 'julian@example.com',
     },
@@ -59,7 +60,7 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { customerId },
+          where: { recipientProfileId: profileId },
           orderBy: { createdAt: 'desc' },
         }),
       );
@@ -72,7 +73,7 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { notificationId, customerId },
+          where: { notificationId, recipientProfileId: profileId },
         }),
       );
     });
@@ -85,12 +86,10 @@ describe('NotificationsService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('rejects requests without a customer profile', async () => {
-      customerDelegate.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.findCustomerNotifications(profileId),
-      ).rejects.toThrow(NotFoundException);
+    it('uses the authenticated profile as the notification recipient', async () => {
+      notificationDelegate.findMany.mockResolvedValue([]);
+      await service.findCustomerNotifications(profileId);
+      expect(customerDelegate.findFirst).not.toHaveBeenCalled();
     });
   });
 
@@ -105,7 +104,7 @@ describe('NotificationsService', () => {
       const result = await service.markAsRead(profileId, notificationId);
 
       expect(notificationDelegate.updateMany).toHaveBeenCalledWith({
-        where: { notificationId, customerId },
+        where: { notificationId, recipientProfileId: profileId },
         data: { isRead: true },
       });
       expect(result).toEqual(
@@ -148,16 +147,30 @@ describe('NotificationsService', () => {
       expect(notificationDelegate.create).not.toHaveBeenCalled();
     });
 
-    it('skips guest orders that have no customer account', async () => {
+    it('queues an email notification for a guest order snapshot', async () => {
       ordersDelegate.findUnique.mockResolvedValue({
         orderId,
         customerId: null,
         customer: null,
+        customerDetails: {
+          firstName: 'Guest',
+          email: 'guest@example.com',
+          phone: '0771234567',
+        },
       });
 
       await service.notifyOrderReady(orderId);
 
-      expect(notificationDelegate.create).not.toHaveBeenCalled();
+      expect(notificationDelegate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          recipientProfileId: null,
+          orderId,
+          channel: 'EMAIL',
+          status: 'Pending',
+          sentAt: null,
+          type: NotificationType.ORDER_READY,
+        }),
+      });
     });
   });
 
@@ -251,7 +264,7 @@ describe('NotificationsService', () => {
 
       expect(notificationDelegate.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          customerId,
+          recipientProfileId: profileId,
           orderId,
           type: NotificationType.COD_CONFIRMED,
           title: 'COD Order Confirmed',
@@ -259,7 +272,7 @@ describe('NotificationsService', () => {
       });
     });
 
-    it('skips a guest checkout', async () => {
+    it('queues a guest checkout notification using its contact snapshot', async () => {
       pendingCheckoutDelegate.findUnique.mockResolvedValue({
         checkoutId: '6b133395-0982-4201-8c62-3edc62b66666',
         customerId: null,
@@ -267,6 +280,11 @@ describe('NotificationsService', () => {
         status: 'Rejected',
         adminNotes: null,
         customer: null,
+        customerDetails: {
+          firstName: 'Guest',
+          email: 'guest@example.com',
+          phone: '0771234567',
+        },
         order: null,
       });
 
@@ -274,7 +292,15 @@ describe('NotificationsService', () => {
         '6b133395-0982-4201-8c62-3edc62b66666',
       );
 
-      expect(notificationDelegate.create).not.toHaveBeenCalled();
+      expect(notificationDelegate.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          recipientProfileId: null,
+          checkoutId: '6b133395-0982-4201-8c62-3edc62b66666',
+          channel: 'EMAIL',
+          status: 'Pending',
+          type: NotificationType.COD_REJECTED,
+        }),
+      });
     });
   });
 });

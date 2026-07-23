@@ -75,7 +75,10 @@ describe('PaymentProofService normalized checkout proof flow', () => {
       checkoutId,
       checkout,
       {
-        receiptUrl: 'https://example.com/receipt.png',
+        fileUrl: 'https://example.com/receipt.png',
+        fileName: 'receipt.png',
+        mimeType: 'image/png',
+        fileSizeBytes: 13,
         storagePublicId: 'new-receipt',
         uploadedAt: expect.any(Date),
       },
@@ -90,7 +93,12 @@ describe('PaymentProofService normalized checkout proof flow', () => {
       checkout: { checkoutId, status: 'Pending Verification' },
       replacedStoragePublicId: 'old-receipt',
     });
-    await service.uploadReservationReceipt(profileId, checkoutId, checkout, receipt);
+    await service.uploadReservationReceipt(
+      profileId,
+      checkoutId,
+      checkout,
+      receipt,
+    );
     expect(cloudinary.deleteAsset).toHaveBeenCalledWith('old-receipt');
   });
 
@@ -99,7 +107,12 @@ describe('PaymentProofService normalized checkout proof flow', () => {
       new BadRequestException('The payment window has expired.'),
     );
     await expect(
-      service.uploadReservationReceipt(profileId, checkoutId, checkout, receipt),
+      service.uploadReservationReceipt(
+        profileId,
+        checkoutId,
+        checkout,
+        receipt,
+      ),
     ).rejects.toThrow(BadRequestException);
     expect(cloudinary.deleteAsset).toHaveBeenCalledWith('new-receipt');
   });

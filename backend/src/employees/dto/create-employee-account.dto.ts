@@ -1,9 +1,11 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Min,
   Matches,
 } from 'class-validator';
 
@@ -38,4 +40,9 @@ export class CreateEmployeeAccountDto {
   @IsString()
   @IsOptional()
   address?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  commissionPerParcel?: number;
 }

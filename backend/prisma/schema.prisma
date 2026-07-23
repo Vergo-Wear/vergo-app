@@ -34,17 +34,21 @@ model Role {
 }
 
 model Profiles {
-  id        String    @id @db.Uuid
-  roleId    String    @map("role_id") @db.Uuid
-  username  String?   @unique
-  status    String?   @default("active")
-  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  id         String    @id @db.Uuid
+  roleId     String    @map("role_id") @db.Uuid
+  username   String?   @unique
+  status     String?   @default("active")
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz(6)
 
-  authUser          AuthUser          @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  role              Role              @relation(fields: [roleId], references: [roleId], onDelete: Restrict, onUpdate: NoAction)
-  customer          Customer?
-  employee          Employee?
-  reviewedCheckouts PendingCheckout[] @relation("PendingCheckoutReviewer")
+  authUser              AuthUser          @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  role                  Role              @relation(fields: [roleId], references: [roleId], onDelete: Restrict, onUpdate: NoAction)
+  customer              Customer?
+  employee              Employee?         @relation("EmployeeProfile")
+  createdEmployees      Employee[]        @relation("EmployeeCreatedBy")
+  reviewedCheckouts     PendingCheckout[] @relation("PendingCheckoutReviewer")
+  reviewedPaymentProofs PaymentProof[]    @relation("PaymentProofReviewer")
+  notifications         Notification[]
 
   @@map("profiles")
   @@schema("public")
@@ -65,7 +69,6 @@ model Customer {
   reviews          Review[]
   addresses        UserAddress[]
   pendingCheckouts PendingCheckout[]
-  notifications    Notification[]
 
   @@map("customer")
   @@schema("public")
@@ -119,24 +122,27 @@ model CartItem {
 }
 
 model Employee {
-  employeeId         String    @id @default(dbgenerated("gen_random_uuid()")) @map("employee_id") @db.Uuid
-  profileId          String    @unique @map("profile_id") @db.Uuid
-  branchId           String?   @map("branch_id") @db.Uuid
-  firstName          String    @map("first_name")
-  lastName           String    @map("last_name")
-  phone              String?
-  address            String?
-  position           String?
-  salary             Decimal?  @db.Decimal
-  hireDate           DateTime? @map("hire_date") @db.Date
-  availabilityStatus String    @default("OFF_DUTY") @map("availability_status")
+  employeeId          String    @id @default(dbgenerated("gen_random_uuid()")) @map("employee_id") @db.Uuid
+  profileId           String    @unique @map("profile_id") @db.Uuid
+  branchId            String?   @map("branch_id") @db.Uuid
+  createdByProfileId  String?   @map("created_by_profile_id") @db.Uuid
+  firstName           String    @map("first_name")
+  lastName            String    @map("last_name")
+  phone               String?
+  address             String?
+  position            String?
+  salary              Decimal?  @db.Decimal
+  commissionPerParcel Decimal   @default(0) @map("commission_per_parcel") @db.Decimal
+  hireDate            DateTime? @map("hire_date") @db.Date
+  availabilityStatus  String    @default("OFF_DUTY") @map("availability_status")
 
-  profile        Profiles        @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  branch         Branch?         @relation(fields: [branchId], references: [branchId])
-  assignedOrders Orders[]        @relation("OrderAssignedEmployee")
-  deliveries     Delivery[]      @relation("DeliveryAssignedEmployee")
+  profile        Profiles             @relation("EmployeeProfile", fields: [profileId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdBy      Profiles?            @relation("EmployeeCreatedBy", fields: [createdByProfileId], references: [id], onDelete: SetNull)
+  branch         Branch?              @relation(fields: [branchId], references: [branchId])
+  assignedOrders Orders[]             @relation("OrderAssignedEmployee")
   attendance     Attendance[]
   salaryRecords  SalaryRecord[]
+  commissions    EmployeeCommission[]
   purchaseOrders PurchaseOrder[]
 
   @@map("employee")
@@ -173,6 +179,9 @@ model Supplier {
   phone          String
   email          String
   address        String
+  status         String          @default("Active")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   products       Product[]
   purchaseOrders PurchaseOrder[]
 
@@ -199,16 +208,18 @@ model Product {
 }
 
 model Review {
-  reviewId   String   @id @default(dbgenerated("gen_random_uuid()")) @map("review_id") @db.Uuid
-  productId  String   @map("product_id") @db.Uuid
-  customerId String   @map("customer_id") @db.Uuid
-  rating     Int
-  comment    String
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  reviewId    String   @id @default(dbgenerated("gen_random_uuid()")) @map("review_id") @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  customerId  String   @map("customer_id") @db.Uuid
+  orderItemId String   @unique @map("order_item_id") @db.Uuid
+  rating      Int
+  comment     String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  product  Product       @relation(fields: [productId], references: [productId], onDelete: Cascade)
-  customer Customer      @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
-  images   ReviewImage[]
+  product   Product       @relation(fields: [productId], references: [productId], onDelete: Cascade)
+  customer  Customer      @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
+  orderItem OrderItem     @relation(fields: [orderItemId], references: [orderItemId], onDelete: Restrict)
+  images    ReviewImage[]
 
   @@unique([productId, customerId])
   @@map("review")
@@ -244,6 +255,7 @@ model ProductVariant {
   purchaseOrderItems   PurchaseOrderItem[]
   pendingCheckoutItems PendingCheckoutItem[]
 
+  @@unique([productId, size, color])
   @@map("product_variant")
   @@schema("public")
 }
@@ -290,6 +302,13 @@ model Orders {
   orderStatus   String    @default("Ready to Process") @map("order_status")
   productTotal  Decimal   @default(0.00) @map("product_total") @db.Decimal
   deliveryFee   Decimal   @default(0.00) @map("delivery_fee") @db.Decimal
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  claimedAt     DateTime? @map("claimed_at") @db.Timestamptz(6)
+  preparingAt   DateTime? @map("preparing_at") @db.Timestamptz(6)
+  parcelReadyAt DateTime? @map("parcel_ready_at") @db.Timestamptz(6)
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(6)
+  deliveredAt   DateTime? @map("delivered_at") @db.Timestamptz(6)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
 
   checkout         PendingCheckout       @relation(fields: [checkoutId], references: [checkoutId])
   customer         Customer?             @relation(fields: [customerId], references: [customerId])
@@ -299,7 +318,8 @@ model Orders {
   customerDetails  OrderCustomerDetails?
   shippingDetails  OrderShippingDetails?
   notifications    Notification[]
-  deliveries       Delivery[]
+  delivery         Delivery?
+  commission       EmployeeCommission?
 
   @@index([customerId])
   @@map("orders")
@@ -321,30 +341,42 @@ model Attendance {
 }
 
 model SalaryRecord {
-  salaryId    String   @id @default(dbgenerated("gen_random_uuid()")) @map("salary_id") @db.Uuid
-  employeeId  String   @map("employee_id") @db.Uuid
-  month       DateTime @db.Date
-  basicSalary Decimal  @map("basic_salary") @db.Decimal
-  bonus       Decimal? @default(0.00) @db.Decimal
-  deduction   Decimal? @default(0.00) @db.Decimal
-  netSalary   Decimal  @map("net_salary") @db.Decimal
+  salaryId        String    @id @default(dbgenerated("gen_random_uuid()")) @map("salary_id") @db.Uuid
+  employeeId      String    @map("employee_id") @db.Uuid
+  month           DateTime  @db.Date
+  basicSalary     Decimal   @map("basic_salary") @db.Decimal
+  commissionTotal Decimal   @default(0) @map("commission_total") @db.Decimal
+  bonus           Decimal   @default(0.00) @db.Decimal
+  deduction       Decimal   @default(0.00) @db.Decimal
+  netSalary       Decimal   @map("net_salary") @db.Decimal
+  paymentStatus   String    @default("Pending") @map("payment_status")
+  calculatedAt    DateTime  @default(now()) @map("calculated_at") @db.Timestamptz(6)
+  paidAt          DateTime? @map("paid_at") @db.Timestamptz(6)
 
-  employee Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Restrict)
+  employee    Employee             @relation(fields: [employeeId], references: [employeeId], onDelete: Restrict)
+  commissions EmployeeCommission[]
 
+  @@unique([employeeId, month])
   @@map("salary_record")
   @@schema("public")
 }
 
 model Delivery {
-  deliveryId         String    @id @default(dbgenerated("gen_random_uuid()")) @map("delivery_id") @db.Uuid
-  orderId            String    @map("order_id") @db.Uuid
-  assignedEmployeeId String?   @map("assigned_employee_id") @db.Uuid
-  deliveryStatus     String?   @default("pending") @map("delivery_status")
-  deliveredAt        DateTime? @map("delivered_at") @db.Timestamptz(6)
+  deliveryId       String    @id @default(dbgenerated("gen_random_uuid()")) @map("delivery_id") @db.Uuid
+  orderId          String    @map("order_id") @db.Uuid
+  deliveryStatus   String    @default("Pending") @map("delivery_status")
+  deliveredAt      DateTime? @map("delivered_at") @db.Timestamptz(6)
+  courierName      String    @default("Koombiyo") @map("courier_name")
+  courierReference String?   @map("courier_reference")
+  waybillNumber    String?   @map("waybill_number")
+  submissionStatus String    @default("Pending") @map("submission_status")
+  submittedAt      DateTime? @map("submitted_at") @db.Timestamptz(6)
+  failureReason    String?   @map("failure_reason")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  order            Orders    @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
-  assignedEmployee Employee? @relation("DeliveryAssignedEmployee", fields: [assignedEmployeeId], references: [employeeId])
+  order Orders @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
 
+  @@unique([orderId])
   @@map("delivery")
   @@schema("public")
 }
@@ -375,6 +407,7 @@ model PurchaseOrderItem {
   purchaseOrder PurchaseOrder  @relation(fields: [purchaseOrderId], references: [purchaseOrderId], onDelete: Cascade)
   variant       ProductVariant @relation(fields: [variantId], references: [variantId], onDelete: Restrict)
 
+  @@unique([purchaseOrderId, variantId])
   @@map("purchase_order_item")
   @@schema("public")
 }
@@ -399,7 +432,9 @@ model OrderItem {
   order                Orders                @relation(fields: [orderId], references: [orderId])
   variant              ProductVariant        @relation(fields: [variantId], references: [variantId])
   inventoryCommitments InventoryCommitment[]
+  review               Review?
 
+  @@unique([orderId, variantId])
   @@map("order_item")
   @@schema("public")
 }
@@ -429,7 +464,9 @@ model PendingCheckout {
   customerId          String?   @map("customer_id") @db.Uuid
   paymentMethod       String    @map("payment_method")
   status              String
+  productTotal        Decimal   @default(0) @map("product_total") @db.Decimal
   deliveryFee         Decimal   @map("delivery_fee") @db.Decimal
+  totalAmount         Decimal   @default(0) @map("total_amount") @db.Decimal
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(6)
   reviewedByProfileId String?   @map("reviewed_by_profile_id") @db.Uuid
   reviewedAt          DateTime? @map("reviewed_at") @db.Timestamptz(6)
@@ -443,7 +480,7 @@ model PendingCheckout {
   items           PendingCheckoutItem[]
   customerDetails PendingCheckoutCustomerDetails?
   shippingDetails PendingCheckoutShippingDetails?
-  paymentProof    CheckoutPaymentProof?
+  paymentProof    PaymentProof?
   reservations    StockReservation[]
   notifications   Notification[]
 
@@ -501,17 +538,25 @@ model PendingCheckoutShippingDetails {
   @@schema("public")
 }
 
-model CheckoutPaymentProof {
-  proofId         String   @id @default(dbgenerated("gen_random_uuid()")) @map("proof_id") @db.Uuid
-  checkoutId      String   @unique @map("checkout_id") @db.Uuid
-  receiptUrl      String   @map("receipt_url")
-  storagePublicId String?  @map("storage_public_id")
-  uploadedAt      DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+model PaymentProof {
+  paymentProofId      String    @id @default(dbgenerated("gen_random_uuid()")) @map("payment_proof_id") @db.Uuid
+  checkoutId          String    @unique @map("checkout_id") @db.Uuid
+  fileUrl             String    @map("file_url")
+  fileName            String?   @map("file_name")
+  mimeType            String?   @map("mime_type")
+  fileSizeBytes       Int?      @map("file_size_bytes")
+  storagePublicId     String?   @map("storage_public_id")
+  status              String    @default("Pending Verification")
+  uploadedAt          DateTime  @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  reviewedByProfileId String?   @map("reviewed_by_profile_id") @db.Uuid
+  reviewedAt          DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  rejectionReason     String?   @map("rejection_reason")
 
   checkout PendingCheckout @relation(fields: [checkoutId], references: [checkoutId], onDelete: Cascade)
+  reviewer Profiles?       @relation("PaymentProofReviewer", fields: [reviewedByProfileId], references: [id], onDelete: SetNull)
 
-  @@map("checkout_payment_proof")
+  @@map("payment_proof")
   @@schema("public")
 }
 
@@ -571,25 +616,47 @@ model OrderShippingDetails {
 }
 
 model Notification {
-  notificationId String   @id @default(dbgenerated("gen_random_uuid()")) @map("notification_id") @db.Uuid
-  customerId     String   @map("customer_id") @db.Uuid
-  orderId        String?  @map("order_id") @db.Uuid
-  checkoutId     String?  @map("checkout_id") @db.Uuid
-  type           String
-  title          String
-  message        String
-  isRead         Boolean  @default(false) @map("is_read")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  notificationId     String    @id @default(dbgenerated("gen_random_uuid()")) @map("notification_id") @db.Uuid
+  recipientProfileId String?   @map("recipient_profile_id") @db.Uuid
+  orderId            String?   @map("order_id") @db.Uuid
+  checkoutId         String?   @map("checkout_id") @db.Uuid
+  type               String
+  title              String
+  message            String
+  channel            String    @default("IN_APP")
+  status             String    @default("Pending")
+  sentAt             DateTime? @map("sent_at") @db.Timestamptz(6)
+  isRead             Boolean   @default(false) @map("is_read")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  customer Customer         @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
-  order    Orders?          @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
-  checkout PendingCheckout? @relation(fields: [checkoutId], references: [checkoutId], onDelete: Cascade)
+  recipient Profiles?        @relation(fields: [recipientProfileId], references: [id], onDelete: Cascade)
+  order     Orders?          @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  checkout  PendingCheckout? @relation(fields: [checkoutId], references: [checkoutId], onDelete: Cascade)
 
-  @@index([customerId, isRead])
+  @@index([recipientProfileId, isRead])
   @@index([orderId])
   @@index([checkoutId])
   @@map("notification")
+  @@schema("public")
+}
+
+model EmployeeCommission {
+  commissionId     String    @id @default(dbgenerated("gen_random_uuid()")) @map("commission_id") @db.Uuid
+  employeeId       String    @map("employee_id") @db.Uuid
+  orderId          String    @unique @map("order_id") @db.Uuid
+  rateUsed         Decimal   @map("rate_used") @db.Decimal
+  commissionAmount Decimal   @map("commission_amount") @db.Decimal
+  status           String    @default("Approved")
+  salaryId         String?   @map("salary_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  paidAt           DateTime? @map("paid_at") @db.Timestamptz(6)
+
+  employee Employee      @relation(fields: [employeeId], references: [employeeId], onDelete: Restrict)
+  order    Orders        @relation(fields: [orderId], references: [orderId], onDelete: Restrict)
+  salary   SalaryRecord? @relation(fields: [salaryId], references: [salaryId], onDelete: SetNull)
+
+  @@map("employee_commission")
   @@schema("public")
 }
 

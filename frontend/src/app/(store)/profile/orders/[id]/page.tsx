@@ -7,6 +7,7 @@ import "@/styles/orders.css";
 
 interface OrderDetails {
   orderId: string;
+  pendingCheckout?: boolean;
   customerId: string | null;
   employeeId: string | null;
   branchId: string | null;
@@ -124,11 +125,17 @@ export default function OrderDetailsPage({
         }
 
         const body = await response.json().catch(() => ({}));
-        if (response.status === 401 || response.status === 403 || response.status === 404) {
+        if (
+          response.status === 401 ||
+          response.status === 403 ||
+          response.status === 404
+        ) {
           setAccessDenied(true);
           return;
         }
-        throw new Error(body.message || "Unable to retrieve this order from the database.");
+        throw new Error(
+          body.message || "Unable to retrieve this order from the database.",
+        );
       }
 
       // Only genuine guest orders use the local checkout record. Authenticated
@@ -254,13 +261,13 @@ export default function OrderDetailsPage({
 
     try {
       if (token && !isGuestOrder) {
-        const response = await fetch(
-          `${API_URL}/orders/mine/${orderId}/cancel`,
-          {
-            method: "PATCH",
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
+        const cancelUrl = order.pendingCheckout
+          ? `${API_URL}/orders/pending-checkouts/${orderId}/cancel`
+          : `${API_URL}/orders/mine/${orderId}/cancel`;
+        const response = await fetch(cancelUrl, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         if (!response.ok) {
           const body = await response.json().catch(() => ({}));
@@ -268,7 +275,16 @@ export default function OrderDetailsPage({
         }
 
         const updated = await response.json();
-        setOrder(updated as OrderDetails);
+        setOrder((current) =>
+          current
+            ? {
+                ...current,
+                ...(order.pendingCheckout
+                  ? { orderStatus: updated.status || "Cancelled" }
+                  : (updated as OrderDetails)),
+              }
+            : current,
+        );
         setCancelSuccess(true);
         return;
       }
@@ -563,21 +579,21 @@ export default function OrderDetailsPage({
 
   // Cancellation criteria checks
   const statusStr = (order.orderStatus || "").toLowerCase();
-  const isUnclaimed = !order.employeeId;
-  const isInitialStatus = [
-    "pending",
-    "draft",
-    "pending payment",
-    "pending verification",
-    "ready to process",
-  ].includes(statusStr);
-  const canCancel = isInitialStatus && isUnclaimed;
+  const paymentMethod = order.paymentMethod.toLowerCase();
+  const isCashOnDelivery =
+    paymentMethod.includes("cash") || paymentMethod === "cod";
+  const isBankTransfer = paymentMethod.includes("bank");
+  const canCancel =
+    !isGuestOrder &&
+    Boolean(order.pendingCheckout) &&
+    isCashOnDelivery &&
+    ["pending", "pending confirmation"].includes(statusStr);
 
   let statusColor = "#00FF9D"; // Green default
   let statusDisplayName = order.orderStatus || "Pending";
 
   if (statusStr.includes("pending")) {
-    statusDisplayName = "Pending";
+    statusDisplayName = order.orderStatus || "Pending";
     statusColor = "#ffc107"; // Gold
   } else if (
     statusStr === "cancelled" ||
@@ -615,19 +631,25 @@ export default function OrderDetailsPage({
         {/* Title and invoice download row */}
         <div className="order-detail-header-row">
           <div>
-            <h1 className="orders-title">Order Details</h1>
+            <h1 className="orders-title">
+              {order.pendingCheckout
+                ? "Pending Order Details"
+                : "Order Details"}
+            </h1>
             <p className="orders-subtitle" style={{ marginTop: "4px" }}>
               Placed on {getFormattedDate(order.orderDate)}
             </p>
           </div>
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button
-              onClick={handleDownloadInvoice}
-              className="order-action-btn btn-view-details"
-              style={{ padding: "12px 24px" }}
-            >
-              Download Invoice
-            </button>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            {!order.pendingCheckout && (
+              <button
+                onClick={handleDownloadInvoice}
+                className="order-action-btn btn-view-details"
+                style={{ padding: "12px 24px" }}
+              >
+                Download Invoice
+              </button>
+            )}
             <Link
               href={`/profile/orders/${order.orderId}/track`}
               className="order-action-btn btn-track-package"
@@ -730,7 +752,8 @@ export default function OrderDetailsPage({
         {/* Upload proof receipt card for Bank Transfer orders */}
         {/* Only one receipt submission is allowed, so the upload card is
             shown only while the proof is still awaiting its first upload */}
-        {order.paymentMethod === "bank_transfer" &&
+        {!order.pendingCheckout &&
+          order.paymentMethod === "bank_transfer" &&
           (payStatusLower === "pending payment" ||
             payStatusLower === "pending upload") && (
             <div
@@ -1191,7 +1214,9 @@ export default function OrderDetailsPage({
               className="order-detail-card"
               style={{ position: "sticky", top: "40px" }}
             >
-              <h2 className="order-detail-card-title">Order Summary</h2>
+              <h2 className="order-detail-card-title">
+                {order.pendingCheckout ? "Checkout Summary" : "Order Summary"}
+              </h2>
 
               <div className="invoice-calc-rows">
                 <div className="invoice-calc-row">
@@ -1246,8 +1271,33 @@ export default function OrderDetailsPage({
                       width: "100%",
                     }}
                   >
-                    {isCancelling ? "Cancelling..." : "Cancel Order"}
+                    {isCancelling
+                      ? "Cancelling..."
+                      : order.pendingCheckout
+                        ? "Cancel Pending Order"
+                        : "Cancel Order"}
                   </button>
+                )}
+
+                {!canCancel && statusStr !== "cancelled" && (
+                  <div
+                    style={{
+                      padding: "12px",
+                      borderRadius: "6px",
+                      backgroundColor: "rgba(255, 193, 7, 0.08)",
+                      border: "1px solid rgba(255, 193, 7, 0.2)",
+                      color: "rgba(255,255,255,0.65)",
+                      fontSize: "11px",
+                      lineHeight: "1.6",
+                      textAlign: "center",
+                    }}
+                  >
+                    {isBankTransfer
+                      ? "Bank Transfer orders cannot be cancelled directly. Contact Support to request cancellation."
+                      : order.pendingCheckout
+                        ? "This order cannot be cancelled directly. Contact Support to request cancellation."
+                        : "This order has already been approved by Admin. Contact Support to request cancellation."}
+                  </div>
                 )}
 
                 {cancelSuccess && (
@@ -1285,7 +1335,9 @@ export default function OrderDetailsPage({
                       textDecoration: "underline",
                     }}
                   >
-                    Need help? Contact Support
+                    {canCancel
+                      ? "Need help? Contact Support"
+                      : "Contact Support to Cancel Order"}
                   </Link>
                 </div>
               </div>

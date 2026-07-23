@@ -33,7 +33,7 @@ export class PrismaService
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: positiveIntegerFromEnv(
         'DATABASE_CONNECTION_TIMEOUT_MS',
-        15000,
+        30000,
       ),
       keepAlive: true,
       keepAliveInitialDelayMillis: 10000,

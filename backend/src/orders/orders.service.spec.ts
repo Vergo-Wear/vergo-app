@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -23,7 +24,12 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
   const pendingCheckoutItem = { deleteMany: jest.fn(), createMany: jest.fn() };
   const pendingCheckoutCustomerDetails = { upsert: jest.fn() };
   const pendingCheckoutShippingDetails = { upsert: jest.fn() };
-  const checkoutPaymentProof = { upsert: jest.fn(), deleteMany: jest.fn() };
+  const paymentProof = {
+    upsert: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+    deleteMany: jest.fn(),
+  };
   const orders = {
     create: jest.fn(),
     findFirst: jest.fn(),
@@ -37,10 +43,18 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
   const orderShippingDetails = { create: jest.fn() };
   const cart = { findUnique: jest.fn() };
   const cartItem = { deleteMany: jest.fn() };
-  const employee = { findFirst: jest.fn() };
+  const employee = { findFirst: jest.fn(), findUnique: jest.fn() };
+  const employeeCommission = {
+    upsert: jest.fn(),
+    updateMany: jest.fn(),
+  };
   const stockReservation = { aggregate: jest.fn() };
   const inventory = { findFirst: jest.fn() };
-  const userAddress = { findFirst: jest.fn(), create: jest.fn(), updateMany: jest.fn() };
+  const userAddress = {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    updateMany: jest.fn(),
+  };
   const profiles = { findUnique: jest.fn() };
   const prisma: any = {
     customer,
@@ -49,7 +63,7 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     pendingCheckoutItem,
     pendingCheckoutCustomerDetails,
     pendingCheckoutShippingDetails,
-    checkoutPaymentProof,
+    paymentProof,
     orders,
     orderItem,
     orderCustomerDetails,
@@ -57,6 +71,7 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     cart,
     cartItem,
     employee,
+    employeeCommission,
     stockReservation,
     inventory,
     userAddress,
@@ -119,7 +134,12 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
         variantId,
         quantity: 2,
         unitPrice: new Prisma.Decimal(4750),
-        variant: { variantId, sku: 'TEE-M', product: { basePrice: new Prisma.Decimal(4500) }, images: [] },
+        variant: {
+          variantId,
+          sku: 'TEE-M',
+          product: { basePrice: new Prisma.Decimal(4500) },
+          images: [],
+        },
       },
     ],
     customerDetails: {
@@ -216,13 +236,18 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
       null,
     );
     expect(orders.create).not.toHaveBeenCalled();
-    expect(result).toEqual(expect.objectContaining({ checkoutId, status: 'Pending Confirmation' }));
+    expect(result).toEqual(
+      expect.objectContaining({ checkoutId, status: 'Pending Confirmation' }),
+    );
   });
 
   it('creates a guest COD checkout without a customer, cart, or saved address', async () => {
     await service.create(dto());
     expect(pendingCheckout.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ customerId: null, paymentMethod: 'Cash on Delivery' }),
+      data: expect.objectContaining({
+        customerId: null,
+        paymentMethod: 'Cash on Delivery',
+      }),
     });
     expect(userAddress.create).not.toHaveBeenCalled();
     expect(cart.findUnique).not.toHaveBeenCalled();
@@ -232,6 +257,89 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
       dto().items,
       null,
     );
+  });
+
+  it('returns an owned pending checkout through the customer details route', async () => {
+    orders.findFirst.mockResolvedValue(null);
+    pendingCheckout.findFirst.mockResolvedValue(includedCheckout());
+
+    const result = await service.findCustomerOrder(profileId, checkoutId);
+
+    expect(pendingCheckout.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { checkoutId, customerId, order: null },
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        orderId: checkoutId,
+        orderStatus: 'Pending Confirmation',
+        pendingCheckout: true,
+        employeeId: null,
+        orderItems: [
+          expect.objectContaining({
+            orderItemId: 'item-1',
+            quantity: 2,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('cancels an owned pending checkout and releases its stock hold', async () => {
+    pendingCheckout.findFirst.mockResolvedValue(includedCheckout());
+    pendingCheckout.findUnique.mockResolvedValue(
+      includedCheckout({ status: 'Cancelled' }),
+    );
+
+    const result = await service.cancelPendingCheckout(profileId, checkoutId);
+
+    expect(stockReservations.releasePendingCheckout).toHaveBeenCalledWith(
+      prisma,
+      checkoutId,
+    );
+    expect(pendingCheckout.update).toHaveBeenCalledWith({
+      where: { checkoutId },
+      data: { status: 'Cancelled' },
+    });
+    expect(result).toEqual(expect.objectContaining({ status: 'Cancelled' }));
+  });
+
+  it('does not allow a Bank Transfer checkout to be cancelled directly', async () => {
+    pendingCheckout.findFirst.mockResolvedValue(
+      includedCheckout({
+        paymentMethod: 'Bank Transfer',
+        status: 'Pending Verification',
+      }),
+    );
+
+    await expect(
+      service.cancelPendingCheckout(profileId, checkoutId),
+    ).rejects.toThrow(
+      'Bank Transfer orders cannot be cancelled directly. Please contact support.',
+    );
+
+    expect(stockReservations.releasePendingCheckout).not.toHaveBeenCalled();
+    expect(pendingCheckout.update).not.toHaveBeenCalled();
+  });
+
+  it('requires support to cancel an order after Admin approval', async () => {
+    orders.findFirst.mockResolvedValue({
+      orderId,
+      customerId,
+      paymentMethod: 'Cash on Delivery',
+      orderStatus: 'Ready to Process',
+      employeeId: null,
+    });
+
+    await expect(
+      service.cancelCustomerOrder(profileId, orderId),
+    ).rejects.toThrow(
+      'Only Cash on Delivery orders awaiting Admin approval can be cancelled directly. Please contact support.',
+    );
+
+    expect(orders.updateMany).not.toHaveBeenCalled();
+    expect(stockReservations.restoreCommittedForOrder).not.toHaveBeenCalled();
   });
 
   it('creates Bank Transfer reservations owned by the new checkout', async () => {
@@ -271,7 +379,9 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
       true,
     );
     expect(stockReservations.releasePendingCheckout).not.toHaveBeenCalled();
-    expect(checkoutPaymentProof.deleteMany).toHaveBeenCalledWith({ where: { checkoutId } });
+    expect(paymentProof.deleteMany).toHaveBeenCalledWith({
+      where: { checkoutId },
+    });
     expect(pendingCheckout.update).toHaveBeenCalledWith({
       where: { checkoutId },
       data: expect.objectContaining({
@@ -286,10 +396,21 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
   it('keeps the database expiry when a customer re-enters Bank Transfer', async () => {
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
     pendingCheckout.findFirst.mockResolvedValue(
-      includedCheckout({ paymentMethod: 'Bank Transfer', status: 'Awaiting Payment', expiresAt }),
+      includedCheckout({
+        paymentMethod: 'Bank Transfer',
+        status: 'Awaiting Payment',
+        expiresAt,
+      }),
     );
-    await expect(service.getCurrentBankTransferReservation(profileId)).resolves.toEqual(
-      expect.objectContaining({ checkoutId, reservationId: checkoutId, expiresAt, status: 'Active' }),
+    await expect(
+      service.getCurrentBankTransferReservation(profileId),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        checkoutId,
+        reservationId: checkoutId,
+        expiresAt,
+        status: 'Active',
+      }),
     );
   });
 
@@ -308,22 +429,30 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
         paymentMethod: 'Bank Transfer',
         status: 'Pending Verification',
         expiresAt,
-        paymentProof: { receiptUrl: 'https://example.com/receipt.png', uploadedAt: new Date() },
+        paymentProof: {
+          fileUrl: 'https://example.com/receipt.png',
+          uploadedAt: new Date(),
+        },
       }),
     );
 
-    await service.finalizeBankTransferReservation(profileId, checkoutId, dto('bank_transfer'), {
-      receiptUrl: 'https://example.com/receipt.png',
-      storagePublicId: 'receipt-1',
-      uploadedAt: new Date(),
-    });
+    await service.finalizeBankTransferReservation(
+      profileId,
+      checkoutId,
+      dto('bank_transfer'),
+      {
+        fileUrl: 'https://example.com/receipt.png',
+        storagePublicId: 'receipt-1',
+        uploadedAt: new Date(),
+      },
+    );
 
     expect(stockReservations.markPendingVerification).toHaveBeenCalledWith(
       prisma,
       checkoutId,
       expect.any(Date),
     );
-    expect(checkoutPaymentProof.upsert).toHaveBeenCalledWith(
+    expect(paymentProof.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { checkoutId } }),
     );
     expect(orders.create).not.toHaveBeenCalled();
@@ -350,10 +479,18 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
       checkout: { ...checkout, paymentProof: null },
     });
 
-    await service.reviewPendingCheckout(checkoutId, { status: 'Approved' }, profileId);
+    await service.reviewPendingCheckout(
+      checkoutId,
+      { status: 'Approved' },
+      profileId,
+    );
 
     expect(orders.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ checkoutId, customerId, orderStatus: 'Ready to Process' }),
+      data: expect.objectContaining({
+        checkoutId,
+        customerId,
+        orderStatus: 'Ready to Process',
+      }),
     });
     expect(stockReservations.commitPendingCheckout).toHaveBeenCalledWith(
       prisma,
@@ -376,7 +513,10 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
       { status: 'Rejected', adminNotes: 'Not approved' },
       profileId,
     );
-    expect(stockReservations.releasePendingCheckout).toHaveBeenCalledWith(prisma, checkoutId);
+    expect(stockReservations.releasePendingCheckout).toHaveBeenCalledWith(
+      prisma,
+      checkoutId,
+    );
     expect(orders.create).not.toHaveBeenCalled();
     expect(stockReservations.commitPendingCheckout).not.toHaveBeenCalled();
   });
@@ -393,5 +533,94 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     ).rejects.toThrow('Only an Admin profile can review a pending checkout.');
 
     expect(orders.create).not.toHaveBeenCalled();
+  });
+
+  it('records one immutable parcel commission when an employee marks the order ready', async () => {
+    const employeeId = '2ad40ee2-0b2c-45b4-93f5-86efbcfc8888';
+    const order = {
+      orderId,
+      checkoutId,
+      customerId,
+      employeeId,
+      branchId: null,
+      orderDate: new Date(),
+      totalAmount: new Prisma.Decimal(9850),
+      productTotal: new Prisma.Decimal(9500),
+      deliveryFee: new Prisma.Decimal(350),
+      paymentMethod: 'Cash on Delivery',
+      orderStatus: 'Preparing',
+      updatedAt: new Date(),
+      claimedAt: new Date(),
+      preparingAt: new Date(),
+      parcelReadyAt: null,
+      sentAt: null,
+      deliveredAt: null,
+      completedAt: null,
+    };
+    orders.findUnique.mockResolvedValueOnce(order);
+    employee.findFirst.mockResolvedValue({ employeeId });
+    employee.findUnique.mockResolvedValue({
+      commissionPerParcel: new Prisma.Decimal(125),
+    });
+    orders.update.mockResolvedValue({
+      ...order,
+      orderStatus: 'Ready for Pickup',
+      parcelReadyAt: new Date(),
+      orderItems: [],
+      customerDetails: null,
+      shippingDetails: null,
+      checkout: { paymentProof: null },
+    });
+
+    await service.updateManagedStatus(
+      profileId,
+      'Employee',
+      orderId,
+      'Ready for Pickup',
+    );
+
+    expect(employeeCommission.upsert).toHaveBeenCalledWith({
+      where: { orderId },
+      create: {
+        employeeId,
+        orderId,
+        rateUsed: new Prisma.Decimal(125),
+        commissionAmount: new Prisma.Decimal(125),
+      },
+      update: {},
+    });
+    expect(notifications.notifyOrderReady).toHaveBeenCalledWith(orderId);
+  });
+
+  it('retries a transient startup expiry-sweep connection timeout', async () => {
+    jest.useFakeTimers();
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const transientError = new Error(
+      'Connection terminated due to connection timeout',
+      {
+        cause: new Error('Connection terminated unexpectedly'),
+      },
+    );
+    const sweep = jest
+      .spyOn(service, 'expireOverduePaymentProofs')
+      .mockRejectedValueOnce(transientError)
+      .mockResolvedValue({ expired: 0, checkouts: 0 });
+
+    try {
+      service.onModuleInit();
+      await Promise.resolve();
+
+      expect(sweep).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        'Payment proof expiry sweep connection attempt 1 failed; retrying.',
+      );
+
+      await jest.advanceTimersByTimeAsync(2000);
+      expect(sweep).toHaveBeenCalledTimes(2);
+    } finally {
+      service.onModuleDestroy();
+      jest.useRealTimers();
+      warn.mockRestore();
+    }
   });
 });

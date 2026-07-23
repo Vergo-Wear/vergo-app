@@ -37,9 +37,28 @@ export class EmployeesController {
     return this.employeesService.updateAvailability(profileId, dto.status);
   }
 
+  @Post('me/check-in')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee')
+  checkIn(@CurrentUser() profileId: string) {
+    return this.employeesService.checkIn(profileId);
+  }
+
+  @Post('me/check-out')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee')
+  checkOut(@CurrentUser() profileId: string) {
+    return this.employeesService.checkOut(profileId);
+  }
+
   @Post()
-  async create(@Body() dto: CreateEmployeeDto) {
-    return this.employeesService.create(dto);
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin')
+  async create(
+    @CurrentUser() adminProfileId: string,
+    @Body() dto: CreateEmployeeDto,
+  ) {
+    return this.employeesService.create(dto, adminProfileId);
   }
 
   @Get('profile/:profileId')
@@ -48,6 +67,8 @@ export class EmployeesController {
   }
 
   @Patch(':id')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin')
   async update(@Param('id') id: string, @Body() dto: UpdateEmployeeDto) {
     return this.employeesService.update(id, dto);
   }
