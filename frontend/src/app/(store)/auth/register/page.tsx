@@ -693,13 +693,6 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* Feedback Message */}
-            {message && (
-              <div className={`feedback-message ${message.type}`}>
-                {message.text}
-              </div>
-            )}
-
             {/* Submit Register Button */}
             <button
               type="submit"

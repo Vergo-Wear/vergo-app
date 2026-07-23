@@ -749,13 +749,6 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            {/* Feedback Message */}
-            {message && (
-              <div className={`feedback-message ${message.type}`}>
-                {message.text}
-              </div>
-            )}
-
             {/* Submit Login Button */}
             <button
               type="submit"

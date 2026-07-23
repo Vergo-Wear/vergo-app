@@ -834,7 +834,7 @@ export default function ShippingPage() {
         <div
           style={{
             position: "fixed",
-            bottom: "32px",
+            top: "96px",
             right: "32px",
             backgroundColor: "#0d0d0e",
             border: "1px solid #00FF9D",

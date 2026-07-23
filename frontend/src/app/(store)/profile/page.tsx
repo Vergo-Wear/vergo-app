@@ -604,7 +604,7 @@ export default function ProfilePage() {
         <div 
           style={{
             position: "fixed",
-            top: "24px",
+            top: "96px",
             right: "24px",
             backgroundColor: toast.type === "success" ? "rgba(0, 255, 157, 0.15)" : "rgba(255, 77, 77, 0.15)",
             border: toast.type === "success" ? "1px solid rgba(0, 255, 157, 0.3)" : "1px solid rgba(255, 77, 77, 0.3)",

@@ -56,6 +56,8 @@ export default function PaymentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOrderCompletedModal, setShowOrderCompletedModal] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showPaymentSelectionToast, setShowPaymentSelectionToast] =
+    useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   const [reservationExpiresAt, setReservationExpiresAt] = useState<
@@ -391,7 +393,7 @@ export default function PaymentPage() {
     setSubmitError(null);
 
     if (!paymentMethod) {
-      setSubmitError("Please select a payment method.");
+      setShowPaymentSelectionToast(true);
       return;
     }
 
@@ -471,6 +473,15 @@ export default function PaymentPage() {
       );
     }
   };
+
+  useEffect(() => {
+    if (!showPaymentSelectionToast) return;
+    const timer = window.setTimeout(
+      () => setShowPaymentSelectionToast(false),
+      3000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [showPaymentSelectionToast]);
 
   const handleFinishCheckout = () => {
     clearCart();
@@ -661,7 +672,9 @@ export default function PaymentPage() {
                 border:
                   paymentMethod === "bank_transfer"
                     ? "1.5px solid #00FF9D"
-                    : "1px solid rgba(255, 255, 255, 0.08)",
+                    : showPaymentSelectionToast && !paymentMethod
+                      ? "1.5px solid #ff453a"
+                      : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
                 backgroundColor: "#0d0d0e",
                 cursor: isLoggedIn ? "pointer" : "not-allowed",
@@ -671,6 +684,7 @@ export default function PaymentPage() {
               onClick={() => {
                 if (isLoggedIn) {
                   setIsChoosingAlternativePayment(false);
+                  setShowPaymentSelectionToast(false);
                   setPaymentMethod("bank_transfer");
                 }
               }}
@@ -757,7 +771,9 @@ export default function PaymentPage() {
                 border:
                   paymentMethod === "cod"
                     ? "1.5px solid #00FF9D"
-                    : "1px solid rgba(255, 255, 255, 0.08)",
+                    : showPaymentSelectionToast && !paymentMethod
+                      ? "1.5px solid #ff453a"
+                      : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
                 backgroundColor: "#0d0d0e",
                 cursor: "pointer",
@@ -765,6 +781,7 @@ export default function PaymentPage() {
               }}
               onClick={() => {
                 setIsChoosingAlternativePayment(true);
+                setShowPaymentSelectionToast(false);
                 setPaymentMethod("cod");
               }}
             >
@@ -922,9 +939,7 @@ export default function PaymentPage() {
               </button>
               <button
                 type="button"
-                disabled={
-                  !paymentMethod || isSubmitting || isCheckingActiveReservation
-                }
+                disabled={isSubmitting || isCheckingActiveReservation}
                 className="submit-btn"
                 onClick={handlePlaceOrder}
               >
@@ -932,16 +947,16 @@ export default function PaymentPage() {
                   ? "Checking payment..."
                   : isSubmitting
                     ? "Processing..."
-                    : paymentMethod
-                      ? "Place Order"
-                      : "Select Payment Method"}
+                    : paymentMethod === "bank_transfer"
+                      ? "Proceed"
+                      : "Submit"}
               </button>
             </div>
           </div>
         </aside>
       </main>
 
-      {authReady && !isCheckingActiveReservation && !paymentMethod && (
+      {showPaymentSelectionToast && !paymentMethod && (
         <div
           className="toast-notification toast-error"
           role="alert"

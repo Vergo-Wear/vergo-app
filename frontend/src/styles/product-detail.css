@@ -505,7 +505,7 @@
 /* Notification Toast */
 .toast-notification {
   position: fixed;
-  bottom: 30px;
+  top: 96px;
   right: 30px;
   background: #161618;
   border: 1.5px solid #00FF9D;
@@ -519,13 +519,13 @@
   gap: 12px;
   font-size: 0.85rem;
   font-weight: 600;
-  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: toastSlideInTop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes slideUp {
+@keyframes toastSlideInTop {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(-20px);
   }
   to {
     opacity: 1;

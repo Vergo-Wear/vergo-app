@@ -1333,7 +1333,7 @@ button.step-item:focus-visible {
 /* Toast Notifications */
 .toast-notification {
   position: fixed;
-  bottom: 24px;
+  top: 96px;
   right: 24px;
   z-index: 2000;
   padding: 16px 24px;
@@ -1383,7 +1383,7 @@ button.step-item:focus-visible {
 
 @keyframes toastFadeIn {
   from {
-    transform: translateY(20px) scale(0.95);
+    transform: translateY(-20px) scale(0.95);
     opacity: 0;
   }
   to {
