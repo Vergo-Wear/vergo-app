@@ -41,9 +41,17 @@ export class ReviewsService {
           orderStatus: { in: ['Delivered', 'Completed'] },
           orderItems: { some: { variant: { productId } } },
         },
-        select: { orderId: true },
+        orderBy: { orderDate: 'desc' },
+        select: {
+          orderItems: {
+            where: { variant: { productId } },
+            select: { orderItemId: true },
+            take: 1,
+          },
+        },
       });
-      if (!purchased) {
+      const purchasedItem = purchased?.orderItems[0];
+      if (!purchasedItem) {
         throw new ForbiddenException(
           'You can review this product after a purchased order is delivered.',
         );
@@ -55,14 +63,13 @@ export class ReviewsService {
         select: { reviewId: true },
       });
       if (existing) {
-        throw new ConflictException(
-          'You have already reviewed this product.',
-        );
+        throw new ConflictException('You have already reviewed this product.');
       }
       return tx.review.create({
         data: {
           productId,
           customerId: customer.customerId,
+          orderItemId: purchasedItem.orderItemId,
           rating: dto.rating,
           comment: dto.comment.trim(),
           images: {

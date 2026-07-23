@@ -19,7 +19,9 @@ describe('ReviewsService purchased-product rule', () => {
     jest.clearAllMocks();
     service = new ReviewsService(prisma);
     customer.findFirst.mockResolvedValue({ customerId });
-    orders.findFirst.mockResolvedValue({ orderId: 'delivered-order' });
+    orders.findFirst.mockResolvedValue({
+      orderItems: [{ orderItemId: 'delivered-order-item' }],
+    });
     review.findUnique.mockResolvedValue(null);
     review.create.mockResolvedValue({ reviewId: 'review-1' });
   });
@@ -36,8 +38,22 @@ describe('ReviewsService purchased-product rule', () => {
         orderStatus: { in: ['Delivered', 'Completed'] },
         orderItems: { some: { variant: { productId } } },
       },
-      select: { orderId: true },
+      orderBy: { orderDate: 'desc' },
+      select: {
+        orderItems: {
+          where: { variant: { productId } },
+          select: { orderItemId: true },
+          take: 1,
+        },
+      },
     });
+    expect(review.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          orderItemId: 'delivered-order-item',
+        }),
+      }),
+    );
   });
 
   it('rejects a review before a qualifying delivery exists', async () => {

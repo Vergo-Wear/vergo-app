@@ -523,24 +523,6 @@ button.step-item:focus-visible {
   letter-spacing: -0.01em;
 }
 
-.summary-payment-icons {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 28px;
-  color: rgba(255, 255, 255, 0.15);
-}
-
-.summary-payment-icon {
-  width: 20px;
-  height: 20px;
-  transition: color 0.2s ease;
-}
-
-.summary-payment-icon:hover {
-  color: rgba(255, 255, 255, 0.4);
-}
-
 /* Existing Customer Modal */
 .modal-overlay {
   position: fixed;

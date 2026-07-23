@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Min,
 } from 'class-validator';
 
 export class CreateEmployeeDto {
@@ -43,4 +44,9 @@ export class CreateEmployeeDto {
   @IsDateString()
   @IsOptional()
   hireDate?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  commissionPerParcel?: number;
 }

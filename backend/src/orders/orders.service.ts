@@ -20,6 +20,8 @@ import { READY_STATUS } from './dto/update-order-status.dto';
 
 const BANK_TRANSFER_HOLD_MINUTES = 15;
 const PROOF_EXPIRY_SWEEP_INTERVAL_MS = 60 * 1000;
+const PROOF_EXPIRY_SWEEP_MAX_ATTEMPTS = 3;
+const PROOF_EXPIRY_SWEEP_RETRY_DELAY_MS = 2 * 1000;
 const OPEN_CHECKOUT_STATUSES = [
   'Awaiting Payment',
   'Pending Confirmation',
@@ -77,6 +79,7 @@ interface StockCheckItem {
 export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OrdersService.name);
   private expirySweepTimer: NodeJS.Timeout | null = null;
+  private expirySweepInFlight = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -114,10 +117,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   } as const;
 
   onModuleInit() {
-    const sweep = () =>
-      void this.expireOverduePaymentProofs().catch((error) =>
-        this.logger.error('Payment proof expiry sweep failed', error),
-      );
+    const sweep = () => void this.runPaymentProofExpirySweep();
     sweep();
     this.expirySweepTimer = setInterval(sweep, PROOF_EXPIRY_SWEEP_INTERVAL_MS);
   }
@@ -128,6 +128,66 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   private paymentProofExpiresAt() {
     return new Date(Date.now() + BANK_TRANSFER_HOLD_MINUTES * 60 * 1000);
+  }
+
+  private isTransientDatabaseConnectionError(error: unknown): boolean {
+    let current: unknown = error;
+    for (let depth = 0; depth < 5 && current; depth += 1) {
+      const candidate = current as {
+        message?: unknown;
+        code?: unknown;
+        cause?: unknown;
+      };
+      const message =
+        typeof candidate.message === 'string'
+          ? candidate.message.toLowerCase()
+          : '';
+      const code =
+        typeof candidate.code === 'string' ? candidate.code.toUpperCase() : '';
+      if (
+        message.includes('connection timeout') ||
+        message.includes('connection terminated unexpectedly') ||
+        message.includes('timeout expired') ||
+        ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH'].includes(code)
+      ) {
+        return true;
+      }
+      current = candidate.cause;
+    }
+    return false;
+  }
+
+  private async runPaymentProofExpirySweep() {
+    if (this.expirySweepInFlight) return;
+    this.expirySweepInFlight = true;
+    try {
+      for (
+        let attempt = 1;
+        attempt <= PROOF_EXPIRY_SWEEP_MAX_ATTEMPTS;
+        attempt += 1
+      ) {
+        try {
+          await this.expireOverduePaymentProofs();
+          return;
+        } catch (error) {
+          const canRetry =
+            attempt < PROOF_EXPIRY_SWEEP_MAX_ATTEMPTS &&
+            this.isTransientDatabaseConnectionError(error);
+          if (!canRetry) {
+            this.logger.error('Payment proof expiry sweep failed', error);
+            return;
+          }
+          this.logger.warn(
+            `Payment proof expiry sweep connection attempt ${attempt} failed; retrying.`,
+          );
+          await new Promise((resolve) =>
+            setTimeout(resolve, PROOF_EXPIRY_SWEEP_RETRY_DELAY_MS * attempt),
+          );
+        }
+      }
+    } finally {
+      this.expirySweepInFlight = false;
+    }
   }
 
   private async customerIdForProfile(profileId: string) {
@@ -176,7 +236,11 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       0,
     );
     const deliveryFee = Number(checkout.deliveryFee);
-    return { productTotal, deliveryFee, totalAmount: productTotal + deliveryFee };
+    return {
+      productTotal,
+      deliveryFee,
+      totalAmount: productTotal + deliveryFee,
+    };
   }
 
   private presentCheckout(checkout: any) {
@@ -185,7 +249,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       ...checkout,
       ...totals,
       checkoutPayload: this.checkoutDto(checkout),
-      receiptUrl: checkout.paymentProof?.receiptUrl ?? null,
+      receiptUrl: checkout.paymentProof?.fileUrl ?? null,
       receiptUploadedAt: checkout.paymentProof?.uploadedAt ?? null,
       // Compatibility alias: the checkout is now the reservation owner.
       reservationId: checkout.checkoutId,
@@ -212,10 +276,53 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         ? [
             {
               ...proof,
+              receiptUrl: proof.fileUrl,
               orderId: order.orderId,
               expiresAt: order.checkout.expiresAt,
-              status: 'Approved',
+              status: proof.status,
               adminNotes: order.checkout.adminNotes,
+            },
+          ]
+        : [],
+    };
+  }
+
+  private presentPendingCheckoutOrder(checkout: any) {
+    const presented = this.presentCheckout(checkout);
+    const shipping = checkout.shippingDetails;
+    const shippingAddress = shipping
+      ? `${shipping.addressLine1}${shipping.addressLine2 ? `, ${shipping.addressLine2}` : ''}, ${shipping.city}, ${shipping.district}${shipping.postalCode ? ` (${shipping.postalCode})` : ''}`
+      : '';
+    const proof = checkout.paymentProof;
+    return {
+      ...presented,
+      orderId: checkout.checkoutId,
+      customerId: checkout.customerId,
+      employeeId: null,
+      branchId: null,
+      orderDate: checkout.createdAt,
+      orderStatus: checkout.status,
+      shippingAddress,
+      confirmationStatus: checkout.status,
+      confirmedAt: checkout.reviewedAt,
+      confirmedBy: checkout.reviewedByProfileId,
+      rejectionReason: checkout.adminNotes,
+      pendingCheckout: true as const,
+      orderItems: checkout.items.map((item: any) => ({
+        orderItemId: item.checkoutItemId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        subtotal: new Prisma.Decimal(item.unitPrice).mul(item.quantity),
+        variant: item.variant,
+      })),
+      paymentProofs: proof
+        ? [
+            {
+              ...proof,
+              proofId: proof.paymentProofId,
+              receiptUrl: proof.fileUrl,
+              expiresAt: checkout.expiresAt,
+              adminNotes: checkout.adminNotes,
             },
           ]
         : [],
@@ -230,14 +337,17 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   }
 
   private validateCheckout(dto: CreateOrderDto, customerId: string | null) {
-    if (!dto.items?.length) throw new BadRequestException('Order must contain at least one item.');
+    if (!dto.items?.length)
+      throw new BadRequestException('Order must contain at least one item.');
     if (!customerId && dto.savedAddressId) {
       throw new BadRequestException(
         'Guest checkouts cannot use a saved address. Please enter shipping details manually.',
       );
     }
     const district = dto.shippingDetails.district.trim().toLowerCase();
-    if (!SRI_LANKAN_DISTRICTS.some((value) => value.toLowerCase() === district)) {
+    if (
+      !SRI_LANKAN_DISTRICTS.some((value) => value.toLowerCase() === district)
+    ) {
       throw new BadRequestException(
         `Shipping district "${dto.shippingDetails.district}" is not a valid Sri Lankan district.`,
       );
@@ -252,7 +362,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   ): Promise<PreparedCheckout> {
     const grouped = new Map<string, number>();
     for (const item of dto.items) {
-      grouped.set(item.variantId, (grouped.get(item.variantId) ?? 0) + item.quantity);
+      grouped.set(
+        item.variantId,
+        (grouped.get(item.variantId) ?? 0) + item.quantity,
+      );
     }
     const items: PreparedCheckout['items'] = [];
     let productTotal = 0;
@@ -262,9 +375,13 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         include: { product: true },
       });
       if (!variant?.product) {
-        throw new BadRequestException(`Product variant with ID ${variantId} not found.`);
+        throw new BadRequestException(
+          `Product variant with ID ${variantId} not found.`,
+        );
       }
-      const unitPrice = Number(variant.product.basePrice) + Number(variant.priceAdjustment ?? 0);
+      const unitPrice =
+        Number(variant.product.basePrice) +
+        Number(variant.priceAdjustment ?? 0);
       productTotal += unitPrice * quantity;
       items.push({
         variantId,
@@ -289,7 +406,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       const saved = await tx.userAddress.findFirst({
         where: { addressId: dto.savedAddressId, customerId },
       });
-      if (!saved) throw new BadRequestException('The selected saved address could not be found.');
+      if (!saved)
+        throw new BadRequestException(
+          'The selected saved address could not be found.',
+        );
       shipping = {
         receiverName: saved.receiverName,
         phone: saved.phone,
@@ -330,7 +450,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   ) {
     await tx.pendingCheckoutItem.deleteMany({ where: { checkoutId } });
     await tx.pendingCheckoutItem.createMany({
-      data: prepared.items.map(({ subtotal: _subtotal, ...item }) => ({ checkoutId, ...item })),
+      data: prepared.items.map((item) => ({
+        checkoutId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
     });
     await tx.pendingCheckoutCustomerDetails.upsert({
       where: { checkoutId },
@@ -342,10 +467,22 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       create: { checkoutId, ...prepared.shipping },
       update: { ...prepared.shipping },
     });
+    await tx.pendingCheckout.update({
+      where: { checkoutId },
+      data: {
+        productTotal: new Prisma.Decimal(prepared.productTotal),
+        deliveryFee: new Prisma.Decimal(prepared.deliveryFee),
+        totalAmount: new Prisma.Decimal(prepared.totalAmount),
+      },
+    });
   }
 
   private async persistOrder(tx: Prisma.TransactionClient, checkout: any) {
-    if (!checkout.customerDetails || !checkout.shippingDetails || !checkout.items?.length) {
+    if (
+      !checkout.customerDetails ||
+      !checkout.shippingDetails ||
+      !checkout.items?.length
+    ) {
       throw new ConflictException('The pending checkout is incomplete.');
     }
     const totals = this.checkoutTotals(checkout);
@@ -400,7 +537,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   }
 
   async create(dto: CreateOrderDto, profileId?: string) {
-    const customerId = profileId ? await this.customerIdForProfile(profileId) : null;
+    const customerId = profileId
+      ? await this.customerIdForProfile(profileId)
+      : null;
     const isBank = dto.paymentMethod.toLowerCase().includes('bank');
     if (!customerId && isBank) {
       throw new BadRequestException(
@@ -410,7 +549,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     this.validateCheckout(dto, customerId);
 
     const checkoutId = await this.prisma.$transaction(async (tx) => {
-      if (customerId) await this.stockReservations.lockCustomerCheckout(tx, customerId);
+      if (customerId)
+        await this.stockReservations.lockCustomerCheckout(tx, customerId);
       const existing = customerId
         ? await tx.pendingCheckout.findFirst({
             where: {
@@ -422,7 +562,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             orderBy: { createdAt: 'desc' },
           })
         : null;
-      const prepared = await this.prepareCheckout(tx, dto, customerId, !existing);
+      const prepared = await this.prepareCheckout(
+        tx,
+        dto,
+        customerId,
+        !existing,
+      );
 
       if (existing) {
         await this.writeCheckoutDetails(tx, existing.checkoutId, dto, prepared);
@@ -446,7 +591,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             null,
             true,
           );
-          await tx.checkoutPaymentProof.deleteMany({ where: { checkoutId: existing.checkoutId } });
+          await tx.paymentProof.deleteMany({
+            where: { checkoutId: existing.checkoutId },
+          });
           await tx.pendingCheckout.update({
             where: { checkoutId: existing.checkoutId },
             data: {
@@ -472,7 +619,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           customerId,
           paymentMethod: isBank ? 'Bank Transfer' : 'Cash on Delivery',
           status: isBank ? 'Awaiting Payment' : 'Pending Confirmation',
+          productTotal: new Prisma.Decimal(prepared.productTotal),
           deliveryFee: new Prisma.Decimal(prepared.deliveryFee),
+          totalAmount: new Prisma.Decimal(prepared.totalAmount),
           expiresAt,
         },
       });
@@ -485,7 +634,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       );
       if (!isBank && customerId) {
         const cart = await tx.cart.findUnique({ where: { customerId } });
-        if (cart) await tx.cartItem.deleteMany({ where: { cartId: cart.cartId } });
+        if (cart)
+          await tx.cartItem.deleteMany({ where: { cartId: cart.cartId } });
       }
       return checkout.checkoutId;
     });
@@ -509,7 +659,13 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       include: this.checkoutInclude,
       orderBy: { createdAt: 'desc' },
     });
-    if (!checkout) return { checkoutId: null, reservationId: null, expiresAt: null, status: null };
+    if (!checkout)
+      return {
+        checkoutId: null,
+        reservationId: null,
+        expiresAt: null,
+        status: null,
+      };
     return { ...this.presentCheckout(checkout), status: 'Active' };
   }
 
@@ -520,7 +676,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   ) {
     const customerId = await this.customerIdForProfile(profileId);
     if (!dto.paymentMethod.toLowerCase().includes('bank')) {
-      throw new BadRequestException('An active Bank Transfer checkout must use Bank Transfer payment.');
+      throw new BadRequestException(
+        'An active Bank Transfer checkout must use Bank Transfer payment.',
+      );
     }
     this.validateCheckout(dto, customerId);
     await this.prisma.$transaction(async (tx) => {
@@ -534,7 +692,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           expiresAt: { gt: new Date() },
         },
       });
-      if (!checkout?.expiresAt) throw new BadRequestException('The payment window has expired.');
+      if (!checkout?.expiresAt)
+        throw new BadRequestException('The payment window has expired.');
       const prepared = await this.prepareCheckout(tx, dto, customerId, false);
       await this.writeCheckoutDetails(tx, checkoutId, dto, prepared);
       await this.stockReservations.reserveForCheckout(
@@ -571,7 +730,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (!checkout) throw new NotFoundException('Pending checkout not found.');
     return {
       ...this.presentCheckout(checkout),
-      status: checkout.status === 'Awaiting Payment' ? 'Active' : checkout.status,
+      status:
+        checkout.status === 'Awaiting Payment' ? 'Active' : checkout.status,
     };
   }
 
@@ -579,74 +739,102 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     profileId: string,
     checkoutId: string,
     dto: CreateOrderDto,
-    receipt: { receiptUrl: string; storagePublicId?: string | null; uploadedAt: Date },
+    receipt: {
+      fileUrl: string;
+      fileName?: string | null;
+      mimeType?: string | null;
+      fileSizeBytes?: number | null;
+      storagePublicId?: string | null;
+      uploadedAt: Date;
+    },
   ) {
     const customerId = await this.customerIdForProfile(profileId);
     if (!dto.paymentMethod.toLowerCase().includes('bank')) {
-      throw new BadRequestException('A Bank Transfer reservation must use Bank Transfer payment.');
+      throw new BadRequestException(
+        'A Bank Transfer reservation must use Bank Transfer payment.',
+      );
     }
     this.validateCheckout(dto, customerId);
-    const replacedStoragePublicId = await this.prisma.$transaction(async (tx) => {
-      await this.stockReservations.lockCustomerCheckout(tx, customerId);
-      const checkout = await tx.pendingCheckout.findFirst({
-        where: {
-          checkoutId,
-          customerId,
-          paymentMethod: 'Bank Transfer',
-          status: { in: ['Awaiting Payment', 'Pending Verification'] },
-        },
-        include: { paymentProof: true },
-      });
-      if (
-        !checkout?.expiresAt ||
-        (checkout.status === 'Awaiting Payment' &&
-          checkout.expiresAt <= receipt.uploadedAt)
-      ) {
-        throw new BadRequestException('The payment window has expired.');
-      }
-      let deliveryFee: Prisma.Decimal | undefined;
-      if (checkout.status === 'Awaiting Payment') {
-        const prepared = await this.prepareCheckout(tx, dto, customerId, false);
-        await this.writeCheckoutDetails(tx, checkoutId, dto, prepared);
-        await this.stockReservations.reserveForCheckout(
-          tx,
-          checkoutId,
-          dto.items,
-          checkout.expiresAt,
-          true,
-        );
-        await this.stockReservations.markPendingVerification(
-          tx,
-          checkoutId,
-          receipt.uploadedAt,
-        );
-        deliveryFee = new Prisma.Decimal(prepared.deliveryFee);
-      }
-      await tx.checkoutPaymentProof.upsert({
-        where: { checkoutId },
-        create: {
-          checkoutId,
-          receiptUrl: receipt.receiptUrl,
-          storagePublicId: receipt.storagePublicId ?? null,
-          uploadedAt: receipt.uploadedAt,
-        },
-        update: {
-          receiptUrl: receipt.receiptUrl,
-          storagePublicId: receipt.storagePublicId ?? null,
-          uploadedAt: receipt.uploadedAt,
-        },
-      });
-      await tx.pendingCheckout.update({
-        where: { checkoutId },
-        data: {
-          status: 'Pending Verification',
-          ...(deliveryFee && { deliveryFee }),
-        },
-      });
-      const cart = await tx.cart.findUnique({ where: { customerId } });
-      if (cart) await tx.cartItem.deleteMany({ where: { cartId: cart.cartId } });
-      return checkout.paymentProof?.storagePublicId ?? null;
-    });
+    const replacedStoragePublicId = await this.prisma.$transaction(
+      async (tx) => {
+        await this.stockReservations.lockCustomerCheckout(tx, customerId);
+        const checkout = await tx.pendingCheckout.findFirst({
+          where: {
+            checkoutId,
+            customerId,
+            paymentMethod: 'Bank Transfer',
+            status: { in: ['Awaiting Payment', 'Pending Verification'] },
+          },
+          include: { paymentProof: true },
+        });
+        if (
+          !checkout?.expiresAt ||
+          (checkout.status === 'Awaiting Payment' &&
+            checkout.expiresAt <= receipt.uploadedAt)
+        ) {
+          throw new BadRequestException('The payment window has expired.');
+        }
+        let deliveryFee: Prisma.Decimal | undefined;
+        if (checkout.status === 'Awaiting Payment') {
+          const prepared = await this.prepareCheckout(
+            tx,
+            dto,
+            customerId,
+            false,
+          );
+          await this.writeCheckoutDetails(tx, checkoutId, dto, prepared);
+          await this.stockReservations.reserveForCheckout(
+            tx,
+            checkoutId,
+            dto.items,
+            checkout.expiresAt,
+            true,
+          );
+          await this.stockReservations.markPendingVerification(
+            tx,
+            checkoutId,
+            receipt.uploadedAt,
+          );
+          deliveryFee = new Prisma.Decimal(prepared.deliveryFee);
+        }
+        await tx.paymentProof.upsert({
+          where: { checkoutId },
+          create: {
+            checkoutId,
+            fileUrl: receipt.fileUrl,
+            fileName: receipt.fileName ?? null,
+            mimeType: receipt.mimeType ?? null,
+            fileSizeBytes: receipt.fileSizeBytes ?? null,
+            storagePublicId: receipt.storagePublicId ?? null,
+            status: 'Pending Verification',
+            uploadedAt: receipt.uploadedAt,
+          },
+          update: {
+            fileUrl: receipt.fileUrl,
+            fileName: receipt.fileName ?? null,
+            mimeType: receipt.mimeType ?? null,
+            fileSizeBytes: receipt.fileSizeBytes ?? null,
+            storagePublicId: receipt.storagePublicId ?? null,
+            status: 'Pending Verification',
+            reviewedByProfileId: null,
+            reviewedAt: null,
+            rejectionReason: null,
+            uploadedAt: receipt.uploadedAt,
+          },
+        });
+        await tx.pendingCheckout.update({
+          where: { checkoutId },
+          data: {
+            status: 'Pending Verification',
+            ...(deliveryFee && { deliveryFee }),
+          },
+        });
+        const cart = await tx.cart.findUnique({ where: { customerId } });
+        if (cart)
+          await tx.cartItem.deleteMany({ where: { cartId: cart.cartId } });
+        return checkout.paymentProof?.storagePublicId ?? null;
+      },
+    );
     const updated = await this.prisma.pendingCheckout.findUnique({
       where: { checkoutId },
       include: this.checkoutInclude,
@@ -670,29 +858,27 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         where: {
           customerId,
           order: null,
-          status: { in: ['Pending Confirmation', 'Pending Verification', 'Rejected', 'Cancelled', 'Expired'] },
+          status: {
+            in: [
+              'Pending Confirmation',
+              'Pending Verification',
+              'Rejected',
+              'Cancelled',
+              'Expired',
+            ],
+          },
         },
         include: this.checkoutInclude,
         orderBy: { createdAt: 'desc' },
       }),
     ]);
-    const history = checkouts.map((checkout) => {
-      const presented = this.presentCheckout(checkout);
-      return {
-        orderId: checkout.checkoutId,
-        orderDate: checkout.createdAt,
-        orderStatus: checkout.status,
-        paymentMethod: checkout.paymentMethod,
-        totalAmount: presented.totalAmount,
-        orderItems: checkout.items.map((item) => ({
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          variant: item.variant,
-        })),
-        pendingCheckout: true as const,
-      };
-    });
-    return [...orders.map((order) => this.presentOrder(order)), ...history].sort(
+    const history = checkouts.map((checkout) =>
+      this.presentPendingCheckoutOrder(checkout),
+    );
+    return [
+      ...orders.map((order) => this.presentOrder(order)),
+      ...history,
+    ].sort(
       (left, right) =>
         (right.orderDate?.getTime() ?? 0) - (left.orderDate?.getTime() ?? 0),
     );
@@ -704,17 +890,32 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       where: { orderId, customerId },
       include: this.orderInclude,
     });
-    if (!order) throw new NotFoundException('Order not found.');
-    return this.presentOrder(order);
+    if (order) return this.presentOrder(order);
+
+    const checkout = await this.prisma.pendingCheckout.findFirst({
+      where: { checkoutId: orderId, customerId, order: null },
+      include: this.checkoutInclude,
+    });
+    if (!checkout) throw new NotFoundException('Order not found.');
+    return this.presentPendingCheckoutOrder(checkout);
   }
 
   async cancelPendingCheckout(profileId: string, checkoutId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     return this.prisma.$transaction(async (tx) => {
       const checkout = await tx.pendingCheckout.findFirst({
-        where: { checkoutId, customerId, status: { in: OPEN_CHECKOUT_STATUSES } },
+        where: {
+          checkoutId,
+          customerId,
+          status: { in: OPEN_CHECKOUT_STATUSES },
+        },
       });
       if (!checkout) throw new NotFoundException('Pending checkout not found.');
+      if (!checkout.paymentMethod.toLowerCase().includes('cash')) {
+        throw new ForbiddenException(
+          'Bank Transfer orders cannot be cancelled directly. Please contact support.',
+        );
+      }
       await this.stockReservations.releasePendingCheckout(tx, checkoutId);
       await tx.pendingCheckout.update({
         where: { checkoutId },
@@ -727,34 +928,13 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   async cancelCustomerOrder(profileId: string, orderId: string) {
     const customerId = await this.customerIdForProfile(profileId);
     return this.prisma.$transaction(async (tx) => {
-      const order = await tx.orders.findFirst({ where: { orderId, customerId } });
+      const order = await tx.orders.findFirst({
+        where: { orderId, customerId },
+      });
       if (!order) throw new NotFoundException('Order not found.');
-      if (order.employeeId) {
-        throw new ForbiddenException(
-          'This order has already been claimed by an employee and cannot be cancelled.',
-        );
-      }
-      const transition = await tx.orders.updateMany({
-        where: {
-          orderId,
-          employeeId: null,
-          orderStatus: 'Ready to Process',
-        },
-        data: { orderStatus: 'Cancelled' },
-      });
-      if (transition.count !== 1) {
-        throw new ForbiddenException('This order can no longer be cancelled.');
-      }
-      await this.stockReservations.restoreCommittedForOrder(
-        tx,
-        orderId,
-        'Customer cancelled order',
+      throw new ForbiddenException(
+        'Only Cash on Delivery orders awaiting Admin approval can be cancelled directly. Please contact support.',
       );
-      const updated = await tx.orders.findUnique({
-        where: { orderId },
-        include: this.orderInclude,
-      });
-      return this.presentOrder(updated);
     });
   }
 
@@ -788,7 +968,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       where: {
         orderStatus: { in: EMPLOYEE_PROCESSING_STATUSES },
         OR: [
-          { employeeId: null, orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES } },
+          {
+            employeeId: null,
+            orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES },
+          },
           { employeeId: employee.employeeId },
         ],
       },
@@ -803,9 +986,15 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async checkParcelStock(items: StockCheckItem[], branchId: string | null) {
+  private async checkParcelStock(
+    items: StockCheckItem[],
+    branchId: string | null,
+  ) {
     if (!branchId) {
-      return { stockAvailable: false, stockShortages: ['Employee is not assigned to a stock branch.'] };
+      return {
+        stockAvailable: false,
+        stockShortages: ['Employee is not assigned to a stock branch.'],
+      };
     }
     const shortages: string[] = [];
     for (const item of items) {
@@ -814,16 +1003,27 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       });
       const held = inventory
         ? await this.prisma.stockReservation.aggregate({
-            where: { inventoryId: inventory.inventoryId, status: { in: ['Active', 'Pending Verification'] } },
+            where: {
+              inventoryId: inventory.inventoryId,
+              status: { in: ['Active', 'Pending Verification'] },
+            },
             _sum: { quantity: true },
           })
         : null;
-      const available = Math.max(0, (inventory?.quantity ?? 0) - (held?._sum.quantity ?? 0));
+      const available = Math.max(
+        0,
+        (inventory?.quantity ?? 0) - (held?._sum.quantity ?? 0),
+      );
       if (available < item.quantity) {
-        shortages.push(`${item.variant?.sku ?? item.variantId}: needs ${item.quantity}, ${available} available`);
+        shortages.push(
+          `${item.variant?.sku ?? item.variantId}: needs ${item.quantity}, ${available} available`,
+        );
       }
     }
-    return { stockAvailable: shortages.length === 0, stockShortages: shortages };
+    return {
+      stockAvailable: shortages.length === 0,
+      stockShortages: shortages,
+    };
   }
 
   async findManagedOrder(orderId: string, role?: string | null) {
@@ -836,7 +1036,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       role?.toLowerCase() === 'employee' &&
       !EMPLOYEE_PROCESSING_STATUSES.includes(order.orderStatus)
     ) {
-      throw new ForbiddenException('This order is not approved for employee processing.');
+      throw new ForbiddenException(
+        'This order is not approved for employee processing.',
+      );
     }
     return this.presentOrder(order);
   }
@@ -855,20 +1057,35 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
     let employeeId = order.employeeId;
     if (role?.toLowerCase() === 'employee') {
-      const employee = await this.prisma.employee.findFirst({ where: { profileId } });
+      const employee = await this.prisma.employee.findFirst({
+        where: { profileId },
+      });
       if (!employee) throw new NotFoundException('Employee profile not found.');
       if (status === 'Claimed') {
+        const claimedAt = new Date();
         const claimed = await this.prisma.orders.updateMany({
-          where: { orderId, employeeId: null, orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES } },
-          data: { orderStatus: 'Claimed', employeeId: employee.employeeId },
+          where: {
+            orderId,
+            employeeId: null,
+            orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES },
+          },
+          data: {
+            orderStatus: 'Claimed',
+            employeeId: employee.employeeId,
+            claimedAt,
+          },
         });
         if (claimed.count !== 1) {
-          throw new ForbiddenException('This order has already been claimed by another employee.');
+          throw new ForbiddenException(
+            'This order has already been claimed by another employee.',
+          );
         }
         return this.findManagedOrder(orderId, role);
       }
       if (order.employeeId !== employee.employeeId) {
-        throw new ForbiddenException('Claim this order before updating its status.');
+        throw new ForbiddenException(
+          'Claim this order before updating its status.',
+        );
       }
       if (!EMPLOYEE_STATUS_TRANSITIONS[order.orderStatus]?.includes(status)) {
         throw new BadRequestException(
@@ -878,18 +1095,58 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       employeeId = employee.employeeId;
     }
 
+    const transitionedAt = new Date();
+    const statusTimestamp =
+      status === 'Claimed' && !order.claimedAt
+        ? { claimedAt: transitionedAt }
+        : status === 'Preparing' && !order.preparingAt
+          ? { preparingAt: transitionedAt }
+          : status === 'Ready for Pickup' && !order.parcelReadyAt
+            ? { parcelReadyAt: transitionedAt }
+            : status === 'Sent' && !order.sentAt
+              ? { sentAt: transitionedAt }
+              : status === 'Delivered' && !order.deliveredAt
+                ? { deliveredAt: transitionedAt }
+                : status === 'Completed' && !order.completedAt
+                  ? { completedAt: transitionedAt }
+                  : {};
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.orders.update({
         where: { orderId },
-        data: { orderStatus: status, employeeId },
+        data: { orderStatus: status, employeeId, ...statusTimestamp },
         include: this.orderInclude,
       });
+      if (status === READY_STATUS && result.employeeId) {
+        const employee = await tx.employee.findUnique({
+          where: { employeeId: result.employeeId },
+          select: { commissionPerParcel: true },
+        });
+        if (!employee) {
+          throw new ConflictException(
+            'The assigned employee no longer exists, so commission could not be recorded.',
+          );
+        }
+        await tx.employeeCommission.upsert({
+          where: { orderId },
+          create: {
+            employeeId: result.employeeId,
+            orderId,
+            rateUsed: employee.commissionPerParcel,
+            commissionAmount: employee.commissionPerParcel,
+          },
+          update: {},
+        });
+      }
       if (status === 'Cancelled') {
         await this.stockReservations.restoreCommittedForOrder(
           tx,
           orderId,
           rejectionReason ?? `Order changed to ${status}`,
         );
+        await tx.employeeCommission.updateMany({
+          where: { orderId, status: { not: 'Paid' } },
+          data: { status: 'Cancelled' },
+        });
       }
       return result;
     });
@@ -919,12 +1176,27 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       );
       const checkout = await this.loadCheckout(tx, checkoutId);
       if (!checkout) throw new NotFoundException('Pending checkout not found.');
-      if (!['Pending Confirmation', 'Pending Verification'].includes(checkout.status)) {
+      if (
+        !['Pending Confirmation', 'Pending Verification'].includes(
+          checkout.status,
+        )
+      ) {
         throw new ConflictException('This checkout has already been reviewed.');
       }
       const reviewedAt = new Date();
       if (dto.status === 'Rejected') {
         await this.stockReservations.releasePendingCheckout(tx, checkoutId);
+        if (checkout.paymentProof) {
+          await tx.paymentProof.update({
+            where: { checkoutId },
+            data: {
+              status: 'Rejected',
+              reviewedByProfileId: reviewerProfileId,
+              reviewedAt,
+              rejectionReason: dto.adminNotes ?? null,
+            },
+          });
+        }
         const rejected = await tx.pendingCheckout.update({
           where: { checkoutId },
           data: {
@@ -934,15 +1206,33 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             adminNotes: dto.adminNotes ?? null,
           },
         });
-        return this.presentCheckout({ ...checkout, ...rejected, reservations: [] });
+        return this.presentCheckout({
+          ...checkout,
+          ...rejected,
+          reservations: [],
+        });
       }
       const isBank = checkout.paymentMethod.toLowerCase().includes('bank');
-      if (isBank && (checkout.status !== 'Pending Verification' || !checkout.paymentProof)) {
+      if (
+        isBank &&
+        (checkout.status !== 'Pending Verification' || !checkout.paymentProof)
+      ) {
         throw new ConflictException(
           'The Bank Transfer checkout has no verified receipt or stock hold.',
         );
       }
       const result = await this.persistOrder(tx, checkout);
+      if (checkout.paymentProof) {
+        await tx.paymentProof.update({
+          where: { checkoutId },
+          data: {
+            status: 'Approved',
+            reviewedByProfileId: reviewerProfileId,
+            reviewedAt,
+            rejectionReason: null,
+          },
+        });
+      }
       await this.stockReservations.commitPendingCheckout(
         tx,
         checkoutId,
@@ -978,7 +1268,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       let checkouts = 0;
       for (const checkout of candidates) {
         if (checkout.customerId) {
-          await this.stockReservations.lockCustomerCheckout(tx, checkout.customerId);
+          await this.stockReservations.lockCustomerCheckout(
+            tx,
+            checkout.customerId,
+          );
         }
         const transitioned = await tx.pendingCheckout.updateMany({
           where: {
@@ -990,17 +1283,29 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         });
         if (transitioned.count !== 1) continue;
         checkouts += 1;
-        await this.stockReservations.releasePendingCheckout(tx, checkout.checkoutId);
+        await tx.paymentProof.updateMany({
+          where: { checkoutId: checkout.checkoutId },
+          data: { status: 'Expired' },
+        });
+        await this.stockReservations.releasePendingCheckout(
+          tx,
+          checkout.checkoutId,
+        );
         if (checkout.customerId) {
-          const cart = await tx.cart.findUnique({ where: { customerId: checkout.customerId } });
-          if (cart) await tx.cartItem.deleteMany({ where: { cartId: cart.cartId } });
+          const cart = await tx.cart.findUnique({
+            where: { customerId: checkout.customerId },
+          });
+          if (cart)
+            await tx.cartItem.deleteMany({ where: { cartId: cart.cartId } });
         }
       }
       const orphaned = await this.stockReservations.expireActive(tx, now);
       return { expired: orphaned.count, checkouts };
     });
     if (result.expired > 0 || result.checkouts > 0) {
-      this.logger.log(`Expired ${result.checkouts} checkout(s) and deleted ${result.expired} orphaned hold(s).`);
+      this.logger.log(
+        `Expired ${result.checkouts} checkout(s) and deleted ${result.expired} orphaned hold(s).`,
+      );
     }
     return result;
   }

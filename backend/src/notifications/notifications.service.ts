@@ -11,6 +11,9 @@ const notificationSelect = {
   type: true,
   title: true,
   message: true,
+  channel: true,
+  status: true,
+  sentAt: true,
   isRead: true,
   createdAt: true,
 } as const;
@@ -24,20 +27,10 @@ export class NotificationsService {
     private readonly email: EmailService,
   ) {}
 
-  private async customerIdForProfile(profileId: string) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { profileId },
-      select: { customerId: true },
-    });
-    if (!customer) throw new NotFoundException('Customer profile not found.');
-    return customer.customerId;
-  }
-
   /** All notifications belonging to the authenticated customer, newest first. */
   async findCustomerNotifications(profileId: string) {
-    const customerId = await this.customerIdForProfile(profileId);
     return this.prisma.notification.findMany({
-      where: { customerId },
+      where: { recipientProfileId: profileId },
       select: notificationSelect,
       orderBy: { createdAt: 'desc' },
     });
@@ -45,9 +38,8 @@ export class NotificationsService {
 
   /** A single notification — only visible to the customer who owns it. */
   async findCustomerNotification(profileId: string, notificationId: string) {
-    const customerId = await this.customerIdForProfile(profileId);
     const notification = await this.prisma.notification.findFirst({
-      where: { notificationId, customerId },
+      where: { notificationId, recipientProfileId: profileId },
       select: notificationSelect,
     });
     if (!notification) throw new NotFoundException('Notification not found.');
@@ -56,9 +48,8 @@ export class NotificationsService {
 
   /** Number of unread notifications for the authenticated customer. */
   async unreadCount(profileId: string) {
-    const customerId = await this.customerIdForProfile(profileId);
     const count = await this.prisma.notification.count({
-      where: { customerId, isRead: false },
+      where: { recipientProfileId: profileId, isRead: false },
     });
     return { count };
   }
@@ -68,16 +59,15 @@ export class NotificationsService {
    * customer can never mark another customer's notification.
    */
   async markAsRead(profileId: string, notificationId: string) {
-    const customerId = await this.customerIdForProfile(profileId);
     const result = await this.prisma.notification.updateMany({
-      where: { notificationId, customerId },
+      where: { notificationId, recipientProfileId: profileId },
       data: { isRead: true },
     });
     if (result.count === 0) {
       throw new NotFoundException('Notification not found.');
     }
     return this.prisma.notification.findFirst({
-      where: { notificationId, customerId },
+      where: { notificationId, recipientProfileId: profileId },
       select: notificationSelect,
     });
   }
@@ -90,16 +80,25 @@ export class NotificationsService {
    * ORDER_READY additionally has a partial unique index in the database).
    */
   private async createNotification(params: {
-    customerId: string;
+    recipientProfileId: string | null;
     orderId?: string | null;
     checkoutId?: string | null;
+    channel?: 'IN_APP' | 'EMAIL' | 'SMS';
     type: NotificationType;
     title: string;
     message: string;
     once?: boolean;
   }) {
-    const { customerId, orderId, checkoutId, type, title, message, once } =
-      params;
+    const {
+      recipientProfileId,
+      orderId,
+      checkoutId,
+      channel = 'IN_APP',
+      type,
+      title,
+      message,
+      once,
+    } = params;
     if (once) {
       const existing = await this.prisma.notification.findFirst({
         where: {
@@ -118,7 +117,17 @@ export class NotificationsService {
     }
     try {
       return await this.prisma.notification.create({
-        data: { customerId, orderId, checkoutId, type, title, message },
+        data: {
+          recipientProfileId,
+          orderId,
+          checkoutId,
+          type,
+          title,
+          message,
+          channel,
+          status: channel === 'IN_APP' ? 'Sent' : 'Pending',
+          sentAt: channel === 'IN_APP' ? new Date() : null,
+        },
       });
     } catch (error: unknown) {
       // P2002 = unique constraint violation (concurrent duplicate event).
@@ -132,7 +141,7 @@ export class NotificationsService {
     }
   }
 
-  /** Loads the account owner (email + name) an order's notifications belong to. */
+  /** Resolves either an account profile or the immutable guest order snapshot. */
   private async orderCustomer(orderId: string) {
     const order = await this.prisma.orders.findUnique({
       where: { orderId },
@@ -140,13 +149,38 @@ export class NotificationsService {
         orderId: true,
         customerId: true,
         customer: {
-          select: { customerId: true, firstName: true, email: true },
+          select: {
+            customerId: true,
+            profileId: true,
+            firstName: true,
+            email: true,
+          },
+        },
+        customerDetails: {
+          select: {
+            firstName: true,
+            email: true,
+            phone: true,
+          },
         },
       },
     });
-    // Guest orders have no customer account, so there is nobody to notify.
-    if (!order?.customer) return null;
-    return order.customer;
+    if (!order) return null;
+    if (order.customer) {
+      return {
+        profileId: order.customer.profileId,
+        firstName: order.customer.firstName,
+        email: order.customer.email,
+        phone: order.customerDetails?.phone ?? null,
+      };
+    }
+    if (!order.customerDetails?.email) return null;
+    return {
+      profileId: null,
+      firstName: order.customerDetails.firstName,
+      email: order.customerDetails.email,
+      phone: order.customerDetails.phone,
+    };
   }
 
   /**
@@ -158,8 +192,9 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
-        customerId: customer.customerId,
+        recipientProfileId: customer.profileId,
         orderId,
+        channel: customer.profileId ? 'IN_APP' : 'EMAIL',
         type: NotificationType.ORDER_READY,
         title: 'Order Ready for Collection',
         message: `Your order ${orderNumber(orderId)} is ready for collection.`,
@@ -187,8 +222,9 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
-        customerId: customer.customerId,
+        recipientProfileId: customer.profileId,
         orderId,
+        channel: customer.profileId ? 'IN_APP' : 'EMAIL',
         type: NotificationType.PAYMENT_REJECTED,
         title: 'Payment Rejected',
         message: `Your bank transfer payment for Order ${orderNumber(orderId)} has been rejected. Please upload a new payment receipt.`,
@@ -216,8 +252,9 @@ export class NotificationsService {
       const customer = await this.orderCustomer(orderId);
       if (!customer) return;
       await this.createNotification({
-        customerId: customer.customerId,
+        recipientProfileId: customer.profileId,
         orderId,
+        channel: customer.profileId ? 'IN_APP' : 'EMAIL',
         type: NotificationType.PAYMENT_EXPIRED,
         title: 'Payment Expired',
         message: `Your payment proof for Order ${orderNumber(orderId)} has expired.`,
@@ -236,9 +273,8 @@ export class NotificationsService {
   }
 
   /**
-   * Notifies an account customer immediately after an Admin approves or
-   * rejects their pending checkout. Guest checkouts have no customerId and
-   * are deliberately skipped.
+   * Notifies an account customer in-app or queues an email notification for
+   * the immutable guest checkout contact after Admin review.
    */
   async notifyCheckoutReviewed(checkoutId: string): Promise<void> {
     try {
@@ -251,12 +287,38 @@ export class NotificationsService {
           status: true,
           adminNotes: true,
           customer: {
-            select: { customerId: true, firstName: true, email: true },
+            select: {
+              customerId: true,
+              profileId: true,
+              firstName: true,
+              email: true,
+            },
+          },
+          customerDetails: {
+            select: {
+              firstName: true,
+              email: true,
+              phone: true,
+            },
           },
           order: { select: { orderId: true } },
         },
       });
-      if (!checkout?.customerId || !checkout.customer) return;
+      if (!checkout) return;
+      const recipient = checkout.customer
+        ? {
+            profileId: checkout.customer.profileId,
+            firstName: checkout.customer.firstName,
+            email: checkout.customer.email,
+          }
+        : checkout.customerDetails?.email
+          ? {
+              profileId: null,
+              firstName: checkout.customerDetails.firstName,
+              email: checkout.customerDetails.email,
+            }
+          : null;
+      if (!recipient) return;
 
       const isBank = checkout.paymentMethod.toLowerCase().includes('bank');
       const approved = checkout.status === 'Approved';
@@ -282,9 +344,10 @@ export class NotificationsService {
         : `${isBank ? 'Your bank transfer payment' : 'Your Cash on Delivery order'} ${reference} has been rejected.${checkout.adminNotes ? ` Reason: ${checkout.adminNotes}` : ''}`;
 
       await this.createNotification({
-        customerId: checkout.customerId,
+        recipientProfileId: recipient.profileId,
         orderId: checkout.order?.orderId ?? null,
         checkoutId,
+        channel: recipient.profileId ? 'IN_APP' : 'EMAIL',
         type,
         title,
         message,
@@ -293,8 +356,8 @@ export class NotificationsService {
 
       if (isBank && !approved) {
         await this.email.sendPaymentRejectedEmail({
-          to: checkout.customer.email,
-          customerName: checkout.customer.firstName,
+          to: recipient.email,
+          customerName: recipient.firstName,
           orderNumber: reference,
           reason: checkout.adminNotes,
         });

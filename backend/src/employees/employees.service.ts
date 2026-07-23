@@ -29,7 +29,10 @@ export class EmployeesService {
    * Rolls back the Supabase Auth user if the database writes fail, so no
    * partial employee accounts are left behind.
    */
-  async createEmployeeAccount(dto: CreateEmployeeAccountDto) {
+  async createEmployeeAccount(
+    dto: CreateEmployeeAccountDto,
+    createdByProfileId?: string,
+  ) {
     const email = dto.email.trim().toLowerCase();
 
     // Normalize phone: strip leading 0, prepend +94 (matches AuthService rules)
@@ -121,11 +124,15 @@ export class EmployeesService {
           data: {
             profileId: userId,
             branchId: dto.branchId,
+            createdByProfileId: createdByProfileId ?? null,
             firstName: dto.firstName.trim(),
             lastName: dto.lastName.trim(),
             phone: resolvedPhone,
             address: dto.address?.trim() || null,
             position: dto.position.trim(),
+            commissionPerParcel: new Prisma.Decimal(
+              dto.commissionPerParcel ?? 0,
+            ),
             hireDate: new Date(),
           },
         });
@@ -265,7 +272,7 @@ export class EmployeesService {
    * Creates a new employee record linked to an existing profile.
    * Validates profile existence and prevents duplicate employee for the same profile.
    */
-  async create(dto: CreateEmployeeDto) {
+  async create(dto: CreateEmployeeDto, createdByProfileId?: string) {
     // Validate profile exists
     const profile = await this.prisma.profiles.findUnique({
       where: { id: dto.profileId },
@@ -292,6 +299,7 @@ export class EmployeesService {
       data: {
         profileId: dto.profileId,
         branchId: dto.branchId,
+        createdByProfileId: createdByProfileId ?? null,
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
@@ -299,6 +307,10 @@ export class EmployeesService {
         position: dto.position,
         salary:
           dto.salary !== undefined ? new Prisma.Decimal(dto.salary) : undefined,
+        commissionPerParcel:
+          dto.commissionPerParcel !== undefined
+            ? new Prisma.Decimal(dto.commissionPerParcel)
+            : undefined,
         hireDate: dto.hireDate ? new Date(dto.hireDate) : undefined,
       },
     });
@@ -328,9 +340,91 @@ export class EmployeesService {
 
   async updateAvailability(profileId: string, status: string) {
     const employee = await this.findByProfileId(profileId);
-    return this.prisma.employee.update({
-      where: { employeeId: employee.employeeId },
-      data: { availabilityStatus: status },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.employee.update({
+        where: { employeeId: employee.employeeId },
+        data: { availabilityStatus: status },
+      });
+      await tx.profiles.update({
+        where: { id: profileId },
+        data: { lastSeenAt: new Date() },
+      });
+      return updated;
+    });
+  }
+
+  async checkIn(profileId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const employee = await tx.employee.findUnique({
+        where: { profileId },
+      });
+      if (!employee) {
+        throw new NotFoundException('Employee profile not found.');
+      }
+      const openAttendance = await tx.attendance.findFirst({
+        where: {
+          employeeId: employee.employeeId,
+          checkIn: { not: null },
+          checkOut: null,
+        },
+      });
+      if (openAttendance) {
+        throw new ConflictException('The employee is already checked in.');
+      }
+      const now = new Date();
+      const attendance = await tx.attendance.create({
+        data: {
+          employeeId: employee.employeeId,
+          date: now,
+          checkIn: now,
+          status: 'PRESENT',
+        },
+      });
+      await tx.employee.update({
+        where: { employeeId: employee.employeeId },
+        data: { availabilityStatus: 'AVAILABLE' },
+      });
+      await tx.profiles.update({
+        where: { id: profileId },
+        data: { lastSeenAt: now },
+      });
+      return attendance;
+    });
+  }
+
+  async checkOut(profileId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const employee = await tx.employee.findUnique({
+        where: { profileId },
+      });
+      if (!employee) {
+        throw new NotFoundException('Employee profile not found.');
+      }
+      const openAttendance = await tx.attendance.findFirst({
+        where: {
+          employeeId: employee.employeeId,
+          checkIn: { not: null },
+          checkOut: null,
+        },
+        orderBy: { checkIn: 'desc' },
+      });
+      if (!openAttendance) {
+        throw new ConflictException('The employee is not checked in.');
+      }
+      const now = new Date();
+      const attendance = await tx.attendance.update({
+        where: { attendanceId: openAttendance.attendanceId },
+        data: { checkOut: now },
+      });
+      await tx.employee.update({
+        where: { employeeId: employee.employeeId },
+        data: { availabilityStatus: 'OFF_DUTY' },
+      });
+      await tx.profiles.update({
+        where: { id: profileId },
+        data: { lastSeenAt: now },
+      });
+      return attendance;
     });
   }
 
@@ -358,6 +452,9 @@ export class EmployeesService {
         ...(dto.position !== undefined && { position: dto.position }),
         ...(dto.salary !== undefined && {
           salary: new Prisma.Decimal(dto.salary),
+        }),
+        ...(dto.commissionPerParcel !== undefined && {
+          commissionPerParcel: new Prisma.Decimal(dto.commissionPerParcel),
         }),
         ...(dto.hireDate !== undefined && {
           hireDate: new Date(dto.hireDate),

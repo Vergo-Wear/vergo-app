@@ -17,6 +17,7 @@ import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { EmployeesService } from '../employees/employees.service';
 import { CreateEmployeeAccountDto } from '../employees/dto/create-employee-account.dto';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('admin')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
@@ -51,8 +52,11 @@ export class AdminController {
   }
 
   @Post('employees')
-  createEmployee(@Body() dto: CreateEmployeeAccountDto) {
-    return this.employeesService.createEmployeeAccount(dto);
+  createEmployee(
+    @CurrentUser() adminProfileId: string,
+    @Body() dto: CreateEmployeeAccountDto,
+  ) {
+    return this.employeesService.createEmployeeAccount(dto, adminProfileId);
   }
 
   @Delete('employees/:id')

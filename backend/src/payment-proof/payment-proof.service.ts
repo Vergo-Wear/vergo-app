@@ -37,9 +37,9 @@ export class PaymentProofService {
     }
     return {
       ...order.checkout.paymentProof,
+      receiptUrl: order.checkout.paymentProof.fileUrl,
       orderId,
       expiresAt: order.checkout.expiresAt,
-      status: 'Approved',
       adminNotes: order.checkout.adminNotes,
     };
   }
@@ -49,6 +49,9 @@ export class PaymentProofService {
     _orderId: string,
     _receipt: UploadedReceiptFile,
   ) {
+    void _profileId;
+    void _orderId;
+    void _receipt;
     throw new BadRequestException(
       'Payment receipts must be uploaded before an order is approved.',
     );
@@ -72,7 +75,10 @@ export class PaymentProofService {
         checkoutId,
         checkout,
         {
-          receiptUrl: upload.secure_url,
+          fileUrl: upload.secure_url,
+          fileName: receipt.originalname,
+          mimeType: receipt.mimetype,
+          fileSizeBytes: receipt.size,
           storagePublicId: upload.public_id,
           uploadedAt: new Date(),
         },
@@ -88,7 +94,9 @@ export class PaymentProofService {
         message: 'Receipt submitted. Your checkout is pending verification.',
       };
     } catch (error) {
-      await this.cloudinary.deleteAsset(upload.public_id).catch(() => undefined);
+      await this.cloudinary
+        .deleteAsset(upload.public_id)
+        .catch(() => undefined);
       throw error;
     }
   }
