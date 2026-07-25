@@ -14,7 +14,18 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 import { AdminService } from './admin.service';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import { UpdateInventoryRecordDto } from './dto/update-inventory-record.dto';
 import { CreateProductDto } from './dto/create-product.dto';
+import { CreateSupplierDto } from './dto/create-supplier.dto';
+import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
+import { CreateColorDto } from './dto/create-color.dto';
+import { UpdateColorDto } from './dto/update-color.dto';
+import { CreateSizeDto } from './dto/create-size.dto';
+import { UpdateSizeDto } from './dto/update-size.dto';
+import { CreateBranchDto } from './dto/create-branch.dto';
+import { UpdateBranchDto } from './dto/update-branch.dto';
 import { EmployeesService } from '../employees/employees.service';
 import { CreateEmployeeAccountDto } from '../employees/dto/create-employee-account.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -33,6 +44,19 @@ export class AdminController {
     return this.adminService.overview();
   }
 
+  @Get('inventory/catalog')
+  inventoryCatalog() {
+    return this.adminService.inventoryCatalog();
+  }
+
+  @Patch('inventory/records/:id')
+  updateInventoryRecord(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateInventoryRecordDto,
+  ) {
+    return this.adminService.updateInventoryRecord(id, dto);
+  }
+
   @Patch('inventory/:id')
   updateInventory(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -46,9 +70,79 @@ export class AdminController {
     return this.adminService.createProduct(dto);
   }
 
+  @Post('categories')
+  createCategory(@Body() dto: CreateCategoryDto) {
+    return this.adminService.createCategory(dto);
+  }
+
+  @Patch('categories/:id')
+  updateCategory(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
+    return this.adminService.updateCategory(id, dto);
+  }
+
+  @Post('colors')
+  createColor(@Body() dto: CreateColorDto) {
+    return this.adminService.createColor(dto);
+  }
+
+  @Patch('colors/:id')
+  updateColor(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateColorDto,
+  ) {
+    return this.adminService.updateColor(id, dto);
+  }
+
+  @Post('sizes')
+  createSize(@Body() dto: CreateSizeDto) {
+    return this.adminService.createSize(dto);
+  }
+
+  @Patch('sizes/:id')
+  updateSize(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateSizeDto,
+  ) {
+    return this.adminService.updateSize(id, dto);
+  }
+
+  @Get('suppliers')
+  listSuppliers() {
+    return this.adminService.listSuppliers();
+  }
+
+  @Post('suppliers')
+  createSupplier(@Body() dto: CreateSupplierDto) {
+    return this.adminService.createSupplier(dto);
+  }
+
+  @Patch('suppliers/:id')
+  updateSupplier(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateSupplierDto,
+  ) {
+    return this.adminService.updateSupplier(id, dto);
+  }
+
   @Get('branches')
   listBranches() {
-    return this.employeesService.listBranches();
+    return this.adminService.listBranches();
+  }
+
+  @Post('branches')
+  createBranch(@Body() dto: CreateBranchDto) {
+    return this.adminService.createBranch(dto);
+  }
+
+  @Patch('branches/:id')
+  updateBranch(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateBranchDto,
+  ) {
+    return this.adminService.updateBranch(id, dto);
   }
 
   @Post('employees')

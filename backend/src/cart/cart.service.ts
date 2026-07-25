@@ -23,6 +23,8 @@ export class CartService {
     variant: {
       include: {
         product: { include: { category: true } },
+        color: true,
+        size: true,
         images: true,
         inventory: {
           include: {
@@ -66,21 +68,21 @@ export class CartService {
             category: product.category?.name || 'Uncategorized',
             description: product.description || undefined,
             images: variant.images.map((entry) => entry.imageUrl),
-            sizes: [variant.size],
-            colors: [variant.color],
+            sizes: [variant.size.name],
+            colors: [variant.color.name],
             variants: [
               {
                 variantId: variant.variantId,
                 sku: variant.sku,
-                size: variant.size,
-                color: variant.color,
+                size: variant.size.name,
+                color: variant.color.name,
                 price,
                 availableQuantity,
               },
             ],
           },
-          size: variant.size,
-          color: variant.color,
+          size: variant.size.name,
+          color: variant.color.name,
           quantity: item.quantity || 1,
         },
       ];
@@ -125,8 +127,16 @@ export class CartService {
         const variant = await this.prisma.productVariant.findFirst({
           where: {
             productId: product.id,
-            size: item.size,
-            ...(item.color ? { color: item.color } : {}),
+            size: {
+              name: { equals: item.size, mode: 'insensitive' },
+            },
+            ...(item.color
+              ? {
+                  color: {
+                    name: { equals: item.color, mode: 'insensitive' },
+                  },
+                }
+              : {}),
           },
           select: { variantId: true },
         });

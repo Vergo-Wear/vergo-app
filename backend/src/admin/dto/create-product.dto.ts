@@ -14,10 +14,14 @@ import {
 
 class CreateVariantDto {
   @IsString() sku: string;
-  @IsString() color: string;
-  @IsString() size: string;
+  @IsOptional() @IsUUID() colorId?: string;
+  @IsOptional() @IsUUID() sizeId?: string;
+  @IsOptional() @IsString() color?: string;
+  @IsOptional() @IsString() size?: string;
   @IsNumber() priceAdjustment: number;
   @IsInt() @Min(0) quantity: number;
+  @IsOptional() @IsUUID() branchId?: string;
+  @IsOptional() @IsInt() @Min(0) reorderLevel?: number;
   @IsOptional() @IsUrl({ require_tld: false }) imageUrl?: string;
 }
 

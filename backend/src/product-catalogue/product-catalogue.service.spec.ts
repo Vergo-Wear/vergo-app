@@ -32,8 +32,10 @@ describe('ProductCatalogueService', () => {
         variantId: 'e335e75a-f87d-4937-a765-712f3ad945ad',
         productId: '3a2c831a-284e-4d02-b780-5c9164246eb8',
         sku: 'VGO-TEE-BLK-M',
-        size: 'M',
-        color: 'Black',
+        sizeId: 'a0c324a5-d46b-4993-b5e6-95c4453fc204',
+        size: { name: 'M' },
+        colorId: '79fef8d6-c5f5-4a40-83ec-bd9310d5172b',
+        color: { name: 'Black' },
         priceAdjustment: new Prisma.Decimal(250),
         inventory: [
           { quantity: 8, stockReservations: [{ quantity: 2 }] },

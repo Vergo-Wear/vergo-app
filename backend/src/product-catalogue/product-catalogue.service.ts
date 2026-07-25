@@ -11,6 +11,8 @@ const CATALOGUE_INCLUDE = {
   supplier: true,
   variants: {
     include: {
+      color: true,
+      size: true,
       inventory: {
         include: {
           stockReservations: {

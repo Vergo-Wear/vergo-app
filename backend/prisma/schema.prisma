@@ -173,6 +173,35 @@ model Category {
   @@schema("public")
 }
 
+model Color {
+  colorId      String           @id @default(dbgenerated("gen_random_uuid()")) @map("color_id") @db.Uuid
+  name         String
+  hexCode      String?          @map("hex_code")
+  displayOrder Int              @default(0) @map("display_order")
+  status       String           @default("Active")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  variants     ProductVariant[]
+
+  @@index([status, displayOrder])
+  @@map("color")
+  @@schema("public")
+}
+
+model Size {
+  sizeId       String           @id @default(dbgenerated("gen_random_uuid()")) @map("size_id") @db.Uuid
+  name         String
+  displayOrder Int              @default(0) @map("display_order")
+  status       String           @default("Active")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  variants     ProductVariant[]
+
+  @@index([status, displayOrder])
+  @@map("size")
+  @@schema("public")
+}
+
 model Supplier {
   supplierId     String          @id @default(dbgenerated("gen_random_uuid()")) @map("supplier_id") @db.Uuid
   name           String
@@ -242,12 +271,14 @@ model ReviewImage {
 model ProductVariant {
   variantId       String   @id @default(dbgenerated("gen_random_uuid()")) @map("variant_id") @db.Uuid
   productId       String   @map("product_id") @db.Uuid
+  colorId         String   @map("color_id") @db.Uuid
+  sizeId          String   @map("size_id") @db.Uuid
   sku             String   @unique
-  size            String
-  color           String
   priceAdjustment Decimal? @default(0.00) @map("price_adjustment") @db.Decimal
 
   product              Product               @relation(fields: [productId], references: [productId], onDelete: NoAction, onUpdate: NoAction)
+  color                Color                 @relation(fields: [colorId], references: [colorId], onDelete: Restrict, onUpdate: Cascade)
+  size                 Size                  @relation(fields: [sizeId], references: [sizeId], onDelete: Restrict, onUpdate: Cascade)
   inventory            Inventory[]
   images               Images[]
   orderItems           OrderItem[]
@@ -255,7 +286,7 @@ model ProductVariant {
   purchaseOrderItems   PurchaseOrderItem[]
   pendingCheckoutItems PendingCheckoutItem[]
 
-  @@unique([productId, size, color])
+  @@unique([productId, sizeId, colorId])
   @@map("product_variant")
   @@schema("public")
 }

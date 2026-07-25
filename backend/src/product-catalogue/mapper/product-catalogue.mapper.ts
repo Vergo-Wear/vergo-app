@@ -13,6 +13,8 @@ export const productWithRelations =
       supplier: true,
       variants: {
         include: {
+          color: true,
+          size: true,
           inventory: {
             include: {
               stockReservations: {
@@ -41,7 +43,11 @@ function mapVariant(
   );
   const reservedQuantity = variant.inventory.reduce(
     (sum, inv) =>
-      sum + inv.stockReservations.reduce((reserved, hold) => reserved + hold.quantity, 0),
+      sum +
+      inv.stockReservations.reduce(
+        (reserved, hold) => reserved + hold.quantity,
+        0,
+      ),
     0,
   );
   const price = basePrice.plus(variant.priceAdjustment ?? 0).toNumber();
@@ -55,8 +61,8 @@ function mapVariant(
   return {
     variant_id: variant.variantId,
     sku: variant.sku,
-    size: variant.size,
-    colour: variant.color,
+    size: variant.size.name,
+    colour: variant.color.name,
     price,
     inventory: {
       quantity,
