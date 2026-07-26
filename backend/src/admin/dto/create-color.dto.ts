@@ -18,6 +18,10 @@ export class CreateColorDto {
   hexCode?: string;
 
   @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   displayOrder?: number;

@@ -5,6 +5,7 @@ export interface ProductVariant {
   color: string;
   price: number;
   availableQuantity: number;
+  images?: string[];
 }
 
 export interface Product {

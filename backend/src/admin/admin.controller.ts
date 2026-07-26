@@ -1,18 +1,26 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
+  FileTypeValidator,
   Get,
+  MaxFileSizeValidator,
   Param,
+  ParseFilePipe,
   ParseUUIDPipe,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 import { AdminService } from './admin.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { UpdateInventoryRecordDto } from './dto/update-inventory-record.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -37,7 +45,8 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly employeesService: EmployeesService,
-  ) {}
+    private readonly cloudinaryService: CloudinaryService,
+  ) { }
 
   @Get('overview')
   overview() {
@@ -70,6 +79,54 @@ export class AdminController {
     return this.adminService.createProduct(dto);
   }
 
+  @Delete('products/:id')
+  deleteProduct(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.adminService.deleteProduct(id);
+  }
+
+  @Patch('products/:id/visibility')
+  updateProductVisibility(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body('status') status: string,
+  ) {
+    return this.adminService.updateProductVisibility(id, status);
+  }
+
+  @Patch('products/:id/gallery/:colorId')
+  updateColorGallery(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('colorId', new ParseUUIDPipe({ version: '4' })) colorId: string,
+    @Body('imageUrls') imageUrls: string[],
+  ) {
+    return this.adminService.updateColorGallery(id, colorId, imageUrls || []);
+  }
+
+  @Post('products/image')
+  @UseInterceptors(FileInterceptor('image'))
+  async uploadProductImage(
+    @UploadedFile(
+      new ParseFilePipe({
+        fileIsRequired: true,
+        validators: [
+          new MaxFileSizeValidator({
+            maxSize: 5 * 1024 * 1024,
+            message: 'Image file must be under 5MB.',
+          }),
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/i }),
+        ],
+      }),
+    )
+    image?: { buffer: Buffer },
+  ) {
+    if (!image?.buffer) {
+      throw new BadRequestException('No image uploaded.');
+    }
+    const result = await this.cloudinaryService.uploadBuffer(image.buffer, {
+      folder: 'products',
+    });
+    return { secure_url: result.secure_url };
+  }
+
   @Post('categories')
   createCategory(@Body() dto: CreateCategoryDto) {
     return this.adminService.createCategory(dto);
@@ -81,6 +138,11 @@ export class AdminController {
     @Body() dto: UpdateCategoryDto,
   ) {
     return this.adminService.updateCategory(id, dto);
+  }
+
+  @Delete('categories/:id')
+  deleteCategory(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.adminService.deleteCategory(id);
   }
 
   @Post('colors')
@@ -96,6 +158,11 @@ export class AdminController {
     return this.adminService.updateColor(id, dto);
   }
 
+  @Delete('colors/:id')
+  deleteColor(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.adminService.deleteColor(id);
+  }
+
   @Post('sizes')
   createSize(@Body() dto: CreateSizeDto) {
     return this.adminService.createSize(dto);
@@ -107,6 +174,11 @@ export class AdminController {
     @Body() dto: UpdateSizeDto,
   ) {
     return this.adminService.updateSize(id, dto);
+  }
+
+  @Delete('sizes/:id')
+  deleteSize(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.adminService.deleteSize(id);
   }
 
   @Get('suppliers')

@@ -3,8 +3,9 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { StorefrontTab } from "./StorefrontTab";
 
-type InventoryTab = "stock" | "categories" | "options";
+type InventoryTab = "stock" | "categories" | "options" | "storefront";
 type InventoryView = "variants" | "products";
 type ProductStatus = "active" | "draft";
 type VariantOptionType = "Color" | "Size";
@@ -32,6 +33,7 @@ interface ColorOption {
   colorId: string;
   name: string;
   hexCode: string | null;
+  imageUrl: string | null;
   displayOrder: number;
   status: "Active" | "Inactive";
   createdAt: string;
@@ -52,6 +54,7 @@ interface ManagedOption {
   optionType: VariantOptionType;
   value: string;
   hexCode: string | null;
+  imageUrl?: string | null;
   displayOrder: number;
   status: "Active" | "Inactive";
   createdAt: string;
@@ -97,12 +100,15 @@ interface ProductGroup {
   imageUrl: string | null;
   variantIds: Set<string>;
   branchIds: Set<string>;
+  colors: { id: string; name: string }[];
+  sizes: Set<string>;
   quantity: number;
   reservedQuantity: number;
   availableQuantity: number;
   minimumPrice: number;
   maximumPrice: number;
   hasLowStock: boolean;
+  lastUpdated: string | null;
 }
 
 interface InventoryCatalog {
@@ -144,6 +150,7 @@ interface VariantOptionForm {
   optionType: VariantOptionType;
   value: string;
   hexCode: string;
+  imageUrl: string;
   displayOrder: string;
   status: "Active" | "Inactive";
 }
@@ -178,6 +185,7 @@ const emptyVariantOptionForm: VariantOptionForm = {
   optionType: "Color",
   value: "",
   hexCode: "",
+  imageUrl: "",
   displayOrder: "0",
   status: "Active",
 };
@@ -217,6 +225,8 @@ export default function InventoryPage() {
   const [branchFilter, setBranchFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState("all");
+  const [isUploadingImg, setIsUploadingImg] = useState(false);
+  const [isDraggingImg, setIsDraggingImg] = useState(false);
   const [feedback, setFeedback] = useState<{
     message: string;
     type: "success" | "error";
@@ -318,6 +328,12 @@ export default function InventoryPage() {
       if (existing) {
         existing.variantIds.add(item.variantId);
         if (item.branchId) existing.branchIds.add(item.branchId);
+        if (item.color) {
+          if (!existing.colors.find(c => c.id === item.colorId)) {
+            existing.colors.push({ id: item.colorId, name: item.color });
+          }
+        }
+        if (item.size) existing.sizes.add(item.size);
         existing.quantity += item.quantity;
         existing.reservedQuantity += item.reservedQuantity;
         existing.availableQuantity += item.availableQuantity;
@@ -331,6 +347,9 @@ export default function InventoryPage() {
         );
         existing.hasLowStock ||= item.availableQuantity <= item.reorderLevel;
         existing.imageUrl ||= item.imageUrl;
+        if (!existing.lastUpdated || (item.lastUpdated && new Date(item.lastUpdated) > new Date(existing.lastUpdated))) {
+          existing.lastUpdated = item.lastUpdated;
+        }
         continue;
       }
       groups.set(item.productId, {
@@ -343,17 +362,78 @@ export default function InventoryPage() {
         imageUrl: item.imageUrl,
         variantIds: new Set([item.variantId]),
         branchIds: new Set(item.branchId ? [item.branchId] : []),
+        colors: item.color ? [{ id: item.colorId, name: item.color }] : [],
+        sizes: new Set(item.size ? [item.size] : []),
         quantity: item.quantity,
         reservedQuantity: item.reservedQuantity,
         availableQuantity: item.availableQuantity,
         minimumPrice: item.sellingPrice,
         maximumPrice: item.sellingPrice,
         hasLowStock: item.availableQuantity <= item.reorderLevel,
+        lastUpdated: item.lastUpdated,
       });
     }
     return [...groups.values()].sort((left, right) =>
       left.name.localeCompare(right.name),
     );
+  }, [filteredItems]);
+
+  const categoryGroups = useMemo(() => {
+    const groups = new Map<string, any>();
+    for (const item of filteredItems) {
+      if (!item.categoryName || item.categoryName === "Unassigned") continue;
+      const key = item.categoryName;
+      let existing = groups.get(key);
+      if (!existing) {
+        existing = {
+          categoryName: item.categoryName,
+          description: item.description,
+          status: item.status,
+          productIds: new Set(),
+          basePrice: item.basePrice,
+          totalStock: 0,
+          colors: new Map(),
+        };
+        groups.set(key, existing);
+      }
+
+      existing.productIds.add(item.productId);
+      existing.totalStock += item.availableQuantity;
+
+      if (item.color) {
+        let colorInfo = existing.colors.get(item.color);
+        if (!colorInfo) {
+          colorInfo = {
+            id: item.colorId,
+            name: item.color,
+            imageUrl: item.imageUrl,
+            sizes: new Map()
+          };
+          existing.colors.set(item.color, colorInfo);
+        }
+        if (item.imageUrl && !colorInfo.imageUrl) colorInfo.imageUrl = item.imageUrl;
+
+        if (item.size) {
+          const sizeQty = colorInfo.sizes.get(item.size) || 0;
+          colorInfo.sizes.set(item.size, sizeQty + item.availableQuantity);
+        }
+      }
+    }
+
+    return Array.from(groups.values()).map(g => ({
+      categoryName: g.categoryName,
+      description: g.description,
+      status: g.status,
+      basePrice: g.basePrice,
+      productIds: Array.from(g.productIds),
+      totalStock: g.totalStock,
+      colors: Array.from(g.colors.values()).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        imageUrl: c.imageUrl,
+        sizes: Array.from(c.sizes.entries() as any).map(([sizeName, qty]: any) => ({ name: sizeName, quantity: qty }))
+      }))
+    })).sort((a, b) => a.categoryName.localeCompare(b.categoryName));
   }, [filteredItems]);
 
   const colorOptions = useMemo(
@@ -363,6 +443,7 @@ export default function InventoryPage() {
         optionType: "Color",
         value: option.name,
         hexCode: option.hexCode,
+        imageUrl: option.imageUrl,
         displayOrder: option.displayOrder,
         status: option.status,
         createdAt: option.createdAt,
@@ -427,6 +508,91 @@ export default function InventoryPage() {
     setProductModalOpen(true);
   };
 
+  const handleImageUpload = async (file: File) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setFeedback({ message: "Image exceeds the maximum file size of 5MB.", type: "error" });
+      return;
+    }
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      setFeedback({ message: "Unsupported file format. Please use JPG, PNG, or WEBP.", type: "error" });
+      return;
+    }
+
+    setIsUploadingImg(true);
+    setFeedback(null);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await authenticatedFetch("/admin/products/image", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response || !response.ok) {
+        setFeedback({
+          message: await getResponseMessage(response as Response, "Image upload failed."),
+          type: "error",
+        });
+        return;
+      }
+
+      const data = (await response.json()) as { secure_url: string };
+      setVariantOptionForm((current) => ({
+        ...current,
+        imageUrl: data.secure_url,
+      }));
+      setFeedback({ message: "Image uploaded successfully.", type: "success" });
+    } catch {
+      setFeedback({ message: "Image upload failed.", type: "error" });
+    } finally {
+      setIsUploadingImg(false);
+      setIsDraggingImg(false);
+    }
+  };
+
+  const deleteCategory = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete the category "${name}"?`)) return;
+    try {
+      const res = await authenticatedFetch(`/admin/categories/${id}`, { method: 'DELETE' });
+      if (!res?.ok) throw new Error(await getResponseMessage(res as Response, 'Failed to delete category'));
+      setFeedback({ type: 'success', message: `Deleted category "${name}"` });
+      loadCatalog();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message });
+    }
+  };
+
+  const deleteVariantOption = async (type: string, id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete this ${type} "${name}"?`)) return;
+    try {
+      const res = await authenticatedFetch(`/admin/inventory/${type.toLowerCase()}s/${id}`, { method: 'DELETE' });
+      if (!res?.ok) throw new Error(await getResponseMessage(res as Response, `Failed to delete ${type}`));
+      setFeedback({ type: 'success', message: `Deleted ${type} "${name}"` });
+      loadCatalog();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message });
+    }
+  };
+
+  const deleteProduct = async (id: string, name: string) => {
+    if (!confirm(`WARNING: You are about to permanently delete "${name}". This will DESTROY all its associated Inventory stock, Colors variants, and Grid images!\n\nAre you sure you want to continue?`)) return;
+    try {
+      const res = await authenticatedFetch(`/admin/products/${id}`, { method: 'DELETE' });
+      if (!res?.ok) throw new Error(await getResponseMessage(res as Response, 'Failed to delete product'));
+      setFeedback({ type: 'success', message: `Permanently deleted "${name}" and all its inventory nodes.` });
+      // Close modal if open
+      if (productForm.inventoryId && (catalog.items.find(i => i.productId === id)?.inventoryId === productForm.inventoryId)) {
+        setProductModalOpen(false);
+      }
+      loadCatalog();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message });
+    }
+  };
+
   const openEditProduct = (item: InventoryItem) => {
     if (!item.inventoryId) {
       setFeedback({
@@ -463,16 +629,23 @@ export default function InventoryPage() {
     setSaving(true);
     setFeedback(null);
 
+    const isEditing = Boolean(productForm.inventoryId);
+
+    const formatShortName = (str: string) => str.substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const color = colorOptions.find(o => o.optionId === productForm.colorId)?.value || "CLR";
+    const size = sizeOptions.find(o => o.optionId === productForm.sizeId)?.value || "SZ";
+    const autoSku = isEditing && productForm.sku ? productForm.sku : `VG-${formatShortName(productForm.name)}-${formatShortName(color)}-${formatShortName(size)}`;
+
     const common = {
       name: productForm.name.trim(),
       description: productForm.description.trim() || undefined,
       categoryId: productForm.categoryId || undefined,
-      supplierId: productForm.supplierId,
+      supplierId: productForm.supplierId || undefined,
       basePrice: Number(productForm.basePrice),
       status: productForm.status,
     };
     const variant = {
-      sku: productForm.sku.trim(),
+      sku: autoSku,
       colorId: productForm.colorId,
       sizeId: productForm.sizeId,
       priceAdjustment: Number(productForm.priceAdjustment),
@@ -482,7 +655,6 @@ export default function InventoryPage() {
       imageUrl: productForm.imageUrl.trim() || undefined,
     };
 
-    const isEditing = Boolean(productForm.inventoryId);
     const response = await authenticatedFetch(
       isEditing
         ? `/admin/inventory/records/${productForm.inventoryId}`
@@ -587,9 +759,11 @@ export default function InventoryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: variantOptionForm.value.trim(),
-          ...(variantOptionForm.optionType === "Color" &&
-          variantOptionForm.hexCode
-            ? { hexCode: variantOptionForm.hexCode }
+          ...(variantOptionForm.optionType === "Color"
+            ? {
+              ...(variantOptionForm.hexCode ? { hexCode: variantOptionForm.hexCode } : {}),
+              ...(variantOptionForm.imageUrl ? { imageUrl: variantOptionForm.imageUrl } : {}),
+            }
             : {}),
           displayOrder: Number(variantOptionForm.displayOrder),
           status: variantOptionForm.status,
@@ -633,11 +807,10 @@ export default function InventoryPage() {
     <div className="space-y-7 text-[#f5f5f7]">
       {feedback && (
         <div
-          className={`fixed right-8 top-24 z-[100] max-w-sm rounded border px-5 py-3 text-xs font-bold shadow-2xl ${
-            feedback.type === "success"
-              ? "border-emerald-500/40 bg-[#0d1f14] text-emerald-300"
-              : "border-red-500/40 bg-[#271010] text-red-300"
-          }`}
+          className={`fixed right-8 top-24 z-[100] max-w-sm rounded border px-5 py-3 text-xs font-bold shadow-2xl ${feedback.type === "success"
+            ? "border-emerald-500/40 bg-[#0d1f14] text-emerald-300"
+            : "border-red-500/40 bg-[#271010] text-red-300"
+            }`}
         >
           {feedback.message}
         </div>
@@ -707,21 +880,29 @@ export default function InventoryPage() {
           { id: "stock" as const, label: "Products & Branch Stock" },
           { id: "categories" as const, label: "Categories" },
           { id: "options" as const, label: "Colors & Sizes" },
+          { id: "storefront" as const, label: "Storefront" },
         ].map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`rounded px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${
-              activeTab === tab.id
-                ? "bg-white text-black"
-                : "text-[#8e8e93] hover:bg-white/5 hover:text-white"
-            }`}
+            className={`rounded px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${activeTab === tab.id
+              ? "bg-white text-black"
+              : "text-[#8e8e93] hover:bg-white/5 hover:text-white"
+              }`}
           >
             {tab.label}
           </button>
         ))}
       </div>
+
+      {activeTab === "storefront" && (
+        <StorefrontTab
+          categoryGroups={categoryGroups}
+          onRefresh={loadCatalog}
+          setFeedback={setFeedback}
+        />
+      )}
 
       {activeTab === "stock" && (
         <section className="space-y-4">
@@ -743,11 +924,10 @@ export default function InventoryPage() {
                   key={view.id}
                   type="button"
                   onClick={() => setInventoryView(view.id)}
-                  className={`rounded px-4 py-2 text-[9px] font-bold uppercase tracking-widest transition-colors ${
-                    inventoryView === view.id
-                      ? "bg-white text-black"
-                      : "text-[#777] hover:text-white"
-                  }`}
+                  className={`rounded px-4 py-2 text-[9px] font-bold uppercase tracking-widest transition-colors ${inventoryView === view.id
+                    ? "bg-white text-black"
+                    : "text-[#777] hover:text-white"
+                    }`}
                 >
                   {view.label}
                 </button>
@@ -876,8 +1056,8 @@ export default function InventoryPage() {
                                 style={
                                   item.imageUrl
                                     ? {
-                                        backgroundImage: `url("${item.imageUrl}")`,
-                                      }
+                                      backgroundImage: `url("${item.imageUrl}")`,
+                                    }
                                     : undefined
                                 }
                               />
@@ -918,13 +1098,12 @@ export default function InventoryPage() {
                           </td>
                           <td className="px-4 py-4">
                             <span
-                              className={`font-mono text-[11px] font-bold ${
-                                isOut
-                                  ? "text-red-400"
-                                  : isLow
-                                    ? "text-amber-400"
-                                    : "text-emerald-400"
-                              }`}
+                              className={`font-mono text-[11px] font-bold ${isOut
+                                ? "text-red-400"
+                                : isLow
+                                  ? "text-amber-400"
+                                  : "text-emerald-400"
+                                }`}
                             >
                               {item.availableQuantity}
                             </span>
@@ -945,11 +1124,10 @@ export default function InventoryPage() {
                           </td>
                           <td className="px-4 py-4">
                             <span
-                              className={`inline-flex rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${
-                                item.status === "active"
-                                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                                  : "border-white/10 bg-white/5 text-[#8e8e93]"
-                              }`}
+                              className={`inline-flex rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${item.status === "active"
+                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                                : "border-white/10 bg-white/5 text-[#8e8e93]"
+                                }`}
                             >
                               {item.status}
                             </span>
@@ -957,19 +1135,29 @@ export default function InventoryPage() {
                           <td className="px-4 py-4 font-mono text-[9px] text-[#666]">
                             {item.lastUpdated
                               ? new Date(item.lastUpdated).toLocaleDateString(
-                                  "en-GB",
-                                )
+                                "en-GB",
+                              )
                               : "—"}
                           </td>
                           <td className="px-4 py-4">
-                            <button
-                              type="button"
-                              onClick={() => openEditProduct(item)}
-                              disabled={!item.inventoryId}
-                              className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openEditProduct(item)}
+                                disabled={!item.inventoryId}
+                                className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteProduct(item.productId, item.name)}
+                                className="rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-[10px] text-red-500 hover:bg-red-500/20 hover:text-red-400"
+                                title="Delete Product"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1035,8 +1223,8 @@ export default function InventoryPage() {
                                 style={
                                   group.imageUrl
                                     ? {
-                                        backgroundImage: `url("${group.imageUrl}")`,
-                                      }
+                                      backgroundImage: `url("${group.imageUrl}")`,
+                                    }
                                     : undefined
                                 }
                               />
@@ -1072,13 +1260,12 @@ export default function InventoryPage() {
                           </td>
                           <td className="px-4 py-4">
                             <span
-                              className={`font-mono text-[11px] font-bold ${
-                                isOut
-                                  ? "text-red-400"
-                                  : group.hasLowStock
-                                    ? "text-amber-400"
-                                    : "text-emerald-400"
-                              }`}
+                              className={`font-mono text-[11px] font-bold ${isOut
+                                ? "text-red-400"
+                                : group.hasLowStock
+                                  ? "text-amber-400"
+                                  : "text-emerald-400"
+                                }`}
                             >
                               {group.availableQuantity}
                             </span>
@@ -1090,11 +1277,10 @@ export default function InventoryPage() {
                           </td>
                           <td className="px-4 py-4">
                             <span
-                              className={`inline-flex rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${
-                                group.status === "active"
-                                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                                  : "border-white/10 bg-white/5 text-[#8e8e93]"
-                              }`}
+                              className={`inline-flex rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${group.status === "active"
+                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                                : "border-white/10 bg-white/5 text-[#8e8e93]"
+                                }`}
                             >
                               {group.status}
                             </span>
@@ -1221,19 +1407,28 @@ export default function InventoryPage() {
                       <span className="text-[9px] font-bold uppercase tracking-widest text-[#666]">
                         {productCount} products
                       </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCategoryForm({
-                            categoryId: category.categoryId,
-                            name: category.name,
-                            description: category.description || "",
-                          })
-                        }
-                        className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white hover:bg-white/10"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCategoryForm({
+                              categoryId: category.categoryId,
+                              name: category.name,
+                              description: category.description || "",
+                            })
+                          }
+                          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white hover:bg-white/10"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteCategory(category.categoryId, category.name)}
+                          className="rounded border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] text-red-500 hover:bg-red-500/20 hover:text-red-400"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1346,6 +1541,88 @@ export default function InventoryPage() {
               </>
             )}
 
+            {variantOptionForm.optionType === "Color" && (
+              <div className="mt-5">
+                <span className={labelClass}>Color Image (Global Variant Cover)</span>
+                {variantOptionForm.imageUrl ? (
+                  <div className="relative mt-2 overflow-hidden rounded-lg border border-white/10 bg-[#0a0a0a]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={variantOptionForm.imageUrl}
+                      alt="Color Preview"
+                      className="h-64 w-full object-contain"
+                    />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 opacity-0 backdrop-blur-sm transition-opacity hover:opacity-100">
+                      <span className="text-sm font-bold text-emerald-400">✓ Upload Successful</span>
+                      <div className="flex gap-3">
+                        <label className="cursor-pointer rounded border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-widest hover:bg-white/20">
+                          Replace Image
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="image/jpeg, image/jpg, image/png, image/webp"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) void handleImageUpload(file);
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="rounded border border-red-500/30 bg-red-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/20"
+                          onClick={() => setVariantOptionForm(curr => ({ ...curr, imageUrl: "" }))}
+                        >
+                          Remove Image
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <label
+                    className={`mt-2 flex h-40 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors ${isDraggingImg ? "border-white bg-white/5" : "border-white/20 hover:border-white/40 hover:bg-white/5"
+                      }`}
+                    onDragOver={(e) => { e.preventDefault(); setIsDraggingImg(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); setIsDraggingImg(false); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingImg(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) void handleImageUpload(file);
+                    }}
+                  >
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/jpeg, image/jpg, image/png, image/webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleImageUpload(file);
+                      }}
+                      disabled={isUploadingImg}
+                    />
+                    {isUploadingImg ? (
+                      <div className="flex flex-col items-center">
+                        <div className="mb-3 h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white"></div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-white">Uploading image...</p>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-white">Drag & Drop Image Here</p>
+                        <p className="my-2 text-[10px] text-[#8e8e93]">OR</p>
+                        <div className="rounded border border-white/20 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-white/10">
+                          Choose Image
+                        </div>
+                        <p className="mt-4 text-center text-[9px] uppercase tracking-widest text-[#555]">
+                          Supported formats: JPG, JPEG, PNG, WEBP<br />
+                          Maximum size: 5 MB
+                        </p>
+                      </>
+                    )}
+                  </label>
+                )}
+              </div>
+            )}
+
             <div className="mt-5 grid grid-cols-2 gap-4">
               <label>
                 <span className={labelClass}>Display Order</span>
@@ -1441,22 +1718,33 @@ export default function InventoryPage() {
                             </div>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setVariantOptionForm({
-                              optionId: option.optionId,
-                              optionType: option.optionType,
-                              value: option.value,
-                              hexCode: option.hexCode || "",
-                              displayOrder: String(option.displayOrder),
-                              status: option.status,
-                            })
-                          }
-                          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white hover:bg-white/10"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVariantOptionForm({
+                                optionId: option.optionId,
+                                optionType: option.optionType,
+                                value: option.value,
+                                hexCode: option.hexCode || "",
+                                imageUrl: option.imageUrl || "",
+                                displayOrder: String(option.displayOrder),
+                                status: option.status,
+                              })
+                            }
+                            className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white hover:bg-white/10"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteVariantOption(option.optionType, option.optionId, option.value)}
+                            className="rounded border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] text-red-500 hover:bg-red-500/20 hover:text-red-400"
+                            title="Delete"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {group.options.length === 0 && (
@@ -1518,6 +1806,7 @@ export default function InventoryPage() {
                       className={fieldClass}
                     />
                   </label>
+
                   <label>
                     <span className={labelClass}>Category</span>
                     <select
@@ -1626,20 +1915,7 @@ export default function InventoryPage() {
                   Variant
                 </h3>
                 <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-                  <label>
-                    <span className={labelClass}>SKU</span>
-                    <input
-                      required
-                      value={productForm.sku}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          sku: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                    />
-                  </label>
+
                   <label>
                     <span className={labelClass}>Color</span>
                     <select
@@ -1718,21 +1994,7 @@ export default function InventoryPage() {
                       className={fieldClass}
                     />
                   </label>
-                  <label className="md:col-span-2 lg:col-span-4">
-                    <span className={labelClass}>Variant Image URL</span>
-                    <input
-                      type="url"
-                      value={productForm.imageUrl}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          imageUrl: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                      placeholder="https://..."
-                    />
-                  </label>
+
                 </div>
               </section>
 
@@ -1800,23 +2062,7 @@ export default function InventoryPage() {
                       </span>
                     )}
                   </label>
-                  <label>
-                    <span className={labelClass}>Reorder Level</span>
-                    <input
-                      required
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={productForm.reorderLevel}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          reorderLevel: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                    />
-                  </label>
+
                   <div className="rounded border border-white/[0.06] bg-[#111] px-4 py-3">
                     <div className="text-[9px] font-bold uppercase tracking-widest text-[#666]">
                       Selling Price
@@ -1856,6 +2102,7 @@ export default function InventoryPage() {
                   type="submit"
                   disabled={
                     saving ||
+                    isUploadingImg ||
                     catalog.suppliers.length === 0 ||
                     (!productForm.inventoryId &&
                       (!hasActiveColorOptions || !hasActiveSizeOptions))
