@@ -384,7 +384,7 @@ export class AdminService {
               orderBy: { sku: 'asc' },
             },
           },
-          orderBy: { name: 'asc' },
+          orderBy: [{ createdAt: 'desc' }, { name: 'asc' }],
         }),
       ]);
 
@@ -399,8 +399,10 @@ export class AdminService {
           supplierId: product.supplierId,
           supplierName: product.supplier?.name || 'Unassigned',
           basePrice: Number(product.basePrice),
-          status: product.status || 'draft',
+          status: product.status,
+          createdAt: product.createdAt,
           variantId: variant.variantId,
+          variantStatus: variant.status,
           sku: variant.sku,
           sizeId: variant.sizeId,
           size: variant.size.name,
@@ -532,13 +534,13 @@ export class AdminService {
           categoryId: dto.categoryId || null,
           supplierId: dto.supplierId,
           basePrice: dto.basePrice,
-          status: dto.status,
         },
       });
       await tx.productVariant.update({
         where: { variantId: existing.variantId },
         data: {
           sku: dto.sku.trim(),
+          status: dto.variantStatus,
           sizeId: references.sizeId,
           colorId: references.colorId,
           priceAdjustment: dto.priceAdjustment,
@@ -616,17 +618,24 @@ export class AdminService {
             },
           });
 
-          const colorRows: any[] = await tx.$queryRawUnsafe(
-            'SELECT image_url FROM color WHERE color_id = $1::uuid',
-            refs.colorId,
-          );
+          const colorRows: any[] = refs.colorId
+            ? await tx.$queryRawUnsafe(
+                'SELECT image_url FROM color WHERE color_id = $1::uuid',
+                refs.colorId,
+              )
+            : [];
           const colorImgUrl = colorRows[0]?.image_url;
-          const shouldCreateImage = !existingImage && colorImgUrl;
+
+          const explicitImgUrl = variantDto.imageUrl?.trim();
+          const mainProductImgUrl = dto.imageUrl?.trim();
+          const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
+          const shouldCreateImage = Boolean(targetImgUrl) && (!existingImage || explicitImgUrl);
 
           await tx.productVariant.create({
             data: {
               productId: product.productId,
               sku: variantDto.sku.trim(),
+              status: variantDto.status || 'show',
               sizeId: refs.sizeId,
               colorId: refs.colorId,
               priceAdjustment: variantDto.priceAdjustment,
@@ -638,7 +647,7 @@ export class AdminService {
                 },
               },
               ...(shouldCreateImage
-                ? { images: { create: { imageUrl: colorImgUrl } } }
+                ? { images: { create: { imageUrl: targetImgUrl } } }
                 : {}),
             },
           });
@@ -655,7 +664,9 @@ export class AdminService {
       });
     } catch (e: any) {
       if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
-        throw new ConflictException('A product variant with this exact Name, Color, and Size combination already exists. Please edit the existing variant in stock instead.');
+        throw new ConflictException(
+          'A product variant with this exact Name, Color, and Size combination already exists. Please edit the existing variant in stock instead.',
+        );
       }
       require('fs').appendFileSync('debug-crash.log', String(e?.stack || e) + '\n\n');
       throw e;
@@ -663,6 +674,11 @@ export class AdminService {
   }
 
   async updateProductVisibility(productId: string, status: string) {
+    if (!['live', 'hold', 'hidden'].includes(status)) {
+      throw new BadRequestException(
+        'Product status must be Live, Hold, or Hidden.',
+      );
+    }
     await this.prisma.product.update({
       where: { productId },
       data: { status },

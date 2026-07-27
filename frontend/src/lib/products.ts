@@ -2,6 +2,7 @@ import { type Product } from "@/data/product";
 
 interface CatalogueVariant {
   variant_id: string;
+  status: "show" | "hidden";
   sku: string;
   size: string;
   colour: string;
@@ -12,6 +13,7 @@ interface CatalogueVariant {
 
 interface CatalogueProduct {
   product_id: string;
+  status: "live" | "hold";
   name: string;
   description: string | null;
   category: { name: string } | null;
@@ -43,14 +45,23 @@ export async function loadProducts(): Promise<Product[]> {
   const products: Product[] = [];
 
   categoryMap.forEach((categoryProducts, categoryName) => {
+    const cataloguePrices = categoryProducts.flatMap((product) =>
+      product.variants.map((variant) => variant.price),
+    );
     const allVariants = categoryProducts.flatMap(p =>
-      p.variants.map((v) => ({
+      p.variants.filter((v) => v.status === "show").map((v) => ({
         variantId: v.variant_id,
         sku: v.sku,
         size: v.size,
         color: v.colour,
         price: v.price,
-        availableQuantity: Math.max(0, v.inventory.quantity - v.inventory.reserved_quantity),
+        availableQuantity:
+          p.status === "hold"
+            ? 0
+            : Math.max(
+                0,
+                v.inventory.quantity - v.inventory.reserved_quantity,
+              ),
         images: v.images.map(img => img.url)
       }))
     );
@@ -63,7 +74,9 @@ export async function loadProducts(): Promise<Product[]> {
       ...allVariants.flatMap(v => v.images)
     ].filter((url, index, all) => all.indexOf(url) === index);
 
-    const minimumPrice = allVariants.length ? Math.min(...allVariants.map((variant) => variant.price)) : 0;
+    const minimumPrice = cataloguePrices.length
+      ? Math.min(...cataloguePrices)
+      : 0;
 
     products.push({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -34,7 +34,7 @@ export class ProductCatalogueService {
 
   async getCatalogue(): Promise<ProductCatalogueItem[]> {
     const products = await this.prisma.product.findMany({
-      where: { status: 'active' },
+      where: { status: { in: ['live', 'hold'] } },
       include: CATALOGUE_INCLUDE,
     });
 
@@ -47,7 +47,7 @@ export class ProductCatalogueService {
       include: CATALOGUE_INCLUDE,
     });
 
-    if (!product || product.status !== 'active') {
+    if (!product || !['live', 'hold'].includes(product.status)) {
       throw new NotFoundException('Product not found');
     }
 

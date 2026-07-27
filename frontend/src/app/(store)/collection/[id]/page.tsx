@@ -292,7 +292,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                   : {}
               }
             >
-              {product.isAvailable && availableQuantity > 0 ? "ADD TO CART" : "SOLD OUT"}
+              {product.isAvailable && availableQuantity > 0 ? "ADD TO CART" : "OUT OF STOCK"}
             </button>
 
             {/* Accordions */}

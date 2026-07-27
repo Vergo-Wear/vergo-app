@@ -21,6 +21,7 @@ export interface VariantInventory {
 
 export interface ProductVariantSummary {
   variant_id: string;
+  status: 'show' | 'hidden';
   sku: string;
   size: string;
   colour: string;
@@ -31,6 +32,7 @@ export interface ProductVariantSummary {
 
 export interface ProductCatalogueItem {
   product_id: string;
+  status: 'live' | 'hold';
   name: string;
   description: string | null;
   category: CategorySummary | null;

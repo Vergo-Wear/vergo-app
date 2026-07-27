@@ -220,19 +220,21 @@ model Supplier {
 }
 
 model Product {
-  productId   String  @id @default(dbgenerated("gen_random_uuid()")) @map("product_id") @db.Uuid
-  categoryId  String? @map("category_id") @db.Uuid
-  supplierId  String? @map("supplier_id") @db.Uuid
+  productId   String   @id @default(dbgenerated("gen_random_uuid()")) @map("product_id") @db.Uuid
+  categoryId  String?  @map("category_id") @db.Uuid
+  supplierId  String?  @map("supplier_id") @db.Uuid
   name        String
   description String?
-  basePrice   Decimal @map("base_price") @db.Decimal
-  status      String? @default("active")
+  basePrice   Decimal  @map("base_price") @db.Decimal
+  status      String   @default("hidden")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   category Category?        @relation(fields: [categoryId], references: [categoryId], onDelete: NoAction, onUpdate: NoAction)
   supplier Supplier?        @relation(fields: [supplierId], references: [supplierId], onDelete: NoAction, onUpdate: NoAction)
   variants ProductVariant[]
   reviews  Review[]
 
+  @@index([createdAt])
   @@map("product")
   @@schema("public")
 }
@@ -275,6 +277,7 @@ model ProductVariant {
   colorId         String   @map("color_id") @db.Uuid
   sizeId          String   @map("size_id") @db.Uuid
   sku             String   @unique
+  status          String   @default("show")
   priceAdjustment Decimal? @default(0.00) @map("price_adjustment") @db.Decimal
 
   product              Product               @relation(fields: [productId], references: [productId], onDelete: NoAction, onUpdate: NoAction)
@@ -288,6 +291,7 @@ model ProductVariant {
   pendingCheckoutItems PendingCheckoutItem[]
 
   @@unique([productId, sizeId, colorId])
+  @@index([productId, status])
   @@map("product_variant")
   @@schema("public")
 }

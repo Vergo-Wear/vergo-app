@@ -30,12 +30,12 @@ export class UpdateInventoryRecordDto {
   @Min(0)
   basePrice: number;
 
-  @IsIn(['active', 'draft'])
-  status: string;
-
   @IsString()
   @MinLength(1)
   sku: string;
+
+  @IsIn(['show', 'hidden'])
+  variantStatus: string;
 
   @IsUUID()
   colorId: string;

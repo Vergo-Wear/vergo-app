@@ -14,6 +14,7 @@ import {
 
 class CreateVariantDto {
   @IsString() sku: string;
+  @IsOptional() @IsIn(['show', 'hidden']) status?: string;
   @IsOptional() @IsUUID() colorId?: string;
   @IsOptional() @IsUUID() sizeId?: string;
   @IsOptional() @IsString() color?: string;
@@ -31,7 +32,8 @@ export class CreateProductDto {
   @IsOptional() @IsUUID() categoryId?: string;
   @IsOptional() @IsUUID() supplierId?: string;
   @IsNumber() @Min(0) basePrice: number;
-  @IsIn(['active', 'draft']) status: string;
+  @IsIn(['live', 'hold', 'hidden']) status: string;
+  @IsOptional() @IsUrl({ require_tld: false }) imageUrl?: string;
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateVariantDto)

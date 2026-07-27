@@ -22,35 +22,40 @@ export async function authenticatedFetch(path: string, init?: RequestInit) {
   const accessToken = sessionStorage.getItem("vergo_access_token");
   if (!accessToken) return null;
 
-  let response = await send(accessToken);
-  if (response.status !== 401) return response;
+  try {
+    let response = await send(accessToken);
+    if (response.status !== 401) return response;
 
-  const refreshToken = sessionStorage.getItem("vergo_refresh_token");
-  if (!refreshToken) {
-    logoutExpiredSession();
+    const refreshToken = sessionStorage.getItem("vergo_refresh_token");
+    if (!refreshToken) {
+      logoutExpiredSession();
+      return response;
+    }
+
+    const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (refreshResponse.status === 401 || refreshResponse.status === 400) {
+      logoutExpiredSession();
+      return response;
+    }
+    if (!refreshResponse.ok) return response;
+
+    const refreshed = (await refreshResponse.json()) as {
+      accessToken: string;
+      refreshToken?: string;
+    };
+    sessionStorage.setItem("vergo_access_token", refreshed.accessToken);
+    if (refreshed.refreshToken) {
+      sessionStorage.setItem("vergo_refresh_token", refreshed.refreshToken);
+    }
+    response = await send(refreshed.accessToken);
+    if (response.status === 401) logoutExpiredSession();
     return response;
+  } catch (err) {
+    console.error("authenticatedFetch connection error:", err);
+    return null;
   }
-
-  const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
-  });
-  if (refreshResponse.status === 401 || refreshResponse.status === 400) {
-    logoutExpiredSession();
-    return response;
-  }
-  if (!refreshResponse.ok) return response;
-
-  const refreshed = (await refreshResponse.json()) as {
-    accessToken: string;
-    refreshToken?: string;
-  };
-  sessionStorage.setItem("vergo_access_token", refreshed.accessToken);
-  if (refreshed.refreshToken) {
-    sessionStorage.setItem("vergo_refresh_token", refreshed.refreshToken);
-  }
-  response = await send(refreshed.accessToken);
-  if (response.status === 401) logoutExpiredSession();
-  return response;
 }
