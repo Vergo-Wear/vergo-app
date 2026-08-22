@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use, useMemo } from "react";
+import { useState, useEffect, use, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -28,13 +28,23 @@ export default function ProductDetailPage({ params }: PageProps) {
   // Gallery state
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  // Size options fallback or dynamic
+  // Size & Color options
   const sizeOptions = product?.sizes || ["S", "M", "L", "XL"];
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0] || "M");
+  const [selectedColor, setSelectedColor] = useState("");
   const [quantity, setQuantity] = useState(1);
 
-  // Update we should probably also track selectedColor since it defaults below:
-  const [selectedColor, setSelectedColor] = useState(product?.colors?.[0] || "");
+  // Update selectedColor and selectedSize when product data arrives
+  useEffect(() => {
+    if (product) {
+      if (product.colors && product.colors.length > 0 && (!selectedColor || !product.colors.includes(selectedColor))) {
+        setSelectedColor(product.colors[0]);
+      }
+      if (product.sizes && product.sizes.length > 0 && (!selectedSize || !product.sizes.includes(selectedSize))) {
+        setSelectedSize(product.sizes[0]);
+      }
+    }
+  }, [product, selectedColor, selectedSize]);
 
   const selectedVariant = useMemo(
     () =>
@@ -42,7 +52,9 @@ export default function ProductDetailPage({ params }: PageProps) {
         (variant) =>
           variant.size === selectedSize &&
           variant.color === selectedColor,
-      ),
+      ) || product?.variants.find(
+        (variant) => variant.size === selectedSize || variant.color === selectedColor
+      ) || product?.variants[0],
     [product, selectedSize, selectedColor]
   );
 
@@ -135,7 +147,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           <div className="product-gallery">
             <div className="main-image-container">
               <Image
-                src={productGallery[activeImageIndex] || product.image}
+                src={productGallery[activeImageIndex] || product.image || "/logo.png"}
                 alt={`${product.name} View ${activeImageIndex + 1}`}
                 fill
                 priority
@@ -154,7 +166,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                     aria-label={`View thumbnail ${index + 1}`}
                   >
                     <Image
-                      src={imgSrc}
+                      src={imgSrc || "/logo.png"}
                       alt={`${product.name} Thumbnail ${index + 1}`}
                       fill
                       className="thumbnail-img"

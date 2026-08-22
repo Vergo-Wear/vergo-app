@@ -23,8 +23,8 @@ export default function ProductCard({ product }: any) {
         )}
 
         <Image
-          src={product.image}
-          alt={product.name}
+          src={product.image || "/logo.png"}
+          alt={product.name || "Product"}
           width={400}
           height={500}
           className="product-image"

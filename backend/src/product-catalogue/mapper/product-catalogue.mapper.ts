@@ -62,8 +62,8 @@ function mapVariant(
     variant_id: variant.variantId,
     status: variant.status as 'show' | 'hidden',
     sku: variant.sku,
-    size: variant.size.name,
-    colour: variant.color.name,
+    size: variant.size?.name || 'Standard',
+    colour: variant.color?.name || 'Standard',
     price,
     inventory: {
       quantity,

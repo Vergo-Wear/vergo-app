@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -77,6 +78,14 @@ export class AdminController {
   @Post('products')
   createProduct(@Body() dto: CreateProductDto) {
     return this.adminService.createProduct(dto);
+  }
+
+  @Put('products/:id')
+  updateProductWhole(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: CreateProductDto,
+  ) {
+    return this.adminService.updateProductWhole(id, dto);
   }
 
   @Delete('products/:id')

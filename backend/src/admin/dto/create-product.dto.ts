@@ -12,7 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-class CreateVariantDto {
+export class CreateVariantDto {
   @IsString() sku: string;
   @IsOptional() @IsIn(['show', 'hidden']) status?: string;
   @IsOptional() @IsUUID() colorId?: string;
@@ -23,7 +23,8 @@ class CreateVariantDto {
   @IsInt() @Min(0) quantity: number;
   @IsOptional() @IsUUID() branchId?: string;
   @IsOptional() @IsInt() @Min(0) reorderLevel?: number;
-  @IsOptional() @IsUrl({ require_tld: false }) imageUrl?: string;
+  @IsOptional() @IsString() imageUrl?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
 }
 
 export class CreateProductDto {
@@ -33,7 +34,7 @@ export class CreateProductDto {
   @IsOptional() @IsUUID() supplierId?: string;
   @IsNumber() @Min(0) basePrice: number;
   @IsIn(['live', 'hold', 'hidden']) status: string;
-  @IsOptional() @IsUrl({ require_tld: false }) imageUrl?: string;
+  @IsOptional() @IsString() imageUrl?: string;
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateVariantDto)

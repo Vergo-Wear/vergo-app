@@ -625,11 +625,13 @@ export class AdminService {
               )
             : [];
           const colorImgUrl = colorRows[0]?.image_url;
-
           const explicitImgUrl = variantDto.imageUrl?.trim();
           const mainProductImgUrl = dto.imageUrl?.trim();
           const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
-          const shouldCreateImage = Boolean(targetImgUrl) && (!existingImage || explicitImgUrl);
+
+          const imageList: string[] = (variantDto.images && variantDto.images.length > 0)
+            ? variantDto.images.filter(Boolean)
+            : targetImgUrl ? [targetImgUrl] : [];
 
           await tx.productVariant.create({
             data: {
@@ -646,8 +648,15 @@ export class AdminService {
                   reorderLevel: variantDto.reorderLevel ?? 10,
                 },
               },
-              ...(shouldCreateImage
-                ? { images: { create: { imageUrl: targetImgUrl } } }
+              ...(imageList.length > 0
+                ? {
+                    images: {
+                      create: imageList.map((url, idx) => ({
+                        imageUrl: url,
+                        title: idx === 0 ? 'Main' : `Gallery ${idx}`,
+                      })),
+                    },
+                  }
                 : {}),
             },
           });
@@ -669,6 +678,129 @@ export class AdminService {
         );
       }
       require('fs').appendFileSync('debug-crash.log', String(e?.stack || e) + '\n\n');
+      throw e;
+    }
+  }
+
+  async updateProductWhole(productId: string, dto: CreateProductDto) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existingProduct = await tx.product.findUnique({
+          where: { productId },
+          include: {
+            variants: {
+              include: { images: true, inventory: true },
+            },
+          },
+        });
+        if (!existingProduct) {
+          throw new NotFoundException('Product not found.');
+        }
+
+        // 1. Update product base info
+        await tx.product.update({
+          where: { productId },
+          data: {
+            name: dto.name.trim(),
+            description: dto.description?.trim(),
+            categoryId: dto.categoryId || null,
+            supplierId: dto.supplierId || null,
+            basePrice: dto.basePrice,
+            status: dto.status,
+          },
+        });
+
+        // 2. Resolve variant references (colorId, sizeId)
+        const references = await Promise.all(
+          dto.variants.map((variant) =>
+            this.resolveVariantReferences(tx, variant),
+          ),
+        );
+
+        // 3. Delete existing images & inventory & variants for this product
+        const oldVariantIds = existingProduct.variants.map((v) => v.variantId);
+        if (oldVariantIds.length > 0) {
+          await tx.cartItem.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+          await tx.pendingCheckoutItem.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+          await tx.images.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+          await tx.inventory.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+          await tx.productVariant.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+        }
+
+        // 4. Re-create new updated variants
+        for (let i = 0; i < dto.variants.length; i++) {
+          const variantDto = dto.variants[i];
+          const refs = references[i];
+
+          const colorRows: any[] = refs.colorId
+            ? await tx.$queryRawUnsafe(
+                'SELECT image_url FROM color WHERE color_id = $1::uuid',
+                refs.colorId,
+              )
+            : [];
+          const colorImgUrl = colorRows[0]?.image_url;
+          const explicitImgUrl = variantDto.imageUrl?.trim();
+          const mainProductImgUrl = dto.imageUrl?.trim();
+          const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
+
+          const imageList: string[] = (variantDto.images && variantDto.images.length > 0)
+            ? variantDto.images.filter(Boolean)
+            : targetImgUrl ? [targetImgUrl] : [];
+
+          await tx.productVariant.create({
+            data: {
+              productId: productId,
+              sku: variantDto.sku.trim(),
+              status: variantDto.status || 'show',
+              sizeId: refs.sizeId,
+              colorId: refs.colorId,
+              priceAdjustment: variantDto.priceAdjustment,
+              inventory: {
+                create: {
+                  quantity: variantDto.quantity,
+                  branchId: variantDto.branchId || null,
+                  reorderLevel: variantDto.reorderLevel ?? 10,
+                },
+              },
+              ...(imageList.length > 0
+                ? {
+                    images: {
+                      create: imageList.map((url, idx) => ({
+                        imageUrl: url,
+                        title: idx === 0 ? 'Main' : `Gallery ${idx}`,
+                      })),
+                    },
+                  }
+                : {}),
+            },
+          });
+        }
+
+        return tx.product.findUnique({
+          where: { productId },
+          include: {
+            variants: {
+              include: { color: true, size: true, inventory: true, images: true },
+            },
+          },
+        });
+      });
+    } catch (e: any) {
+      if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
+        throw new ConflictException(
+          'A product variant with this SKU already exists.',
+        );
+      }
       throw e;
     }
   }

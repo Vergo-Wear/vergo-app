@@ -16,7 +16,7 @@ interface CatalogueProduct {
   status: "live" | "hold";
   name: string;
   description: string | null;
-  category: { name: string } | null;
+  category: { category_id: string; name: string; description: string | null } | null;
   images: Array<{ image_id: string; url: string }>;
   variants: CatalogueVariant[];
 }
@@ -30,72 +30,48 @@ function formatLkr(value: number) {
 export async function loadProducts(): Promise<Product[]> {
   const response = await fetch(`${API_URL}/product-catalogue`, { cache: "no-store" });
   if (!response.ok) throw new Error(`Unable to load products (${response.status}).`);
-  const items = await response.json() as CatalogueProduct[];
+  const items = (await response.json()) as CatalogueProduct[];
 
-  const categoryMap = new Map<string, CatalogueProduct[]>();
-
-  items.forEach(item => {
-    const catName = item.category?.name || "Uncategorized";
-    if (!categoryMap.has(catName)) {
-      categoryMap.set(catName, []);
-    }
-    categoryMap.get(catName)!.push(item);
-  });
-
-  const products: Product[] = [];
-
-  categoryMap.forEach((categoryProducts, categoryName) => {
-    const cataloguePrices = categoryProducts.flatMap((product) =>
-      product.variants.map((variant) => variant.price),
-    );
-    const allVariants = categoryProducts.flatMap(p =>
-      p.variants.filter((v) => v.status === "show").map((v) => ({
+  return items.map((item) => {
+    const allVariants = item.variants
+      .filter((v) => v.status === "show")
+      .map((v) => ({
         variantId: v.variant_id,
         sku: v.sku,
         size: v.size,
         color: v.colour,
         price: v.price,
         availableQuantity:
-          p.status === "hold"
+          item.status === "hold"
             ? 0
-            : Math.max(
-                0,
-                v.inventory.quantity - v.inventory.reserved_quantity,
-              ),
-        images: v.images.map(img => img.url)
-      }))
-    );
+            : Math.max(0, (v.inventory?.quantity ?? 0) - (v.inventory?.reserved_quantity ?? 0)),
+        images: v.images.map((img) => img.url),
+      }));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const description = (categoryProducts[0]?.category as any)?.description || categoryProducts.find(p => p.description)?.description || undefined;
+    const allImages = [
+      ...item.images.map((i) => i.url),
+      ...allVariants.flatMap((v) => v.images),
+    ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
 
-    const images = [
-      ...categoryProducts.flatMap(p => p.images.map(i => i.url)),
-      ...allVariants.flatMap(v => v.images)
-    ].filter((url, index, all) => all.indexOf(url) === index);
+    const prices = allVariants.map((v) => v.price);
+    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
 
-    const minimumPrice = cataloguePrices.length
-      ? Math.min(...cataloguePrices)
-      : 0;
-
-    products.push({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      id: (categoryProducts[0]?.category as any)?.category_id || categoryName,
-      name: categoryName,
-      price: formatLkr(minimumPrice),
-      lkrPrice: formatLkr(minimumPrice),
-      isAvailable: allVariants.some((variant) => variant.availableQuantity > 0),
-      image: images[0] || "/logo.png",
-      category: categoryName,
-      description,
-      images,
-      sizes: [...new Set(allVariants.map((variant) => variant.size))],
-      colors: [...new Set(allVariants.map((variant) => variant.color))],
+    return {
+      id: item.product_id,
+      name: item.name,
+      price: formatLkr(minPrice),
+      lkrPrice: formatLkr(minPrice),
+      isAvailable: item.status === "live" && allVariants.some((v) => v.availableQuantity > 0),
+      image: allImages[0] || "/logo.png",
+      category: item.category?.name || "Apparel",
+      subTitle: item.category?.name || "ESSENTIALS",
+      description: item.description || undefined,
+      images: allImages.length > 0 ? allImages : ["/logo.png"],
+      sizes: [...new Set(allVariants.map((v) => v.size))],
+      colors: [...new Set(allVariants.map((v) => v.color))],
       variants: allVariants,
-    });
+    };
   });
-
-  return products;
 }
 
 export function getInitialProducts(): Product[] {
