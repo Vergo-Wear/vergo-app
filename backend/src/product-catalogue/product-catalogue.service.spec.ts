@@ -17,7 +17,8 @@ describe('ProductCatalogueService', () => {
     name: 'Essential Tee',
     description: 'Heavy cotton tee',
     basePrice: new Prisma.Decimal(4500),
-    status: 'active',
+    status: 'live',
+    createdAt: new Date('2026-07-26T00:00:00.000Z'),
     category: {
       categoryId: 'ff4b7461-dd1c-4a37-a255-bc9090312067',
       name: 'T-Shirts',
@@ -32,6 +33,7 @@ describe('ProductCatalogueService', () => {
         variantId: 'e335e75a-f87d-4937-a765-712f3ad945ad',
         productId: '3a2c831a-284e-4d02-b780-5c9164246eb8',
         sku: 'VGO-TEE-BLK-M',
+        status: 'show',
         sizeId: 'a0c324a5-d46b-4993-b5e6-95c4453fc204',
         size: { name: 'M' },
         colorId: '79fef8d6-c5f5-4a40-83ec-bd9310d5172b',
@@ -54,23 +56,27 @@ describe('ProductCatalogueService', () => {
     service = new ProductCatalogueService(prisma as never);
   });
 
-  it('returns active products with variants, pricing, stock and valid images', async () => {
+  it('returns live and held products with variants, pricing, stock and valid images', async () => {
     productDelegate.findMany.mockResolvedValue([product]);
 
     const result = await service.getCatalogue();
 
     expect(productDelegate.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { status: 'active' } }),
+      expect.objectContaining({
+        where: { status: { in: ['live', 'hold'] } },
+      }),
     );
     expect(result[0]).toMatchObject({
       category: {
         name: 'T-Shirts',
         description: 'Everyday tees',
       },
+      status: 'live',
       images: [{ image_id: '1', url: 'https://cdn.example.com/tee.jpg' }],
       variants: [
         {
           sku: 'VGO-TEE-BLK-M',
+          status: 'show',
           size: 'M',
           colour: 'Black',
           price: 4750,
@@ -81,7 +87,7 @@ describe('ProductCatalogueService', () => {
     });
   });
 
-  it('returns one active product by product_id', async () => {
+  it('returns one visible product by product_id', async () => {
     productDelegate.findUnique.mockResolvedValue(product);
 
     const result = await service.getProductById(product.productId);
@@ -89,8 +95,8 @@ describe('ProductCatalogueService', () => {
     expect(result.product_id).toBe(product.productId);
   });
 
-  it.each([null, { ...product, status: 'inactive' }])(
-    'returns a clear not-found error for missing or inactive customer products',
+  it.each([null, { ...product, status: 'hidden' }])(
+    'returns a clear not-found error for missing or hidden customer products',
     async (value) => {
       productDelegate.findUnique.mockResolvedValue(value);
 

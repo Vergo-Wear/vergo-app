@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use, useMemo } from "react";
+import { useState, useEffect, use, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -27,21 +27,37 @@ export default function ProductDetailPage({ params }: PageProps) {
 
   // Gallery state
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  
-  // Size options fallback or dynamic
+
+  // Size & Color options
   const sizeOptions = product?.sizes || ["S", "M", "L", "XL"];
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0] || "M");
+  const [selectedColor, setSelectedColor] = useState("");
   const [quantity, setQuantity] = useState(1);
+
+  // Update selectedColor and selectedSize when product data arrives
+  useEffect(() => {
+    if (product) {
+      if (product.colors && product.colors.length > 0 && (!selectedColor || !product.colors.includes(selectedColor))) {
+        setSelectedColor(product.colors[0]);
+      }
+      if (product.sizes && product.sizes.length > 0 && (!selectedSize || !product.sizes.includes(selectedSize))) {
+        setSelectedSize(product.sizes[0]);
+      }
+    }
+  }, [product, selectedColor, selectedSize]);
 
   const selectedVariant = useMemo(
     () =>
       product?.variants.find(
         (variant) =>
           variant.size === selectedSize &&
-          variant.color === (product.colors?.[0] || variant.color),
-      ),
-    [product, selectedSize],
+          variant.color === selectedColor,
+      ) || product?.variants.find(
+        (variant) => variant.size === selectedSize || variant.color === selectedColor
+      ) || product?.variants[0],
+    [product, selectedSize, selectedColor]
   );
+
   const availableQuantity = selectedVariant?.availableQuantity ?? 0;
 
   // Accordion state
@@ -111,7 +127,7 @@ export default function ProductDetailPage({ params }: PageProps) {
     );
   }
 
-  const productGallery = product.images || [product.image];
+  const productGallery = product.images && product.images.length > 0 ? product.images : [product.image];
 
   return (
     <div className="product-detail-wrapper">
@@ -131,7 +147,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           <div className="product-gallery">
             <div className="main-image-container">
               <Image
-                src={productGallery[activeImageIndex] || product.image}
+                src={productGallery[activeImageIndex] || product.image || "/logo.png"}
                 alt={`${product.name} View ${activeImageIndex + 1}`}
                 fill
                 priority
@@ -142,7 +158,7 @@ export default function ProductDetailPage({ params }: PageProps) {
 
             {productGallery.length > 1 && (
               <div className="thumbnail-list">
-                {productGallery.map((imgSrc, index) => (
+                {productGallery.map((imgSrc: string, index: number) => (
                   <button
                     key={index}
                     onClick={() => setActiveImageIndex(index)}
@@ -150,7 +166,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                     aria-label={`View thumbnail ${index + 1}`}
                   >
                     <Image
-                      src={imgSrc}
+                      src={imgSrc || "/logo.png"}
                       alt={`${product.name} Thumbnail ${index + 1}`}
                       fill
                       className="thumbnail-img"
@@ -170,6 +186,41 @@ export default function ProductDetailPage({ params }: PageProps) {
 
             <div className="product-price">{product.lkrPrice}</div>
 
+            {/* Color Selection */}
+            {product?.colors && product.colors.length > 0 && (
+              <div className="size-selection-section">
+                <div className="size-header">
+                  <span className="size-label">SELECT COLOR</span>
+                </div>
+                <div className="size-options-grid" style={{ marginBottom: "20px" }}>
+                  {product.colors.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => {
+                        setSelectedColor(color);
+                        // Jump the main image to the selected variant's first image
+                        const variantWithColor = product?.variants.find((v) => v.color === color);
+                        if (variantWithColor && variantWithColor.images && variantWithColor.images.length > 0) {
+                          const targetImg = variantWithColor.images[0];
+                          const idx = productGallery.indexOf(targetImg);
+                          if (idx !== -1) setActiveImageIndex(idx);
+                        }
+
+                        const colorAvailability = product?.variants.find(
+                          (variant) => variant.color === color && variant.size === selectedSize,
+                        )?.availableQuantity ?? 0;
+                        setQuantity((current) => Math.max(1, Math.min(current, colorAvailability || 1)));
+                      }}
+                      className={`size-btn ${selectedColor === color ? "selected" : ""}`}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Size Selection */}
             {sizeOptions.length > 0 && (
               <div className="size-selection-section">
@@ -185,8 +236,8 @@ export default function ProductDetailPage({ params }: PageProps) {
                       type="button"
                       onClick={() => {
                         setSelectedSize(size);
-                        const sizeAvailability = product.variants.find(
-                          (variant) => variant.size === size,
+                        const sizeAvailability = product?.variants.find(
+                          (variant) => variant.size === size && variant.color === selectedColor,
                         )?.availableQuantity ?? 0;
                         setQuantity((current) => Math.max(1, Math.min(current, sizeAvailability || 1)));
                       }}
@@ -253,7 +304,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                   : {}
               }
             >
-              {product.isAvailable && availableQuantity > 0 ? "ADD TO CART" : "SOLD OUT"}
+              {product.isAvailable && availableQuantity > 0 ? "ADD TO CART" : "OUT OF STOCK"}
             </button>
 
             {/* Accordions */}
@@ -319,7 +370,7 @@ export default function ProductDetailPage({ params }: PageProps) {
             </div>
           </div>
         </section>
-        
+
         {/* Complete The Look Section */}
         {completeTheLookItems.length > 0 && (
           <section className="complete-look-section">

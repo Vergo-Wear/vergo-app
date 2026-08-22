@@ -19,6 +19,10 @@ export class UpdateColorDto {
   hexCode?: string;
 
   @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   displayOrder?: number;

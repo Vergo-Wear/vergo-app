@@ -43,6 +43,8 @@ export class CartService {
       const variant = item.variant;
       const product = variant?.product;
       if (!variant || !product) return [];
+      if (product.status === 'hidden') return [];
+      if (variant.status === 'hidden') return [];
       const availableQuantity = variant.inventory.reduce(
         (total, row) =>
           total +
@@ -53,6 +55,8 @@ export class CartService {
           ),
         0,
       );
+      const customerAvailableQuantity =
+        product.status === 'live' ? Math.max(0, availableQuantity) : 0;
       const price =
         Number(product.basePrice) + Number(variant.priceAdjustment || 0);
       const image = variant.images[0]?.imageUrl || '/logo.png';
@@ -63,7 +67,7 @@ export class CartService {
             name: product.name,
             price: `LKR ${price.toFixed(2)}`,
             lkrPrice: `LKR ${price.toFixed(2)}`,
-            isAvailable: availableQuantity > 0,
+            isAvailable: customerAvailableQuantity > 0,
             image,
             category: product.category?.name || 'Uncategorized',
             description: product.description || undefined,
@@ -77,7 +81,7 @@ export class CartService {
                 size: variant.size.name,
                 color: variant.color.name,
                 price,
-                availableQuantity,
+                availableQuantity: customerAvailableQuantity,
               },
             ],
           },
@@ -147,6 +151,20 @@ export class CartService {
         return variant.variantId;
       }),
     );
+    const uniqueVariantIds = [...new Set(variants)];
+    const liveVariants = await this.prisma.productVariant.findMany({
+      where: {
+        variantId: { in: uniqueVariantIds },
+        status: 'show',
+        product: { status: 'live' },
+      },
+      select: { variantId: true },
+    });
+    if (liveVariants.length !== uniqueVariantIds.length) {
+      throw new BadRequestException(
+        'One or more products are not currently available for purchase.',
+      );
+    }
 
     const cartId = await this.prisma.$transaction(async (tx) => {
       let cart = await tx.cart.findFirst({ where: { customerId } });

@@ -282,10 +282,29 @@ describe('AdminService database-backed inventory', () => {
     create: jest.fn(),
     update: jest.fn(),
   };
-  const product = { findMany: jest.fn(), create: jest.fn() };
+  const product = {
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+  };
+  const productVariant = { create: jest.fn() };
+  const images = { findFirst: jest.fn() };
   const inventory = { findUnique: jest.fn(), update: jest.fn() };
+  const queryRawUnsafe = jest.fn();
   const transaction = jest.fn((callback: (tx: unknown) => unknown) =>
-    callback({ category, supplier, branch, color, size, product, inventory }),
+    callback({
+      category,
+      supplier,
+      branch,
+      color,
+      size,
+      product,
+      productVariant,
+      images,
+      inventory,
+      $queryRawUnsafe: queryRawUnsafe,
+    }),
   );
   const service = new AdminService({
     category,
@@ -294,7 +313,9 @@ describe('AdminService database-backed inventory', () => {
     color,
     size,
     product,
+    productVariant,
     inventory,
+    $queryRawUnsafe: queryRawUnsafe,
     $transaction: transaction,
   } as never);
 
@@ -308,6 +329,10 @@ describe('AdminService database-backed inventory', () => {
     size.findMany.mockResolvedValue([]);
     size.findFirst.mockResolvedValue(null);
     product.findMany.mockResolvedValue([]);
+    product.findFirst.mockResolvedValue(null);
+    product.findUnique.mockResolvedValue({ productId: 'product-1' });
+    images.findFirst.mockResolvedValue(null);
+    queryRawUnsafe.mockResolvedValue([]);
   });
 
   it('returns branch stock with reserved and available quantities', async () => {
@@ -319,13 +344,15 @@ describe('AdminService database-backed inventory', () => {
         name: 'Utility Shirt',
         description: 'Ripstop shirt',
         basePrice: 5000,
-        status: 'active',
+        status: 'live',
+        createdAt: new Date('2026-07-25T00:00:00.000Z'),
         category: { name: 'Shirts' },
         supplier: { name: 'Apex Textiles' },
         variants: [
           {
             variantId: 'variant-1',
             sku: 'VGO-SHIRT-BLK-M',
+            status: 'show',
             sizeId: 'size-1',
             size: { name: 'M' },
             colorId: 'color-1',
@@ -358,6 +385,9 @@ describe('AdminService database-backed inventory', () => {
         reservedQuantity: 3,
         availableQuantity: 9,
         sellingPrice: 5500,
+        status: 'live',
+        variantStatus: 'show',
+        createdAt: new Date('2026-07-25T00:00:00.000Z'),
       }),
     ]);
   });
@@ -383,7 +413,7 @@ describe('AdminService database-backed inventory', () => {
       name: 'Utility Shirt',
       supplierId: '7c1f343c-93de-49a8-b1fa-a40dfb321ee6',
       basePrice: 5000,
-      status: 'active',
+      status: 'live',
       variants: [
         {
           sku: 'VGO-SHIRT-BLK-M',
@@ -397,22 +427,17 @@ describe('AdminService database-backed inventory', () => {
       ],
     });
 
-    expect(product.create).toHaveBeenCalledWith(
+    expect(productVariant.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          variants: {
-            create: [
-              expect.objectContaining({
-                inventory: {
-                  create: expect.objectContaining({
-                    quantity: 12,
-                    branchId: 'e26540e1-f52b-4fe7-85c4-282c16d36b6b',
-                    reorderLevel: 5,
-                  }),
-                },
-              }),
-            ],
+          inventory: {
+            create: expect.objectContaining({
+              quantity: 12,
+              branchId: 'e26540e1-f52b-4fe7-85c4-282c16d36b6b',
+              reorderLevel: 5,
+            }),
           },
+          status: 'show',
         }),
       }),
     );
@@ -436,6 +461,7 @@ describe('AdminService database-backed inventory', () => {
       data: {
         name: 'Olive',
         hexCode: null,
+        imageUrl: null,
         displayOrder: 2,
         status: 'Active',
       },

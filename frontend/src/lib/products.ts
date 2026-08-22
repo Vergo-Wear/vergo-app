@@ -2,6 +2,7 @@ import { type Product } from "@/data/product";
 
 interface CatalogueVariant {
   variant_id: string;
+  status: "show" | "hidden";
   sku: string;
   size: string;
   colour: string;
@@ -12,9 +13,10 @@ interface CatalogueVariant {
 
 interface CatalogueProduct {
   product_id: string;
+  status: "live" | "hold";
   name: string;
   description: string | null;
-  category: { name: string } | null;
+  category: { category_id: string; name: string; description: string | null } | null;
   images: Array<{ image_id: string; url: string }>;
   variants: CatalogueVariant[];
 }
@@ -25,41 +27,51 @@ function formatLkr(value: number) {
   return `LKR ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function mapProduct(product: CatalogueProduct): Product {
-  const variants = product.variants.map((variant) => ({
-    variantId: variant.variant_id,
-    sku: variant.sku,
-    size: variant.size,
-    color: variant.colour,
-    price: variant.price,
-    availableQuantity: Math.max(0, variant.inventory.quantity - variant.inventory.reserved_quantity),
-  }));
-  const images = [
-    ...product.images.map((image) => image.url),
-    ...product.variants.flatMap((variant) => variant.images.map((image) => image.url)),
-  ].filter((url, index, all) => all.indexOf(url) === index);
-  const minimumPrice = variants.length ? Math.min(...variants.map((variant) => variant.price)) : 0;
-
-  return {
-    id: product.product_id,
-    name: product.name,
-    price: formatLkr(minimumPrice),
-    lkrPrice: formatLkr(minimumPrice),
-    isAvailable: variants.some((variant) => variant.availableQuantity > 0),
-    image: images[0] || "/logo.png",
-    category: product.category?.name || "Uncategorized",
-    description: product.description || undefined,
-    images,
-    sizes: [...new Set(variants.map((variant) => variant.size))],
-    colors: [...new Set(variants.map((variant) => variant.color))],
-    variants,
-  };
-}
-
 export async function loadProducts(): Promise<Product[]> {
   const response = await fetch(`${API_URL}/product-catalogue`, { cache: "no-store" });
   if (!response.ok) throw new Error(`Unable to load products (${response.status}).`);
-  return ((await response.json()) as CatalogueProduct[]).map(mapProduct);
+  const items = (await response.json()) as CatalogueProduct[];
+
+  return items.map((item) => {
+    const allVariants = item.variants
+      .filter((v) => v.status === "show")
+      .map((v) => ({
+        variantId: v.variant_id,
+        sku: v.sku,
+        size: v.size,
+        color: v.colour,
+        price: v.price,
+        availableQuantity:
+          item.status === "hold"
+            ? 0
+            : Math.max(0, (v.inventory?.quantity ?? 0) - (v.inventory?.reserved_quantity ?? 0)),
+        images: v.images.map((img) => img.url),
+      }));
+
+    const allImages = [
+      ...item.images.map((i) => i.url),
+      ...allVariants.flatMap((v) => v.images),
+    ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
+
+    const prices = allVariants.map((v) => v.price);
+    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+
+    return {
+      id: item.product_id,
+      name: item.name,
+      price: formatLkr(minPrice),
+      lkrPrice: formatLkr(minPrice),
+      isAvailable: item.status === "live" && allVariants.some((v) => v.availableQuantity > 0),
+      image: allImages[0] || "/logo.png",
+      category: item.category?.name || "Apparel",
+      subTitle: item.category?.name || "ESSENTIALS",
+      description: item.description || undefined,
+      images: allImages.length > 0 ? allImages : ["/logo.png"],
+      sizes: [...new Set(allVariants.map((v) => v.size))],
+      colors: [...new Set(allVariants.map((v) => v.color))],
+      variants: allVariants,
+    };
+  });
 }
 
 export function getInitialProducts(): Product[] {

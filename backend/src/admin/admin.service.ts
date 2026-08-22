@@ -29,7 +29,7 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private async resolveVariantReferences(
     tx: Prisma.TransactionClient,
@@ -43,25 +43,25 @@ export class AdminService {
   ) {
     const color = variant.colorId
       ? await tx.color.findFirst({
+        where: {
+          colorId: variant.colorId,
+          ...(current?.colorId === variant.colorId
+            ? {}
+            : { status: 'Active' }),
+        },
+        select: { colorId: true },
+      })
+      : variant.color?.trim()
+        ? await tx.color.findFirst({
           where: {
-            colorId: variant.colorId,
-            ...(current?.colorId === variant.colorId
-              ? {}
-              : { status: 'Active' }),
+            name: {
+              equals: variant.color.trim(),
+              mode: 'insensitive',
+            },
+            status: 'Active',
           },
           select: { colorId: true },
         })
-      : variant.color?.trim()
-        ? await tx.color.findFirst({
-            where: {
-              name: {
-                equals: variant.color.trim(),
-                mode: 'insensitive',
-              },
-              status: 'Active',
-            },
-            select: { colorId: true },
-          })
         : null;
     if (!color) {
       throw new BadRequestException(
@@ -71,23 +71,23 @@ export class AdminService {
 
     const size = variant.sizeId
       ? await tx.size.findFirst({
+        where: {
+          sizeId: variant.sizeId,
+          ...(current?.sizeId === variant.sizeId ? {} : { status: 'Active' }),
+        },
+        select: { sizeId: true },
+      })
+      : variant.size?.trim()
+        ? await tx.size.findFirst({
           where: {
-            sizeId: variant.sizeId,
-            ...(current?.sizeId === variant.sizeId ? {} : { status: 'Active' }),
+            name: {
+              equals: variant.size.trim(),
+              mode: 'insensitive',
+            },
+            status: 'Active',
           },
           select: { sizeId: true },
         })
-      : variant.size?.trim()
-        ? await tx.size.findFirst({
-            where: {
-              name: {
-                equals: variant.size.trim(),
-                mode: 'insensitive',
-              },
-              status: 'Active',
-            },
-            select: { sizeId: true },
-          })
         : null;
     if (!size) {
       throw new BadRequestException(
@@ -345,9 +345,17 @@ export class AdminService {
           orderBy: [{ status: 'asc' }, { name: 'asc' }],
         }),
         this.prisma.branch.findMany({ orderBy: { name: 'asc' } }),
-        this.prisma.color.findMany({
-          orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
-        }),
+        this.prisma.$queryRawUnsafe<any[]>(
+          'SELECT color_id as "colorId", name, hex_code as "hexCode", image_url as "imageUrl", display_order as "displayOrder", status, created_at as "createdAt" FROM color ORDER BY display_order ASC, name ASC'
+        ).then(colors => colors.map(c => ({
+          colorId: c.colorId,
+          name: c.name,
+          hexCode: c.hexCode,
+          imageUrl: c.imageUrl,
+          displayOrder: Number(c.displayOrder),
+          status: c.status,
+          createdAt: c.createdAt
+        }))),
         this.prisma.size.findMany({
           orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
         }),
@@ -376,7 +384,7 @@ export class AdminService {
               orderBy: { sku: 'asc' },
             },
           },
-          orderBy: { name: 'asc' },
+          orderBy: [{ createdAt: 'desc' }, { name: 'asc' }],
         }),
       ]);
 
@@ -391,8 +399,10 @@ export class AdminService {
           supplierId: product.supplierId,
           supplierName: product.supplier?.name || 'Unassigned',
           basePrice: Number(product.basePrice),
-          status: product.status || 'draft',
+          status: product.status,
+          createdAt: product.createdAt,
           variantId: variant.variantId,
+          variantStatus: variant.status,
           sku: variant.sku,
           sizeId: variant.sizeId,
           size: variant.size.name,
@@ -402,6 +412,7 @@ export class AdminService {
           sellingPrice:
             Number(product.basePrice) + Number(variant.priceAdjustment || 0),
           imageUrl: variant.images[0]?.imageUrl || null,
+          images: variant.images.map((img) => img.imageUrl),
         };
 
         if (variant.inventory.length === 0) {
@@ -523,13 +534,13 @@ export class AdminService {
           categoryId: dto.categoryId || null,
           supplierId: dto.supplierId,
           basePrice: dto.basePrice,
-          status: dto.status,
         },
       });
       await tx.productVariant.update({
         where: { variantId: existing.variantId },
         data: {
           sku: dto.sku.trim(),
+          status: dto.variantStatus,
           sizeId: references.sizeId,
           colorId: references.colorId,
           priceAdjustment: dto.priceAdjustment,
@@ -567,52 +578,307 @@ export class AdminService {
   }
 
   async createProduct(dto: CreateProductDto) {
-    return this.prisma.$transaction(async (tx) => {
-      const references = await Promise.all(
-        dto.variants.map((variant) =>
-          this.resolveVariantReferences(tx, variant),
-        ),
-      );
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const references = await Promise.all(
+          dto.variants.map((variant) =>
+            this.resolveVariantReferences(tx, variant),
+          ),
+        );
 
-      return tx.product.create({
-        data: {
-          name: dto.name.trim(),
-          description: dto.description?.trim(),
-          categoryId: dto.categoryId || null,
-          supplierId: dto.supplierId || null,
-          basePrice: dto.basePrice,
-          status: dto.status,
-          variants: {
-            create: dto.variants.map((variant, index) => ({
-              sku: variant.sku.trim(),
-              sizeId: references[index].sizeId,
-              colorId: references[index].colorId,
-              priceAdjustment: variant.priceAdjustment,
+        let product = await tx.product.findFirst({
+          where: { name: { equals: dto.name.trim(), mode: 'insensitive' } },
+          select: { productId: true },
+        });
+
+        if (!product) {
+          product = await tx.product.create({
+            data: {
+              name: dto.name.trim(),
+              description: dto.description?.trim(),
+              categoryId: dto.categoryId || null,
+              supplierId: dto.supplierId || null,
+              basePrice: dto.basePrice,
+              status: dto.status,
+            },
+            select: { productId: true },
+          });
+        }
+
+        for (let i = 0; i < dto.variants.length; i++) {
+          const variantDto = dto.variants[i];
+          const refs = references[i];
+
+          const existingImage = await tx.images.findFirst({
+            where: {
+              variant: {
+                productId: product.productId,
+                colorId: refs.colorId,
+              },
+            },
+          });
+
+          const colorRows: any[] = refs.colorId
+            ? await tx.$queryRawUnsafe(
+                'SELECT image_url FROM color WHERE color_id = $1::uuid',
+                refs.colorId,
+              )
+            : [];
+          const colorImgUrl = colorRows[0]?.image_url;
+          const explicitImgUrl = variantDto.imageUrl?.trim();
+          const mainProductImgUrl = dto.imageUrl?.trim();
+          const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
+
+          const imageList: string[] = (variantDto.images && variantDto.images.length > 0)
+            ? variantDto.images.filter(Boolean)
+            : targetImgUrl ? [targetImgUrl] : [];
+
+          await tx.productVariant.create({
+            data: {
+              productId: product.productId,
+              sku: variantDto.sku.trim(),
+              status: variantDto.status || 'show',
+              sizeId: refs.sizeId,
+              colorId: refs.colorId,
+              priceAdjustment: variantDto.priceAdjustment,
               inventory: {
                 create: {
-                  quantity: variant.quantity,
-                  branchId: variant.branchId || null,
-                  reorderLevel: variant.reorderLevel ?? 10,
+                  quantity: variantDto.quantity,
+                  branchId: variantDto.branchId || null,
+                  reorderLevel: variantDto.reorderLevel ?? 10,
                 },
               },
-              ...(variant.imageUrl
-                ? { images: { create: { imageUrl: variant.imageUrl } } }
+              ...(imageList.length > 0
+                ? {
+                    images: {
+                      create: imageList.map((url, idx) => ({
+                        imageUrl: url,
+                        title: idx === 0 ? 'Main' : `Gallery ${idx}`,
+                      })),
+                    },
+                  }
                 : {}),
-            })),
-          },
-        },
-        include: {
-          variants: {
-            include: {
-              color: true,
-              size: true,
-              inventory: true,
-              images: true,
+            },
+          });
+        }
+
+        return tx.product.findUnique({
+          where: { productId: product.productId },
+          include: {
+            variants: {
+              include: { color: true, size: true, inventory: true, images: true },
             },
           },
-        },
+        });
       });
+    } catch (e: any) {
+      if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
+        throw new ConflictException(
+          'A product variant with this exact Name, Color, and Size combination already exists. Please edit the existing variant in stock instead.',
+        );
+      }
+      require('fs').appendFileSync('debug-crash.log', String(e?.stack || e) + '\n\n');
+      throw e;
+    }
+  }
+
+  async updateProductWhole(productId: string, dto: CreateProductDto) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existingProduct = await tx.product.findUnique({
+          where: { productId },
+          include: {
+            variants: {
+              include: { images: true, inventory: true },
+            },
+          },
+        });
+        if (!existingProduct) {
+          throw new NotFoundException('Product not found.');
+        }
+
+        // 1. Update product base info
+        await tx.product.update({
+          where: { productId },
+          data: {
+            name: dto.name.trim(),
+            description: dto.description?.trim(),
+            categoryId: dto.categoryId || null,
+            supplierId: dto.supplierId || null,
+            basePrice: dto.basePrice,
+            status: dto.status,
+          },
+        });
+
+        // 2. Resolve variant references (colorId, sizeId)
+        const references = await Promise.all(
+          dto.variants.map((variant) =>
+            this.resolveVariantReferences(tx, variant),
+          ),
+        );
+
+        // 3. Delete existing images & inventory & variants for this product
+        const oldVariantIds = existingProduct.variants.map((v) => v.variantId);
+        if (oldVariantIds.length > 0) {
+          await tx.cartItem.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+          await tx.pendingCheckoutItem.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+          await tx.images.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+          await tx.inventory.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+          await tx.productVariant.deleteMany({
+            where: { variantId: { in: oldVariantIds } },
+          });
+        }
+
+        // 4. Re-create new updated variants
+        for (let i = 0; i < dto.variants.length; i++) {
+          const variantDto = dto.variants[i];
+          const refs = references[i];
+
+          const colorRows: any[] = refs.colorId
+            ? await tx.$queryRawUnsafe(
+                'SELECT image_url FROM color WHERE color_id = $1::uuid',
+                refs.colorId,
+              )
+            : [];
+          const colorImgUrl = colorRows[0]?.image_url;
+          const explicitImgUrl = variantDto.imageUrl?.trim();
+          const mainProductImgUrl = dto.imageUrl?.trim();
+          const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
+
+          const imageList: string[] = (variantDto.images && variantDto.images.length > 0)
+            ? variantDto.images.filter(Boolean)
+            : targetImgUrl ? [targetImgUrl] : [];
+
+          await tx.productVariant.create({
+            data: {
+              productId: productId,
+              sku: variantDto.sku.trim(),
+              status: variantDto.status || 'show',
+              sizeId: refs.sizeId,
+              colorId: refs.colorId,
+              priceAdjustment: variantDto.priceAdjustment,
+              inventory: {
+                create: {
+                  quantity: variantDto.quantity,
+                  branchId: variantDto.branchId || null,
+                  reorderLevel: variantDto.reorderLevel ?? 10,
+                },
+              },
+              ...(imageList.length > 0
+                ? {
+                    images: {
+                      create: imageList.map((url, idx) => ({
+                        imageUrl: url,
+                        title: idx === 0 ? 'Main' : `Gallery ${idx}`,
+                      })),
+                    },
+                  }
+                : {}),
+            },
+          });
+        }
+
+        return tx.product.findUnique({
+          where: { productId },
+          include: {
+            variants: {
+              include: { color: true, size: true, inventory: true, images: true },
+            },
+          },
+        });
+      });
+    } catch (e: any) {
+      if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
+        throw new ConflictException(
+          'A product variant with this SKU already exists.',
+        );
+      }
+      throw e;
+    }
+  }
+
+  async updateProductVisibility(productId: string, status: string) {
+    if (!['live', 'hold', 'hidden'].includes(status)) {
+      throw new BadRequestException(
+        'Product status must be Live, Hold, or Hidden.',
+      );
+    }
+    await this.prisma.product.update({
+      where: { productId },
+      data: { status },
     });
+    return { success: true };
+  }
+
+  async updateColorGallery(productId: string, colorId: string, imageUrls: string[]) {
+    return this.prisma.$transaction(async (tx) => {
+      const variant = await tx.productVariant.findFirst({
+        where: { productId, colorId },
+        select: { variantId: true },
+        orderBy: { sku: 'asc' },
+      });
+      if (!variant) throw new NotFoundException('Variant not found for this color.');
+
+      await tx.images.deleteMany({ where: { variantId: variant.variantId } });
+
+      if (imageUrls && imageUrls.length > 0) {
+        await tx.images.createMany({
+          data: imageUrls.slice(0, 5).map((url, index) => ({
+            variantId: variant.variantId,
+            imageUrl: url,
+            title: index === 0 ? 'Main' : `Gallery ${index}`,
+          })),
+        });
+      }
+      return { success: true };
+    });
+  }
+
+  async deleteProduct(productId: string) {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const variants = await tx.productVariant.findMany({
+          where: { productId },
+          select: { variantId: true },
+        });
+
+        const variantIds = variants.map((v) => v.variantId);
+
+        if (variantIds.length > 0) {
+          await tx.images.deleteMany({
+            where: { variantId: { in: variantIds } },
+          });
+
+          await tx.inventory.deleteMany({
+            where: { variantId: { in: variantIds } },
+          });
+
+          await tx.productVariant.deleteMany({
+            where: { productId },
+          });
+        }
+
+        await tx.product.delete({
+          where: { productId },
+        });
+      });
+      return { success: true };
+    } catch (error: any) {
+      if (error.code === 'P2003') {
+        throw new ConflictException(
+          'Cannot delete this product because it is tied to historical customer orders or active inventory commitments.',
+        );
+      }
+      throw error;
+    }
   }
 
   async createCategory(dto: CreateCategoryDto) {
@@ -664,22 +930,34 @@ export class AdminService {
     });
   }
 
+  async deleteCategory(categoryId: string) {
+    try {
+      await this.prisma.category.delete({ where: { categoryId } });
+      return { success: true };
+    } catch (error: any) {
+      if (error.code === 'P2003') {
+        throw new ConflictException('Cannot delete this category because it is used by active products. Please remove the products first.');
+      }
+      throw error;
+    }
+  }
+
   async createColor(dto: CreateColorDto) {
     const name = dto.name.trim();
     const duplicate = await this.prisma.color.findFirst({
-      where: {
-        name: { equals: name, mode: 'insensitive' },
-      },
+      where: { name: { equals: dto.name.trim(), mode: 'insensitive' } },
       select: { colorId: true },
     });
     if (duplicate) {
-      throw new ConflictException('This color already exists.');
+      throw new ConflictException('A color with this name already exists.');
     }
-    return this.prisma.color.create({
+
+    return (this.prisma.color.create as any)({
       data: {
-        name,
-        hexCode: dto.hexCode?.toUpperCase() || null,
-        displayOrder: dto.displayOrder ?? 0,
+        name: dto.name.trim(),
+        hexCode: dto.hexCode?.trim() || null,
+        imageUrl: dto.imageUrl?.trim() || null,
+        displayOrder: dto.displayOrder,
         status: dto.status || 'Active',
       },
     });
@@ -688,6 +966,7 @@ export class AdminService {
   async updateColor(colorId: string, dto: UpdateColorDto) {
     const existing = await this.prisma.color.findUnique({
       where: { colorId },
+      select: { colorId: true, name: true },
     });
     if (!existing) throw new NotFoundException('Color not found.');
 
@@ -700,22 +979,31 @@ export class AdminService {
       select: { colorId: true },
     });
     if (duplicate) {
-      throw new ConflictException('This color already exists.');
+      throw new ConflictException('A color with this name already exists.');
     }
 
-    return this.prisma.color.update({
+    return (this.prisma.color.update as any)({
       where: { colorId },
       data: {
         ...(dto.name !== undefined ? { name } : {}),
-        ...(dto.hexCode !== undefined
-          ? { hexCode: dto.hexCode.toUpperCase() }
-          : {}),
-        ...(dto.displayOrder !== undefined
-          ? { displayOrder: dto.displayOrder }
-          : {}),
+        ...(dto.hexCode !== undefined ? { hexCode: dto.hexCode?.trim() || null } : {}),
+        ...(dto.imageUrl !== undefined ? { imageUrl: dto.imageUrl?.trim() || null } : {}),
+        ...(dto.displayOrder !== undefined ? { displayOrder: dto.displayOrder } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
       },
     });
+  }
+
+  async deleteColor(colorId: string) {
+    try {
+      await this.prisma.color.delete({ where: { colorId } });
+      return { success: true };
+    } catch (error: any) {
+      if (error.code === 'P2003') {
+        throw new ConflictException('Cannot delete this color because it is used by active products. Please remove the products first.');
+      }
+      throw error;
+    }
   }
 
   async createSize(dto: CreateSizeDto) {
@@ -764,6 +1052,18 @@ export class AdminService {
         ...(dto.status !== undefined ? { status: dto.status } : {}),
       },
     });
+  }
+
+  async deleteSize(sizeId: string) {
+    try {
+      await this.prisma.size.delete({ where: { sizeId } });
+      return { success: true };
+    } catch (error: any) {
+      if (error.code === 'P2003') {
+        throw new ConflictException('Cannot delete this size because it is used by active products. Please remove the products first.');
+      }
+      throw error;
+    }
   }
 
   listBranches() {

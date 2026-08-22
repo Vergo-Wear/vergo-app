@@ -1,13 +1,9 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import React, { useState, useEffect, useMemo, FormEvent, useCallback } from "react";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 
-type InventoryTab = "stock" | "categories" | "options";
-type InventoryView = "variants" | "products";
-type ProductStatus = "active" | "draft";
-type VariantOptionType = "Color" | "Size";
+type TabType = "catalog" | "collections" | "colors";
 
 interface Category {
   categoryId: string;
@@ -15,50 +11,33 @@ interface Category {
   description: string | null;
 }
 
+interface ColorEntity {
+  colorId: string;
+  name: string;
+  hexCode: string | null;
+  imageUrl: string | null;
+  displayOrder: number;
+  status: string;
+}
+
+interface SizeEntity {
+  sizeId: string;
+  name: string;
+  displayOrder: number;
+  status: string;
+}
+
 interface Supplier {
   supplierId: string;
   name: string;
-  status: "Active" | "Inactive";
 }
 
 interface Branch {
   branchId: string;
   name: string;
-  address: string;
-  phone: string;
 }
 
-interface ColorOption {
-  colorId: string;
-  name: string;
-  hexCode: string | null;
-  displayOrder: number;
-  status: "Active" | "Inactive";
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface SizeOption {
-  sizeId: string;
-  name: string;
-  displayOrder: number;
-  status: "Active" | "Inactive";
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ManagedOption {
-  optionId: string;
-  optionType: VariantOptionType;
-  value: string;
-  hexCode: string | null;
-  displayOrder: number;
-  status: "Active" | "Inactive";
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface InventoryItem {
+interface InventoryCatalogItem {
   productId: string;
   name: string;
   description: string | null;
@@ -68,7 +47,9 @@ interface InventoryItem {
   supplierName: string;
   basePrice: number;
   status: string;
+  createdAt: string;
   variantId: string;
+  variantStatus: string;
   sku: string;
   sizeId: string;
   size: string;
@@ -77,6 +58,7 @@ interface InventoryItem {
   priceAdjustment: number;
   sellingPrice: number;
   imageUrl: string | null;
+  images: string[];
   inventoryId: string | null;
   branchId: string | null;
   branchName: string;
@@ -87,1789 +69,1741 @@ interface InventoryItem {
   lastUpdated: string | null;
 }
 
-interface ProductGroup {
+interface ProductCardData {
   productId: string;
   name: string;
   description: string | null;
-  categoryName: string;
-  supplierName: string;
-  status: string;
-  imageUrl: string | null;
-  variantIds: Set<string>;
-  branchIds: Set<string>;
-  quantity: number;
-  reservedQuantity: number;
-  availableQuantity: number;
-  minimumPrice: number;
-  maximumPrice: number;
-  hasLowStock: boolean;
-}
-
-interface InventoryCatalog {
-  categories: Category[];
-  suppliers: Supplier[];
-  branches: Branch[];
-  colors: ColorOption[];
-  sizes: SizeOption[];
-  items: InventoryItem[];
-}
-
-interface ProductForm {
-  inventoryId: string | null;
-  name: string;
-  description: string;
-  categoryId: string;
-  supplierId: string;
-  basePrice: string;
-  status: ProductStatus;
-  sku: string;
-  sizeId: string;
-  colorId: string;
-  priceAdjustment: string;
-  branchId: string;
-  quantity: string;
-  reorderLevel: string;
-  imageUrl: string;
-  reservedQuantity: number;
-}
-
-interface CategoryForm {
   categoryId: string | null;
-  name: string;
-  description: string;
+  categoryName: string;
+  supplierId: string | null;
+  supplierName: string;
+  branchId: string | null;
+  branchName: string;
+  basePrice: number;
+  status: string;
+  createdAt: string;
+  mainImage: string | null;
+  totalQuantity: number;
+  totalAvailableQuantity: number;
+  colors: { colorId: string; name: string; hexCode: string | null; images: string[] }[];
+  sizes: { sizeId: string; name: string }[];
+  variants: InventoryCatalogItem[];
 }
 
-interface VariantOptionForm {
-  optionId: string | null;
-  optionType: VariantOptionType;
-  value: string;
-  hexCode: string;
-  displayOrder: string;
-  status: "Active" | "Inactive";
-}
-
-const emptyProductForm: ProductForm = {
-  inventoryId: null,
-  name: "",
-  description: "",
-  categoryId: "",
-  supplierId: "",
-  basePrice: "0",
-  status: "draft",
-  sku: "",
-  sizeId: "",
-  colorId: "",
-  priceAdjustment: "0",
-  branchId: "",
-  quantity: "0",
-  reorderLevel: "10",
-  imageUrl: "",
-  reservedQuantity: 0,
-};
-
-const emptyCategoryForm: CategoryForm = {
-  categoryId: null,
-  name: "",
-  description: "",
-};
-
-const emptyVariantOptionForm: VariantOptionForm = {
-  optionId: null,
-  optionType: "Color",
-  value: "",
-  hexCode: "",
-  displayOrder: "0",
-  status: "Active",
-};
-
-async function getResponseMessage(response: Response, fallback: string) {
-  const body = (await response.json().catch(() => null)) as {
-    message?: string | string[];
-  } | null;
+async function responseMessage(response: Response, fallback: string) {
+  const body = (await response.json().catch(() => null)) as
+    | { message?: string | string[] }
+    | null;
   if (Array.isArray(body?.message)) return body.message.join(" ");
   return body?.message || fallback;
 }
 
-export default function InventoryPage() {
-  const [catalog, setCatalog] = useState<InventoryCatalog>({
-    categories: [],
-    suppliers: [],
-    branches: [],
-    colors: [],
-    sizes: [],
-    items: [],
-  });
-  const [activeTab, setActiveTab] = useState<InventoryTab>("stock");
-  const [inventoryView, setInventoryView] = useState<InventoryView>("variants");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [productModalOpen, setProductModalOpen] = useState(false);
-  const [productForm, setProductForm] = useState<ProductForm>(emptyProductForm);
-  const [categoryForm, setCategoryForm] =
-    useState<CategoryForm>(emptyCategoryForm);
-  const [variantOptionForm, setVariantOptionForm] = useState<VariantOptionForm>(
-    emptyVariantOptionForm,
-  );
-  const [search, setSearch] = useState("");
-  const [productFilter, setProductFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [supplierFilter, setSupplierFilter] = useState("all");
-  const [branchFilter, setBranchFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [stockFilter, setStockFilter] = useState("all");
-  const [feedback, setFeedback] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
+export default function InventoryDashboard() {
+  // -- State: Tabs --
+  const [activeTab, setActiveTab] = useState<TabType>("catalog");
 
-  const loadCatalog = useCallback(async () => {
+  // -- State: Universal Data --
+  const [loading, setLoading] = useState(true);
+
+  // DB Lists
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [colors, setColors] = useState<ColorEntity[]>([]);
+  const [sizes, setSizes] = useState<SizeEntity[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [masterCatalog, setMasterCatalog] = useState<InventoryCatalogItem[]>([]);
+
+  // -- State: Master Catalog Filters --
+  const [search, setSearch] = useState("");
+  const [colFilter, setColFilter] = useState("all");
+  const [colorFilter, setColorFilter] = useState("all");
+  const [visibilityFilter, setVisibilityFilter] = useState("all");
+
+  // -- State: UI Popups & Feedback --
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // ================= DATA FETCHING =================
+  const fetchAllData = useCallback(async () => {
     setLoading(true);
-    const response = await authenticatedFetch("/admin/inventory/catalog", {
-      cache: "no-store",
-    });
-    if (!response) {
+    try {
+      const response = await authenticatedFetch("/admin/inventory/catalog");
+      if (!response) {
+        setLoading(false);
+        return;
+      }
+      if (!response.ok) {
+        showToast(await responseMessage(response, "Failed to fetch inventory data"), "error");
+        setLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      setCategories(data.categories || []);
+      setColors(data.colors || []);
+      setSizes(data.sizes || []);
+      setSuppliers(data.suppliers || []);
+      setBranches(data.branches || []);
+      setMasterCatalog(data.items || []);
+    } catch (err: any) {
+      showToast(err.message || "Connection error fetching inventory", "error");
+    } finally {
       setLoading(false);
-      return;
     }
-    if (!response.ok) {
-      setFeedback({
-        message: await getResponseMessage(
-          response,
-          "Unable to load inventory data.",
-        ),
-        type: "error",
-      });
-      setLoading(false);
-      return;
-    }
-    setCatalog((await response.json()) as InventoryCatalog);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
-    void loadCatalog();
-  }, [loadCatalog]);
+    void fetchAllData();
+  }, [fetchAllData]);
 
-  const filteredItems = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return catalog.items.filter((item) => {
-      const matchesSearch =
-        !query ||
-        [
-          item.name,
-          item.sku,
-          item.color,
-          item.size,
-          item.categoryName,
-          item.supplierName,
-          item.branchName,
-        ].some((value) => value.toLowerCase().includes(query));
-      const matchesCategory =
-        categoryFilter === "all" || item.categoryId === categoryFilter;
-      const matchesProduct =
-        productFilter === "all" || item.productId === productFilter;
-      const matchesSupplier =
-        supplierFilter === "all" || item.supplierId === supplierFilter;
-      const matchesBranch =
-        branchFilter === "all" || item.branchId === branchFilter;
-      const matchesStatus =
-        statusFilter === "all" || item.status === statusFilter;
-      const matchesStock =
-        stockFilter === "all" ||
-        (stockFilter === "low" &&
-          item.availableQuantity > 0 &&
-          item.availableQuantity <= item.reorderLevel) ||
-        (stockFilter === "out" && item.availableQuantity === 0);
-      return (
-        matchesSearch &&
-        matchesProduct &&
-        matchesCategory &&
-        matchesSupplier &&
-        matchesBranch &&
-        matchesStatus &&
-        matchesStock
-      );
-    });
-  }, [
-    branchFilter,
-    catalog.items,
-    categoryFilter,
-    productFilter,
-    search,
-    statusFilter,
-    stockFilter,
-    supplierFilter,
-  ]);
+  // ================= GROUP CATALOG ITEMS INTO PRODUCT BOX CARDS =================
+  const productCards = useMemo<ProductCardData[]>(() => {
+    const map = new Map<string, ProductCardData>();
 
-  const products = useMemo(() => {
-    const unique = new Map<string, string>();
-    for (const item of catalog.items) {
-      unique.set(item.productId, item.name);
-    }
-    return [...unique.entries()]
-      .map(([productId, name]) => ({ productId, name }))
-      .sort((left, right) => left.name.localeCompare(right.name));
-  }, [catalog.items]);
-
-  const productGroups = useMemo(() => {
-    const groups = new Map<string, ProductGroup>();
-    for (const item of filteredItems) {
-      const existing = groups.get(item.productId);
-      if (existing) {
-        existing.variantIds.add(item.variantId);
-        if (item.branchId) existing.branchIds.add(item.branchId);
-        existing.quantity += item.quantity;
-        existing.reservedQuantity += item.reservedQuantity;
-        existing.availableQuantity += item.availableQuantity;
-        existing.minimumPrice = Math.min(
-          existing.minimumPrice,
-          item.sellingPrice,
-        );
-        existing.maximumPrice = Math.max(
-          existing.maximumPrice,
-          item.sellingPrice,
-        );
-        existing.hasLowStock ||= item.availableQuantity <= item.reorderLevel;
-        existing.imageUrl ||= item.imageUrl;
-        continue;
+    masterCatalog.forEach((item) => {
+      if (!map.has(item.productId)) {
+        map.set(item.productId, {
+          productId: item.productId,
+          name: item.name,
+          description: item.description,
+          categoryId: item.categoryId,
+          categoryName: item.categoryName,
+          supplierId: item.supplierId,
+          supplierName: item.supplierName,
+          branchId: item.branchId,
+          branchName: item.branchName,
+          basePrice: item.basePrice,
+          status: item.status,
+          createdAt: item.createdAt,
+          mainImage: item.imageUrl || (item.images && item.images[0]) || null,
+          totalQuantity: 0,
+          totalAvailableQuantity: 0,
+          colors: [],
+          sizes: [],
+          variants: [],
+        });
       }
-      groups.set(item.productId, {
-        productId: item.productId,
-        name: item.name,
-        description: item.description,
-        categoryName: item.categoryName,
-        supplierName: item.supplierName,
-        status: item.status,
-        imageUrl: item.imageUrl,
-        variantIds: new Set([item.variantId]),
-        branchIds: new Set(item.branchId ? [item.branchId] : []),
-        quantity: item.quantity,
-        reservedQuantity: item.reservedQuantity,
-        availableQuantity: item.availableQuantity,
-        minimumPrice: item.sellingPrice,
-        maximumPrice: item.sellingPrice,
-        hasLowStock: item.availableQuantity <= item.reorderLevel,
-      });
-    }
-    return [...groups.values()].sort((left, right) =>
-      left.name.localeCompare(right.name),
-    );
-  }, [filteredItems]);
 
-  const colorOptions = useMemo(
-    () =>
-      catalog.colors.map<ManagedOption>((option) => ({
-        optionId: option.colorId,
-        optionType: "Color",
-        value: option.name,
-        hexCode: option.hexCode,
-        displayOrder: option.displayOrder,
-        status: option.status,
-        createdAt: option.createdAt,
-        updatedAt: option.updatedAt,
-      })),
-    [catalog.colors],
-  );
+      const card = map.get(item.productId)!;
+      card.totalQuantity += item.quantity;
+      card.totalAvailableQuantity += item.availableQuantity;
+      card.variants.push(item);
 
-  const sizeOptions = useMemo(
-    () =>
-      catalog.sizes.map<ManagedOption>((option) => ({
-        optionId: option.sizeId,
-        optionType: "Size",
-        value: option.name,
-        hexCode: null,
-        displayOrder: option.displayOrder,
-        status: option.status,
-        createdAt: option.createdAt,
-        updatedAt: option.updatedAt,
-      })),
-    [catalog.sizes],
-  );
-  const hasActiveColorOptions = colorOptions.some(
-    (option) => option.status === "Active",
-  );
-  const hasActiveSizeOptions = sizeOptions.some(
-    (option) => option.status === "Active",
-  );
+      // Track unique colors
+      if (item.colorId && !card.colors.some((c) => c.colorId === item.colorId)) {
+        const colorObj = colors.find((c) => c.colorId === item.colorId);
+        const colorImages = item.images && item.images.length > 0 ? item.images : item.imageUrl ? [item.imageUrl] : [];
+        card.colors.push({
+          colorId: item.colorId,
+          name: item.color,
+          hexCode: colorObj?.hexCode || null,
+          images: colorImages,
+        });
+      } else if (item.colorId && item.images && item.images.length > 0) {
+        const existingColor = card.colors.find((c) => c.colorId === item.colorId);
+        if (existingColor && existingColor.images.length === 0) {
+          existingColor.images = item.images;
+        }
+      }
 
-  const stats = useMemo(() => {
-    const products = new Set(catalog.items.map((item) => item.productId)).size;
-    const onHand = catalog.items.reduce(
-      (total, item) => total + item.quantity,
-      0,
-    );
-    const reserved = catalog.items.reduce(
-      (total, item) => total + item.reservedQuantity,
-      0,
-    );
-    const lowStock = catalog.items.filter(
-      (item) => item.availableQuantity <= item.reorderLevel && item.inventoryId,
-    ).length;
-    return { products, onHand, reserved, lowStock };
-  }, [catalog.items]);
+      // Track unique sizes
+      if (item.sizeId && !card.sizes.some((s) => s.sizeId === item.sizeId)) {
+        card.sizes.push({
+          sizeId: item.sizeId,
+          name: item.size,
+        });
+      }
 
-  const openCreateProduct = () => {
-    setActiveTab("stock");
-    setProductForm({
-      ...emptyProductForm,
-      supplierId:
-        catalog.suppliers.find((supplier) => supplier.status === "Active")
-          ?.supplierId || "",
-      branchId: catalog.branches[0]?.branchId || "",
-      colorId:
-        colorOptions.find((option) => option.status === "Active")?.optionId ||
-        "",
-      sizeId:
-        sizeOptions.find((option) => option.status === "Active")?.optionId ||
-        "",
+      // Set main image if not set
+      if (!card.mainImage && (item.imageUrl || (item.images && item.images[0]))) {
+        card.mainImage = item.imageUrl || item.images[0];
+      }
     });
-    setFeedback(null);
-    setProductModalOpen(true);
+
+    return Array.from(map.values());
+  }, [masterCatalog, colors]);
+
+  const filteredProductCards = useMemo(() => {
+    return productCards.filter((prod) => {
+      const matchSearch =
+        prod.name.toLowerCase().includes(search.toLowerCase()) ||
+        prod.variants.some((v) => v.sku.toLowerCase().includes(search.toLowerCase()));
+      const matchCol = colFilter === "all" || prod.categoryId === colFilter;
+      const matchColor =
+        colorFilter === "all" ||
+        prod.colors.some((c) => c.colorId === colorFilter || c.name === colorFilter);
+      const matchVisibility =
+        visibilityFilter === "all" ||
+        (visibilityFilter === "Live" && (prod.status === "live" || prod.status === "show")) ||
+        (visibilityFilter === "Hidden" && (prod.status === "hidden" || prod.status === "hold"));
+
+      return matchSearch && matchCol && matchColor && matchVisibility;
+    });
+  }, [productCards, search, colFilter, colorFilter, visibilityFilter]);
+
+  const handleDeleteProduct = async (productId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this product and all its variants from inventory?")) return;
+    setLoading(true);
+
+    try {
+      const res = await authenticatedFetch(`/admin/products/${productId}`, {
+        method: "DELETE",
+      });
+      if (res && res.ok) {
+        showToast("Product deleted successfully", "success");
+        setIsProductModalOpen(false);
+        await fetchAllData();
+      } else {
+        const msg = res ? await responseMessage(res, "Failed to delete product") : "Request failed";
+        showToast(msg, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to delete product", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const openEditProduct = (item: InventoryItem) => {
-    if (!item.inventoryId) {
-      setFeedback({
-        message:
-          "This variant has no inventory row. Add stock through a branch before editing it.",
-        type: "error",
+  const handleToggleProductVisibility = async (productId: string, currentStatus: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const nextStatus = currentStatus === "show" || currentStatus === "live" ? "hidden" : "live";
+    setLoading(true);
+    try {
+      const res = await authenticatedFetch(`/admin/products/${productId}/visibility`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
       });
+      if (res && res.ok) {
+        showToast(`Product set to ${nextStatus.toUpperCase()}`, "success");
+        await fetchAllData();
+      } else {
+        const msg = res ? await responseMessage(res, "Failed to update product status") : "Request failed";
+        showToast(msg, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to update visibility", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ================= TAB 2: COLLECTIONS =================
+  const [collectionForm, setCollectionForm] = useState({ id: "", name: "", desc: "" });
+
+  const saveCollection = async () => {
+    if (!collectionForm.name.trim()) {
+      showToast("Collection name is required.", "error");
       return;
     }
-    setProductForm({
-      inventoryId: item.inventoryId,
-      name: item.name,
-      description: item.description || "",
-      categoryId: item.categoryId || "",
-      supplierId: item.supplierId || "",
-      basePrice: String(item.basePrice),
-      status: item.status === "active" ? "active" : "draft",
-      sku: item.sku,
-      sizeId: item.sizeId,
-      colorId: item.colorId,
-      priceAdjustment: String(item.priceAdjustment),
-      branchId: item.branchId || "",
-      quantity: String(item.quantity),
-      reorderLevel: String(item.reorderLevel),
-      imageUrl: item.imageUrl || "",
-      reservedQuantity: item.reservedQuantity,
-    });
-    setFeedback(null);
-    setProductModalOpen(true);
+
+    setLoading(true);
+    const isEditing = !!collectionForm.id;
+    const path = isEditing ? `/admin/categories/${collectionForm.id}` : "/admin/categories";
+    const method = isEditing ? "PATCH" : "POST";
+
+    try {
+      const res = await authenticatedFetch(path, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: collectionForm.name.trim(),
+          description: collectionForm.desc.trim() || undefined,
+        }),
+      });
+
+      if (res && res.ok) {
+        showToast(`Collection ${isEditing ? "updated" : "created"} successfully`, "success");
+        setCollectionForm({ id: "", name: "", desc: "" });
+        await fetchAllData();
+      } else {
+        const msg = res ? await responseMessage(res, "Failed to save collection") : "Request failed";
+        showToast(msg, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to save collection", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
-    setFeedback(null);
+  const deleteCollection = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this collection?")) return;
+    setLoading(true);
 
-    const common = {
+    try {
+      const res = await authenticatedFetch(`/admin/categories/${id}`, {
+        method: "DELETE",
+      });
+
+      if (res && res.ok) {
+        showToast("Collection deleted", "success");
+        await fetchAllData();
+      } else {
+        const msg = res ? await responseMessage(res, "Failed to delete collection") : "Request failed";
+        showToast(msg, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to delete collection", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ================= TAB 3: COLOR PALETTE =================
+  const [colorInput, setColorInput] = useState("");
+  const [hexInput, setHexInput] = useState("#10B981");
+  const [colorImageInput, setColorImageInput] = useState("");
+  const [editingColorId, setEditingColorId] = useState<string | null>(null);
+
+  const saveColor = async () => {
+    if (!colorInput.trim()) {
+      showToast("Color name is required.", "error");
+      return;
+    }
+
+    setLoading(true);
+    const isEditing = !!editingColorId;
+    const path = isEditing ? `/admin/colors/${editingColorId}` : "/admin/colors";
+    const method = isEditing ? "PATCH" : "POST";
+
+    try {
+      const res = await authenticatedFetch(path, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: colorInput.trim(),
+          hexCode: hexInput || undefined,
+          imageUrl: colorImageInput.trim() || undefined,
+          status: "Active",
+        }),
+      });
+
+      if (res && res.ok) {
+        showToast(`Color ${isEditing ? "updated" : "added"} successfully`, "success");
+        setColorInput("");
+        setHexInput("#10B981");
+        setColorImageInput("");
+        setEditingColorId(null);
+        await fetchAllData();
+      } else {
+        const msg = res ? await responseMessage(res, "Failed to save color") : "Request failed";
+        showToast(msg, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to save color", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteColor = async (colorId: string) => {
+    if (!confirm("Delete this color from palette?")) return;
+    setLoading(true);
+
+    try {
+      const res = await authenticatedFetch(`/admin/colors/${colorId}`, {
+        method: "DELETE",
+      });
+
+      if (res && res.ok) {
+        showToast("Color deleted", "success");
+        await fetchAllData();
+      } else {
+        const msg = res ? await responseMessage(res, "Failed to delete color") : "Request failed";
+        showToast(msg, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to delete color", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ================= IMAGE UPLOAD HELPER =================
+  const [uploadingColorId, setUploadingColorId] = useState<string | null>(null);
+
+  const uploadFileToCloudinary = async (file: File, targetColorId?: string): Promise<string | null> => {
+    if (targetColorId) setUploadingColorId(targetColorId);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await authenticatedFetch("/admin/products/image", {
+        method: "POST",
+        body: formData,
+      });
+      if (res && res.ok) {
+        const data = await res.json();
+        return data.secure_url || null;
+      } else {
+        const msg = res ? await responseMessage(res, "Image upload failed") : "Image upload error";
+        showToast(msg, "error");
+        return null;
+      }
+    } catch (err: any) {
+      showToast(err.message || "Image upload failed", "error");
+      return null;
+    } finally {
+      if (targetColorId) setUploadingColorId(null);
+    }
+  };
+
+  // ================= UNIFIED MULTI-VARIANT PRODUCT MODAL (ADD / EDIT) =================
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+
+  const [productForm, setProductForm] = useState({
+    name: "",
+    description: "",
+    categoryId: "",
+    supplierId: "",
+    branchId: "",
+    basePrice: "2500",
+    status: "live" as "live" | "hidden",
+  });
+
+  // Selected Colors & Sizes
+  const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
+  const [selectedSizeIds, setSelectedSizeIds] = useState<string[]>([]);
+
+  // Per-color images map: { [colorId]: string[] }
+  const [colorImages, setColorImages] = useState<Record<string, string[]>>({});
+  // Per-color URL text input: { [colorId]: string }
+  const [colorUrlInputs, setColorUrlInputs] = useState<Record<string, string>>({});
+
+  // Matrix quantities & price adjustments: key is `${colorId}_${sizeId}`
+  const [variantMatrix, setVariantMatrix] = useState<
+    Record<string, { quantity: number; priceAdjustment: number; customSku?: string }>
+  >({});
+
+  const [bulkQtyValue, setBulkQtyValue] = useState("10");
+
+  // Open for Adding a New Product
+  const openAddProductModal = () => {
+    setModalMode("add");
+    setEditingProductId(null);
+    setProductForm({
+      name: "",
+      description: "",
+      categoryId: categories[0]?.categoryId || "",
+      supplierId: suppliers[0]?.supplierId || "",
+      branchId: branches[0]?.branchId || "",
+      basePrice: "2500",
+      status: "live",
+    });
+
+    const initialColors = colors.slice(0, 2).map((c) => c.colorId);
+    const initialSizes = sizes.length > 0
+      ? sizes.filter((s) => ["S", "M", "L", "XL"].includes(s.name.toUpperCase())).map((s) => s.sizeId)
+      : [];
+
+    setSelectedColorIds(initialColors);
+    setSelectedSizeIds(initialSizes.length > 0 ? initialSizes : sizes.slice(0, 4).map((s) => s.sizeId));
+    setColorImages({});
+    setColorUrlInputs({});
+    setVariantMatrix({});
+    setBulkQtyValue("10");
+    setIsProductModalOpen(true);
+  };
+
+  // Open for Editing an Existing Product Box Card
+  const openEditProductModal = (card: ProductCardData) => {
+    setModalMode("edit");
+    setEditingProductId(card.productId);
+    setProductForm({
+      name: card.name,
+      description: card.description || "",
+      categoryId: card.categoryId || "",
+      supplierId: card.supplierId || "",
+      branchId: card.branchId || "",
+      basePrice: card.basePrice.toString(),
+      status: (card.status === "show" || card.status === "live" ? "live" : "hidden") as "live" | "hidden",
+    });
+
+    // Populate selected colors
+    const activeColorIds = card.colors.map((c) => c.colorId);
+    setSelectedColorIds(activeColorIds.length > 0 ? activeColorIds : colors.slice(0, 2).map((c) => c.colorId));
+
+    // Populate per-color images map
+    const imgsMap: Record<string, string[]> = {};
+    card.colors.forEach((c) => {
+      imgsMap[c.colorId] = c.images || [];
+    });
+    setColorImages(imgsMap);
+    setColorUrlInputs({});
+
+    // Populate selected sizes
+    const activeSizeIds = card.sizes.map((s) => s.sizeId);
+    setSelectedSizeIds(activeSizeIds.length > 0 ? activeSizeIds : sizes.slice(0, 4).map((s) => s.sizeId));
+
+    // Populate variant stock matrix
+    const matrix: Record<string, { quantity: number; priceAdjustment: number; customSku?: string }> = {};
+    card.variants.forEach((v) => {
+      const key = `${v.colorId}_${v.sizeId}`;
+      matrix[key] = {
+        quantity: v.quantity,
+        priceAdjustment: v.priceAdjustment,
+        customSku: v.sku,
+      };
+    });
+    setVariantMatrix(matrix);
+    setBulkQtyValue("10");
+    setIsProductModalOpen(true);
+  };
+
+  const toggleColorSelection = (colorId: string) => {
+    setSelectedColorIds((prev) =>
+      prev.includes(colorId) ? prev.filter((id) => id !== colorId) : [...prev, colorId]
+    );
+  };
+
+  const toggleSizeSelection = (sizeId: string) => {
+    setSelectedSizeIds((prev) =>
+      prev.includes(sizeId) ? prev.filter((id) => id !== sizeId) : [...prev, sizeId]
+    );
+  };
+
+  const applySizePreset = (preset: "standard" | "full" | "all" | "clear") => {
+    if (preset === "standard") {
+      const standard = sizes
+        .filter((s) => ["S", "M", "L", "XL"].includes(s.name.toUpperCase()))
+        .map((s) => s.sizeId);
+      setSelectedSizeIds(standard.length > 0 ? standard : sizes.slice(0, 4).map((s) => s.sizeId));
+    } else if (preset === "full") {
+      const full = sizes
+        .filter((s) => ["XS", "S", "M", "L", "XL", "2XL", "3XL"].includes(s.name.toUpperCase()))
+        .map((s) => s.sizeId);
+      setSelectedSizeIds(full.length > 0 ? full : sizes.map((s) => s.sizeId));
+    } else if (preset === "all") {
+      setSelectedSizeIds(sizes.map((s) => s.sizeId));
+    } else {
+      setSelectedSizeIds([]);
+    }
+  };
+
+  const handleAddImageUrlToColor = (colorId: string) => {
+    const url = (colorUrlInputs[colorId] || "").trim();
+    if (!url) return;
+    setColorImages((prev) => ({
+      ...prev,
+      [colorId]: [...(prev[colorId] || []), url],
+    }));
+    setColorUrlInputs((prev) => ({ ...prev, [colorId]: "" }));
+  };
+
+  const handleFileUploadForColor = async (colorId: string, file: File) => {
+    const uploadedUrl = await uploadFileToCloudinary(file, colorId);
+    if (uploadedUrl) {
+      setColorImages((prev) => ({
+        ...prev,
+        [colorId]: [...(prev[colorId] || []), uploadedUrl],
+      }));
+      showToast("Image uploaded successfully", "success");
+    }
+  };
+
+  const handleRemoveImageFromColor = (colorId: string, imageIndex: number) => {
+    setColorImages((prev) => ({
+      ...prev,
+      [colorId]: (prev[colorId] || []).filter((_, idx) => idx !== imageIndex),
+    }));
+  };
+
+  const handleMatrixChange = (
+    colorId: string,
+    sizeId: string,
+    field: "quantity" | "priceAdjustment",
+    value: number
+  ) => {
+    const key = `${colorId}_${sizeId}`;
+    setVariantMatrix((prev) => ({
+      ...prev,
+      [key]: {
+        quantity: field === "quantity" ? Math.max(0, value) : (prev[key]?.quantity ?? 0),
+        priceAdjustment: field === "priceAdjustment" ? value : (prev[key]?.priceAdjustment ?? 0),
+        customSku: prev[key]?.customSku,
+      },
+    }));
+  };
+
+  const bulkApplyAllQuantities = (qty: number) => {
+    setVariantMatrix((prev) => {
+      const next = { ...prev };
+      selectedColorIds.forEach((colorId) => {
+        selectedSizeIds.forEach((sizeId) => {
+          const key = `${colorId}_${sizeId}`;
+          next[key] = {
+            quantity: Math.max(0, qty),
+            priceAdjustment: prev[key]?.priceAdjustment ?? 0,
+            customSku: prev[key]?.customSku,
+          };
+        });
+      });
+      return next;
+    });
+    showToast(`Set all variant quantities to ${qty} units`, "success");
+  };
+
+  const copyQuantitiesToAllColors = (sourceColorId: string) => {
+    setVariantMatrix((prev) => {
+      const next = { ...prev };
+      selectedColorIds.forEach((cId) => {
+        if (cId === sourceColorId) return;
+        selectedSizeIds.forEach((sId) => {
+          const sourceKey = `${sourceColorId}_${sId}`;
+          const targetKey = `${cId}_${sId}`;
+          next[targetKey] = {
+            quantity: prev[sourceKey]?.quantity ?? 0,
+            priceAdjustment: prev[sourceKey]?.priceAdjustment ?? 0,
+            customSku: prev[targetKey]?.customSku,
+          };
+        });
+      });
+      return next;
+    });
+    showToast("Copied stock quantities to all colors", "success");
+  };
+
+  const matrixStats = useMemo(() => {
+    let totalVariants = 0;
+    let totalStock = 0;
+
+    selectedColorIds.forEach((colorId) => {
+      selectedSizeIds.forEach((sizeId) => {
+        totalVariants += 1;
+        const key = `${colorId}_${sizeId}`;
+        totalStock += variantMatrix[key]?.quantity ?? 0;
+      });
+    });
+
+    return { totalVariants, totalStock };
+  }, [selectedColorIds, selectedSizeIds, variantMatrix]);
+
+  // Save the Product (Create New or Update Existing)
+  const handleSaveMultiVariantProduct = async (statusOverride?: "live" | "hidden") => {
+    if (!productForm.name.trim()) {
+      showToast("Product name is required", "error");
+      return;
+    }
+    if (selectedColorIds.length === 0) {
+      showToast("Please select at least one color", "error");
+      return;
+    }
+    if (selectedSizeIds.length === 0) {
+      showToast("Please select at least one size", "error");
+      return;
+    }
+
+    setLoading(true);
+
+    const basePriceNum = parseFloat(productForm.basePrice) || 0;
+    const finalStatus = statusOverride || productForm.status;
+    const prefix = productForm.name.replace(/[^a-zA-Z0-9]/g, "").substring(0, 4).toUpperCase() || "VG";
+
+    const variantsPayload = selectedColorIds.flatMap((colorId) => {
+      const colorObj = colors.find((c) => c.colorId === colorId);
+      const colorName = colorObj?.name || "CLR";
+      const colorImagesList = colorImages[colorId] || [];
+
+      return selectedSizeIds.map((sizeId) => {
+        const sizeObj = sizes.find((s) => s.sizeId === sizeId);
+        const sizeName = sizeObj?.name || "SZ";
+        const key = `${colorId}_${sizeId}`;
+        const itemData = variantMatrix[key] || { quantity: 0, priceAdjustment: 0 };
+
+        const sku =
+          itemData.customSku?.trim() ||
+          `VG-${prefix}-${colorName.replace(/[^a-zA-Z0-9]/g, "").substring(0, 3).toUpperCase()}-${sizeName.toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+
+        return {
+          sku,
+          status: "show",
+          colorId,
+          sizeId,
+          priceAdjustment: itemData.priceAdjustment,
+          quantity: itemData.quantity,
+          branchId: productForm.branchId || undefined,
+          reorderLevel: 10,
+          imageUrl: colorImagesList[0] || colorObj?.imageUrl || undefined,
+          images: colorImagesList,
+        };
+      });
+    });
+
+    const payload = {
       name: productForm.name.trim(),
       description: productForm.description.trim() || undefined,
       categoryId: productForm.categoryId || undefined,
-      supplierId: productForm.supplierId,
-      basePrice: Number(productForm.basePrice),
-      status: productForm.status,
-    };
-    const variant = {
-      sku: productForm.sku.trim(),
-      colorId: productForm.colorId,
-      sizeId: productForm.sizeId,
-      priceAdjustment: Number(productForm.priceAdjustment),
-      quantity: Number(productForm.quantity),
-      branchId: productForm.branchId || undefined,
-      reorderLevel: Number(productForm.reorderLevel),
-      imageUrl: productForm.imageUrl.trim() || undefined,
+      supplierId: productForm.supplierId || undefined,
+      basePrice: basePriceNum,
+      status: finalStatus,
+      variants: variantsPayload,
     };
 
-    const isEditing = Boolean(productForm.inventoryId);
-    const response = await authenticatedFetch(
-      isEditing
-        ? `/admin/inventory/records/${productForm.inventoryId}`
-        : "/admin/products",
-      {
-        method: isEditing ? "PATCH" : "POST",
+    try {
+      const isEditing = modalMode === "edit" && editingProductId;
+      const path = isEditing ? `/admin/products/${editingProductId}` : "/admin/products";
+      const method = isEditing ? "PUT" : "POST";
+
+      const res = await authenticatedFetch(path, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          isEditing
-            ? { ...common, ...variant }
-            : { ...common, variants: [variant] },
-        ),
-      },
-    );
-
-    if (!response) {
-      setSaving(false);
-      return;
-    }
-    if (!response.ok) {
-      setFeedback({
-        message: await getResponseMessage(
-          response,
-          isEditing
-            ? "Unable to update this inventory record."
-            : "Unable to create this product.",
-        ),
-        type: "error",
+        body: JSON.stringify(payload),
       });
-      setSaving(false);
-      return;
-    }
 
-    setProductModalOpen(false);
-    setFeedback({
-      message: isEditing
-        ? "Inventory record updated successfully."
-        : "Product and opening stock created successfully.",
-      type: "success",
-    });
-    await loadCatalog();
-    setSaving(false);
+      if (res && res.ok) {
+        showToast(
+          isEditing
+            ? "Product and variants updated successfully!"
+            : `Product created successfully with ${variantsPayload.length} variants!`,
+          "success"
+        );
+        setIsProductModalOpen(false);
+        await fetchAllData();
+      } else {
+        const msg = res ? await responseMessage(res, "Failed to save product") : "Request failed";
+        showToast(msg, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to save product", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const saveCategory = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
-    setFeedback(null);
-    const isEditing = Boolean(categoryForm.categoryId);
-    const response = await authenticatedFetch(
-      isEditing
-        ? `/admin/categories/${categoryForm.categoryId}`
-        : "/admin/categories",
-      {
-        method: isEditing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: categoryForm.name.trim(),
-          description: categoryForm.description.trim() || undefined,
-        }),
-      },
-    );
-    if (!response) {
-      setSaving(false);
-      return;
-    }
-    if (!response.ok) {
-      setFeedback({
-        message: await getResponseMessage(
-          response,
-          isEditing ? "Unable to update category." : "Unable to add category.",
-        ),
-        type: "error",
-      });
-      setSaving(false);
-      return;
-    }
-    setCategoryForm(emptyCategoryForm);
-    setFeedback({
-      message: isEditing
-        ? "Category updated successfully."
-        : "Category added successfully.",
-      type: "success",
-    });
-    await loadCatalog();
-    setSaving(false);
-  };
-
-  const saveVariantOption = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
-    setFeedback(null);
-    const isEditing = Boolean(variantOptionForm.optionId);
-    const resource =
-      variantOptionForm.optionType === "Color" ? "colors" : "sizes";
-    const response = await authenticatedFetch(
-      isEditing
-        ? `/admin/${resource}/${variantOptionForm.optionId}`
-        : `/admin/${resource}`,
-      {
-        method: isEditing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: variantOptionForm.value.trim(),
-          ...(variantOptionForm.optionType === "Color" &&
-          variantOptionForm.hexCode
-            ? { hexCode: variantOptionForm.hexCode }
-            : {}),
-          displayOrder: Number(variantOptionForm.displayOrder),
-          status: variantOptionForm.status,
-        }),
-      },
-    );
-    if (!response) {
-      setSaving(false);
-      return;
-    }
-    if (!response.ok) {
-      setFeedback({
-        message: await getResponseMessage(
-          response,
-          isEditing
-            ? `Unable to update this ${variantOptionForm.optionType.toLowerCase()}.`
-            : `Unable to add this ${variantOptionForm.optionType.toLowerCase()}.`,
-        ),
-        type: "error",
-      });
-      setSaving(false);
-      return;
-    }
-    setVariantOptionForm(emptyVariantOptionForm);
-    setFeedback({
-      message: isEditing
-        ? `${variantOptionForm.optionType} updated successfully.`
-        : `${variantOptionForm.optionType} added successfully.`,
-      type: "success",
-    });
-    await loadCatalog();
-    setSaving(false);
-  };
-
-  const fieldClass =
-    "w-full rounded border border-white/10 bg-[#121212] px-3 py-2.5 text-xs text-white outline-none transition-colors placeholder:text-[#555] focus:border-white/30";
-  const labelClass =
-    "mb-2 block text-[9px] font-bold uppercase tracking-widest text-[#8e8e93]";
-
-  return (
-    <div className="space-y-7 text-[#f5f5f7]">
-      {feedback && (
-        <div
-          className={`fixed right-8 top-24 z-[100] max-w-sm rounded border px-5 py-3 text-xs font-bold shadow-2xl ${
-            feedback.type === "success"
-              ? "border-emerald-500/40 bg-[#0d1f14] text-emerald-300"
-              : "border-red-500/40 bg-[#271010] text-red-300"
+  // ================= UI RENDERS =================
+  const renderNav = () => (
+    <div className="flex gap-2 sm:gap-4 border-b border-[rgba(255,255,255,0.06)] mb-6 sm:mb-8 pb-4 overflow-x-auto whitespace-nowrap custom-scrollbar">
+      {[
+        { id: "catalog", label: "Master Catalog" },
+        { id: "collections", label: "Collections" },
+        { id: "colors", label: "Color Palette" },
+      ].map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => setActiveTab(t.id as TabType)}
+          className={`text-xs font-bold tracking-widest uppercase px-4 py-2.5 rounded-lg transition-all cursor-pointer ${
+            activeTab === t.id
+              ? "bg-white text-black shadow-md shadow-white/5"
+              : "text-[#8e8e93] hover:text-white bg-[#121212] border border-[rgba(255,255,255,0.05)] hover:border-white/20"
           }`}
         >
-          {feedback.message}
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#050505] text-[#f5f5f7] font-sans pb-32 pt-6 sm:pt-8 px-4 sm:px-8">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-6 right-4 sm:right-8 z-[100] px-6 py-3.5 rounded-lg text-[10px] uppercase font-bold tracking-widest shadow-2xl transition-all animate-bounce ${
+            toast.type === "success"
+              ? "bg-[#101914] border border-emerald-500/50 text-emerald-400 shadow-emerald-950/50"
+              : "bg-[#1a0f0f] border border-red-500/50 text-red-400 shadow-red-950/50"
+          }`}
+        >
+          {toast.message}
         </div>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.24em] text-[#8e8e93]">
-            Database Inventory
-          </p>
-          <h1 className="text-xl font-bold uppercase tracking-[0.2em] text-white">
-            Inventory Control
-          </h1>
-          <p className="mt-2 max-w-2xl text-[11px] leading-relaxed text-[#707070]">
-            Stock is tracked per product variant and branch. Reserved units are
-            protected from manual quantity reductions.
-          </p>
+      {/* Header */}
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-lg sm:text-xl font-bold tracking-[0.2em] text-white uppercase">INVENTORY COMMAND</h1>
+        <p className="text-[10px] sm:text-xs text-[#71717a] uppercase tracking-wider mt-1">
+          Manage apparel catalog, box cards, live customizations & color palette
+        </p>
+      </div>
+
+      {renderNav()}
+
+      {loading && (
+        <div className="py-20 text-center text-white font-mono text-xs uppercase tracking-widest animate-pulse flex items-center justify-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-white animate-ping"></div>
+          SYNCING INVENTORY RECORDS...
         </div>
-        <div className="flex gap-3">
-          <Link
-            href="/admin/suppliers"
-            className="rounded border border-white/10 bg-white/5 px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-white/10"
-          >
-            Manage Suppliers
-          </Link>
-          <button
-            type="button"
-            onClick={openCreateProduct}
-            className="rounded bg-white px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-black transition-colors hover:bg-[#e5e5e5]"
-          >
-            + Product & Stock
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          { label: "Products", value: stats.products, tone: "text-white" },
-          { label: "On Hand", value: stats.onHand, tone: "text-white" },
-          {
-            label: "Reserved",
-            value: stats.reserved,
-            tone: "text-amber-400",
-          },
-          {
-            label: "Low / Out",
-            value: stats.lowStock,
-            tone: "text-red-400",
-          },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="rounded-lg border border-white/[0.06] bg-[#0a0a0a] px-5 py-4"
-          >
-            <div className="text-[9px] font-bold uppercase tracking-widest text-[#666]">
-              {stat.label}
-            </div>
-            <div className={`mt-2 font-mono text-xl font-bold ${stat.tone}`}>
-              {stat.value}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-2 border-b border-white/[0.06] pb-3">
-        {[
-          { id: "stock" as const, label: "Products & Branch Stock" },
-          { id: "categories" as const, label: "Categories" },
-          { id: "options" as const, label: "Colors & Sizes" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`rounded px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors ${
-              activeTab === tab.id
-                ? "bg-white text-black"
-                : "text-[#8e8e93] hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === "stock" && (
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-[#0a0a0a] px-4 py-3">
-            <div>
-              <div className="text-[9px] font-bold uppercase tracking-widest text-[#8e8e93]">
-                Inventory View
-              </div>
-              <div className="mt-1 text-[9px] text-[#555]">
-                Product Groups combines all matching variants and branches.
-              </div>
-            </div>
-            <div className="flex rounded border border-white/10 bg-[#070707] p-1">
-              {[
-                { id: "products" as const, label: "Product Groups" },
-                { id: "variants" as const, label: "Variant Stock" },
-              ].map((view) => (
-                <button
-                  key={view.id}
-                  type="button"
-                  onClick={() => setInventoryView(view.id)}
-                  className={`rounded px-4 py-2 text-[9px] font-bold uppercase tracking-widest transition-colors ${
-                    inventoryView === view.id
-                      ? "bg-white text-black"
-                      : "text-[#777] hover:text-white"
-                  }`}
-                >
-                  {view.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-3 rounded-lg border border-white/[0.06] bg-[#0a0a0a] p-4 md:grid-cols-3 xl:grid-cols-7">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search product, SKU, supplier..."
-              className={`${fieldClass} md:col-span-2 xl:col-span-1`}
-            />
-            <select
-              value={productFilter}
-              onChange={(event) => setProductFilter(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="all">All products</option>
-              {products.map((product) => (
-                <option key={product.productId} value={product.productId}>
-                  {product.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="all">All categories</option>
-              {catalog.categories.map((category) => (
-                <option key={category.categoryId} value={category.categoryId}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={supplierFilter}
-              onChange={(event) => setSupplierFilter(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="all">All suppliers</option>
-              {catalog.suppliers.map((supplier) => (
-                <option key={supplier.supplierId} value={supplier.supplierId}>
-                  {supplier.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={branchFilter}
-              onChange={(event) => setBranchFilter(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="all">All branches</option>
-              {catalog.branches.map((branch) => (
-                <option key={branch.branchId} value={branch.branchId}>
-                  {branch.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="all">All product statuses</option>
-              <option value="active">Active</option>
-              <option value="draft">Draft</option>
-            </select>
-            <select
-              value={stockFilter}
-              onChange={(event) => setStockFilter(event.target.value)}
-              className={fieldClass}
-            >
-              <option value="all">All stock levels</option>
-              <option value="low">Low stock</option>
-              <option value="out">Out of stock</option>
-            </select>
-          </div>
-
-          {inventoryView === "variants" && (
-            <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0a0a0a]">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1280px] text-left">
-                  <thead className="bg-[#070707]">
-                    <tr className="border-b border-white/[0.06]">
-                      {[
-                        "Product",
-                        "Category / Supplier",
-                        "Variant",
-                        "Branch",
-                        "On Hand",
-                        "Reserved",
-                        "Available",
-                        "Reorder At",
-                        "Price",
-                        "Status",
-                        "Updated",
-                        "Actions",
-                      ].map((heading) => (
-                        <th
-                          key={heading}
-                          className="px-4 py-4 text-[9px] font-bold uppercase tracking-widest text-[#777]"
-                        >
-                          {heading}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.04]">
-                    {filteredItems.map((item) => {
-                      const isOut = item.availableQuantity === 0;
-                      const isLow =
-                        !isOut && item.availableQuantity <= item.reorderLevel;
-                      return (
-                        <tr
-                          key={`${item.variantId}:${item.inventoryId || "none"}`}
-                          className="transition-colors hover:bg-white/[0.02]"
-                        >
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="h-10 w-10 flex-shrink-0 rounded border border-white/10 bg-[#151515] bg-cover bg-center"
-                                style={
-                                  item.imageUrl
-                                    ? {
-                                        backgroundImage: `url("${item.imageUrl}")`,
-                                      }
-                                    : undefined
-                                }
-                              />
-                              <div>
-                                <div className="text-[11px] font-bold uppercase tracking-wide text-white">
-                                  {item.name}
-                                </div>
-                                <div className="mt-1 max-w-[180px] truncate text-[9px] text-[#666]">
-                                  {item.description || "No description"}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="text-[10px] font-bold uppercase text-white">
-                              {item.categoryName}
-                            </div>
-                            <div className="mt-1 text-[9px] uppercase tracking-wide text-[#777]">
-                              {item.supplierName}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="font-mono text-[10px] text-white">
-                              {item.sku}
-                            </div>
-                            <div className="mt-1 text-[9px] uppercase text-[#777]">
-                              {item.color} / {item.size}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-[10px] font-bold uppercase text-[#b0b0b0]">
-                            {item.branchName}
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[11px] text-white">
-                            {item.quantity}
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[11px] text-amber-400">
-                            {item.reservedQuantity}
-                          </td>
-                          <td className="px-4 py-4">
-                            <span
-                              className={`font-mono text-[11px] font-bold ${
-                                isOut
-                                  ? "text-red-400"
-                                  : isLow
-                                    ? "text-amber-400"
-                                    : "text-emerald-400"
-                              }`}
-                            >
-                              {item.availableQuantity}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[11px] text-[#a0a0a0]">
-                            {item.reorderLevel}
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="font-mono text-[10px] text-white">
-                              LKR {item.sellingPrice.toFixed(2)}
-                            </div>
-                            {item.priceAdjustment !== 0 && (
-                              <div className="mt-1 font-mono text-[8px] text-[#666]">
-                                {item.priceAdjustment > 0 ? "+" : ""}
-                                {item.priceAdjustment.toFixed(2)} adjustment
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-4">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${
-                                item.status === "active"
-                                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                                  : "border-white/10 bg-white/5 text-[#8e8e93]"
-                              }`}
-                            >
-                              {item.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[9px] text-[#666]">
-                            {item.lastUpdated
-                              ? new Date(item.lastUpdated).toLocaleDateString(
-                                  "en-GB",
-                                )
-                              : "—"}
-                          </td>
-                          <td className="px-4 py-4">
-                            <button
-                              type="button"
-                              onClick={() => openEditProduct(item)}
-                              disabled={!item.inventoryId}
-                              className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
-                            >
-                              Edit
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {!loading && filteredItems.length === 0 && (
-                <div className="px-6 py-16 text-center text-[10px] font-bold uppercase tracking-widest text-[#555]">
-                  No inventory records match these filters.
-                </div>
-              )}
-              {loading && (
-                <div className="px-6 py-16 text-center text-[10px] font-bold uppercase tracking-widest text-[#8e8e93]">
-                  Loading database inventory...
-                </div>
-              )}
-            </div>
-          )}
-
-          {inventoryView === "products" && (
-            <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0a0a0a]">
-              <div className="border-b border-white/[0.05] px-5 py-3 text-[9px] uppercase tracking-widest text-[#666]">
-                Group totals reflect the current search and filters.
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1050px] text-left">
-                  <thead className="bg-[#070707]">
-                    <tr className="border-b border-white/[0.06]">
-                      {[
-                        "Product",
-                        "Category / Supplier",
-                        "Variants",
-                        "Branches",
-                        "On Hand",
-                        "Reserved",
-                        "Available",
-                        "Price Range",
-                        "Status",
-                        "Actions",
-                      ].map((heading) => (
-                        <th
-                          key={heading}
-                          className="px-4 py-4 text-[9px] font-bold uppercase tracking-widest text-[#777]"
-                        >
-                          {heading}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.04]">
-                    {productGroups.map((group) => {
-                      const isOut = group.availableQuantity === 0;
-                      return (
-                        <tr
-                          key={group.productId}
-                          className="transition-colors hover:bg-white/[0.02]"
-                        >
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="h-10 w-10 flex-shrink-0 rounded border border-white/10 bg-[#151515] bg-cover bg-center"
-                                style={
-                                  group.imageUrl
-                                    ? {
-                                        backgroundImage: `url("${group.imageUrl}")`,
-                                      }
-                                    : undefined
-                                }
-                              />
-                              <div>
-                                <div className="text-[11px] font-bold uppercase tracking-wide text-white">
-                                  {group.name}
-                                </div>
-                                <div className="mt-1 max-w-[220px] truncate text-[9px] text-[#666]">
-                                  {group.description || "No description"}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="text-[10px] font-bold uppercase text-white">
-                              {group.categoryName}
-                            </div>
-                            <div className="mt-1 text-[9px] uppercase tracking-wide text-[#777]">
-                              {group.supplierName}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[11px] font-bold text-white">
-                            {group.variantIds.size}
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[11px] text-[#b0b0b0]">
-                            {group.branchIds.size}
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[11px] text-white">
-                            {group.quantity}
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[11px] text-amber-400">
-                            {group.reservedQuantity}
-                          </td>
-                          <td className="px-4 py-4">
-                            <span
-                              className={`font-mono text-[11px] font-bold ${
-                                isOut
-                                  ? "text-red-400"
-                                  : group.hasLowStock
-                                    ? "text-amber-400"
-                                    : "text-emerald-400"
-                              }`}
-                            >
-                              {group.availableQuantity}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 font-mono text-[10px] text-white">
-                            {group.minimumPrice === group.maximumPrice
-                              ? `LKR ${group.minimumPrice.toFixed(2)}`
-                              : `LKR ${group.minimumPrice.toFixed(2)} – ${group.maximumPrice.toFixed(2)}`}
-                          </td>
-                          <td className="px-4 py-4">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${
-                                group.status === "active"
-                                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                                  : "border-white/10 bg-white/5 text-[#8e8e93]"
-                              }`}
-                            >
-                              {group.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProductFilter(group.productId);
-                                setInventoryView("variants");
-                              }}
-                              className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-white/10"
-                            >
-                              View stock
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {!loading && productGroups.length === 0 && (
-                <div className="px-6 py-16 text-center text-[10px] font-bold uppercase tracking-widest text-[#555]">
-                  No product groups match these filters.
-                </div>
-              )}
-              {loading && (
-                <div className="px-6 py-16 text-center text-[10px] font-bold uppercase tracking-widest text-[#8e8e93]">
-                  Loading grouped inventory...
-                </div>
-              )}
-            </div>
-          )}
-        </section>
       )}
 
-      {activeTab === "categories" && (
-        <section className="grid gap-6 xl:grid-cols-[minmax(320px,0.7fr)_1.3fr]">
-          <form
-            onSubmit={saveCategory}
-            className="h-fit rounded-lg border border-white/[0.06] bg-[#0a0a0a] p-6"
-          >
-            <div className="mb-6 flex items-center justify-between border-b border-white/[0.05] pb-4">
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-white">
-                {categoryForm.categoryId ? "Edit Category" : "Add Category"}
-              </h2>
-              {categoryForm.categoryId && (
-                <button
-                  type="button"
-                  onClick={() => setCategoryForm(emptyCategoryForm)}
-                  className="text-[9px] font-bold uppercase tracking-widest text-[#777] hover:text-white"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-            <label className={labelClass}>Category Name</label>
-            <input
-              required
-              minLength={2}
-              value={categoryForm.name}
-              onChange={(event) =>
-                setCategoryForm((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))
-              }
-              className={fieldClass}
-              placeholder="e.g. Outerwear"
-            />
-            <label className={`${labelClass} mt-5`}>Description</label>
-            <textarea
-              value={categoryForm.description}
-              onChange={(event) =>
-                setCategoryForm((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }))
-              }
-              className={`${fieldClass} min-h-28 resize-y`}
-              placeholder="Customer-facing category description"
-            />
-            <button
-              type="submit"
-              disabled={saving}
-              className="mt-5 w-full rounded bg-white px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-black transition-colors hover:bg-[#e5e5e5] disabled:opacity-50"
-            >
-              {saving
-                ? "Saving..."
-                : categoryForm.categoryId
-                  ? "Update Category"
-                  : "Add Category"}
-            </button>
-          </form>
-
-          <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0a0a0a]">
-            <div className="border-b border-white/[0.06] px-5 py-4">
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-white">
-                Database Categories
-              </h2>
-            </div>
-            <div className="divide-y divide-white/[0.04]">
-              {catalog.categories.map((category) => {
-                const productCount = new Set(
-                  catalog.items
-                    .filter((item) => item.categoryId === category.categoryId)
-                    .map((item) => item.productId),
-                ).size;
-                return (
-                  <div
-                    key={category.categoryId}
-                    className="flex items-center justify-between gap-5 px-5 py-4 transition-colors hover:bg-white/[0.02]"
-                  >
-                    <div>
-                      <div className="text-[11px] font-bold uppercase tracking-wide text-white">
-                        {category.name}
-                      </div>
-                      <div className="mt-1 text-[10px] text-[#777]">
-                        {category.description || "No description"}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-[#666]">
-                        {productCount} products
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCategoryForm({
-                            categoryId: category.categoryId,
-                            name: category.name,
-                            description: category.description || "",
-                          })
-                        }
-                        className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white hover:bg-white/10"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {!loading && catalog.categories.length === 0 && (
-                <div className="px-6 py-16 text-center text-[10px] font-bold uppercase tracking-widest text-[#555]">
-                  No categories found.
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {activeTab === "options" && (
-        <section className="grid gap-6 xl:grid-cols-[minmax(320px,0.7fr)_1.3fr]">
-          <form
-            onSubmit={saveVariantOption}
-            className="h-fit rounded-lg border border-white/[0.06] bg-[#0a0a0a] p-6"
-          >
-            <div className="mb-6 flex items-center justify-between border-b border-white/[0.05] pb-4">
-              <div>
-                <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-white">
-                  {variantOptionForm.optionId
-                    ? `Edit ${variantOptionForm.optionType}`
-                    : "Add Color or Size"}
-                </h2>
-                <p className="mt-2 text-[9px] leading-relaxed text-[#666]">
-                  Active colors and sizes appear in the product form dropdowns.
-                </p>
-              </div>
-              {variantOptionForm.optionId && (
-                <button
-                  type="button"
-                  onClick={() => setVariantOptionForm(emptyVariantOptionForm)}
-                  className="text-[9px] font-bold uppercase tracking-widest text-[#777] hover:text-white"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-
-            <label className={labelClass}>Option Type</label>
-            <select
-              disabled={Boolean(variantOptionForm.optionId)}
-              value={variantOptionForm.optionType}
-              onChange={(event) =>
-                setVariantOptionForm((current) => ({
-                  ...current,
-                  optionType: event.target.value as VariantOptionType,
-                  hexCode:
-                    event.target.value === "Color" ? current.hexCode : "",
-                }))
-              }
-              className={`${fieldClass} disabled:cursor-not-allowed disabled:opacity-50`}
-            >
-              <option value="Color">Color</option>
-              <option value="Size">Size</option>
-            </select>
-
-            <label className={`${labelClass} mt-5`}>Display Value</label>
-            <input
-              required
-              value={variantOptionForm.value}
-              onChange={(event) =>
-                setVariantOptionForm((current) => ({
-                  ...current,
-                  value: event.target.value,
-                }))
-              }
-              className={fieldClass}
-              placeholder={
-                variantOptionForm.optionType === "Color"
-                  ? "e.g. Midnight Black"
-                  : "e.g. XL"
-              }
-            />
-
-            {variantOptionForm.optionType === "Color" && (
-              <>
-                <label className={`${labelClass} mt-5`}>
-                  Hex Color (optional)
-                </label>
-                <div className="flex gap-3">
-                  <input
-                    type="color"
-                    aria-label="Color preview"
-                    value={variantOptionForm.hexCode || "#000000"}
-                    onChange={(event) =>
-                      setVariantOptionForm((current) => ({
-                        ...current,
-                        hexCode: event.target.value.toUpperCase(),
-                      }))
-                    }
-                    className="h-10 w-14 cursor-pointer rounded border border-white/10 bg-[#121212] p-1"
-                  />
-                  <input
-                    value={variantOptionForm.hexCode}
-                    onChange={(event) =>
-                      setVariantOptionForm((current) => ({
-                        ...current,
-                        hexCode: event.target.value.toUpperCase(),
-                      }))
-                    }
-                    pattern="^#[0-9A-Fa-f]{6}$"
-                    className={fieldClass}
-                    placeholder="#000000"
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="mt-5 grid grid-cols-2 gap-4">
-              <label>
-                <span className={labelClass}>Display Order</span>
-                <input
-                  required
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={variantOptionForm.displayOrder}
-                  onChange={(event) =>
-                    setVariantOptionForm((current) => ({
-                      ...current,
-                      displayOrder: event.target.value,
-                    }))
-                  }
-                  className={fieldClass}
-                />
-              </label>
-              <label>
-                <span className={labelClass}>Status</span>
-                <select
-                  value={variantOptionForm.status}
-                  onChange={(event) =>
-                    setVariantOptionForm((current) => ({
-                      ...current,
-                      status: event.target.value as "Active" | "Inactive",
-                    }))
-                  }
-                  className={fieldClass}
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </label>
+      {/* ========================================================================= */}
+      {/* ======================= TAB: MASTER CATALOG BOX CARDS ==================== */}
+      {/* ========================================================================= */}
+      {!loading && activeTab === "catalog" && (
+        <section className="space-y-6">
+          {/* Top Filter & Add Toolbar */}
+          <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center bg-[#0d0d0d] border border-[rgba(255,255,255,0.08)] p-4 sm:p-5 rounded-xl gap-4 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 w-full lg:w-auto">
+              <input
+                type="text"
+                placeholder="Search Garment Name or SKU..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="bg-[#161616] border border-[rgba(255,255,255,0.08)] focus:border-white/20 rounded-md px-3.5 py-2 text-xs text-white placeholder-[#555] uppercase focus:outline-none transition-all"
+              />
+              <select
+                value={colFilter}
+                onChange={(e) => setColFilter(e.target.value)}
+                className="bg-[#161616] border border-[rgba(255,255,255,0.08)] focus:border-white/20 rounded-md px-3 py-2 text-xs font-bold tracking-wider uppercase text-white cursor-pointer focus:outline-none transition-all"
+              >
+                <option value="all" className="bg-[#121212]">ALL COLLECTIONS</option>
+                {categories.map((c) => (
+                  <option key={c.categoryId} value={c.categoryId} className="bg-[#121212]">
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={colorFilter}
+                onChange={(e) => setColorFilter(e.target.value)}
+                className="bg-[#161616] border border-[rgba(255,255,255,0.08)] focus:border-white/20 rounded-md px-3 py-2 text-xs font-bold tracking-wider uppercase text-white cursor-pointer focus:outline-none transition-all"
+              >
+                <option value="all" className="bg-[#121212]">ALL COLORS</option>
+                {colors.map((c) => (
+                  <option key={c.colorId} value={c.colorId} className="bg-[#121212]">
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={visibilityFilter}
+                onChange={(e) => setVisibilityFilter(e.target.value)}
+                className="bg-[#161616] border border-[rgba(255,255,255,0.08)] focus:border-white/20 rounded-md px-3 py-2 text-xs font-bold tracking-wider uppercase text-white cursor-pointer focus:outline-none transition-all"
+              >
+                <option value="all" className="bg-[#121212]">ALL VISIBILITY</option>
+                <option value="Live" className="bg-[#121212]">LIVE ONLY</option>
+                <option value="Hidden" className="bg-[#121212]">HIDDEN ONLY</option>
+              </select>
             </div>
 
             <button
-              type="submit"
-              disabled={saving}
-              className="mt-5 w-full rounded bg-white px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-black transition-colors hover:bg-[#e5e5e5] disabled:opacity-50"
+              type="button"
+              onClick={openAddProductModal}
+              className="bg-white text-black hover:bg-[#eaeaea] font-bold text-xs tracking-[0.15em] px-5 py-2.5 rounded-md transition-all shadow-md shadow-white/5 uppercase cursor-pointer flex items-center justify-center gap-2 active:scale-95"
             >
-              {saving
-                ? "Saving..."
-                : variantOptionForm.optionId
-                  ? "Update Option"
-                  : "Add Option"}
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>ADD PRODUCT</span>
             </button>
-          </form>
+          </div>
 
-          <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0a0a0a]">
-            <div className="border-b border-white/[0.06] px-5 py-4">
-              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-white">
-                Database Colors & Sizes
-              </h2>
-            </div>
-            <div className="grid md:grid-cols-2">
-              {[
-                { type: "Color" as const, options: colorOptions },
-                { type: "Size" as const, options: sizeOptions },
-              ].map((group, groupIndex) => (
+          {/* PRODUCT BOX CARDS GRID */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {filteredProductCards.map((card) => {
+              const isLive = card.status === "show" || card.status === "live";
+
+              return (
                 <div
-                  key={group.type}
-                  className={
-                    groupIndex === 0
-                      ? "border-b border-white/[0.06] md:border-b-0 md:border-r"
-                      : ""
-                  }
+                  key={card.productId}
+                  onClick={() => openEditProductModal(card)}
+                  className="admin-card group relative flex flex-col justify-between overflow-hidden cursor-pointer hover:border-white/20 transition-all rounded-xl bg-[#0d0d0d] border border-[rgba(255,255,255,0.08)] shadow-lg hover:shadow-2xl"
                 >
-                  <div className="border-b border-white/[0.05] bg-[#080808] px-5 py-3 text-[9px] font-bold uppercase tracking-[0.2em] text-[#8e8e93]">
-                    {group.type}s
-                  </div>
-                  <div className="divide-y divide-white/[0.04]">
-                    {group.options.map((option) => (
-                      <div
-                        key={option.optionId}
-                        className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-white/[0.02]"
-                      >
-                        <div className="flex items-center gap-3">
-                          {option.optionType === "Color" && (
-                            <div
-                              className="h-5 w-5 rounded-full border border-white/20"
-                              style={{
-                                backgroundColor: option.hexCode || option.value,
-                              }}
-                            />
-                          )}
-                          <div>
-                            <div className="text-[11px] font-bold uppercase tracking-wide text-white">
-                              {option.value}
-                            </div>
-                            <div className="mt-1 text-[8px] uppercase tracking-widest text-[#666]">
-                              Order {option.displayOrder} · {option.status}
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setVariantOptionForm({
-                              optionId: option.optionId,
-                              optionType: option.optionType,
-                              value: option.value,
-                              hexCode: option.hexCode || "",
-                              displayOrder: String(option.displayOrder),
-                              status: option.status,
-                            })
-                          }
-                          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white hover:bg-white/10"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    ))}
-                    {group.options.length === 0 && (
-                      <div className="px-5 py-10 text-center text-[9px] font-bold uppercase tracking-widest text-[#555]">
-                        No {group.type.toLowerCase()} options
+                  {/* Card Header Media */}
+                  <div className="relative aspect-[4/3] w-full bg-[#161616] overflow-hidden border-b border-[rgba(255,255,255,0.06)]">
+                    {card.mainImage ? (
+                      <img
+                        src={card.mainImage}
+                        alt={card.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-[#555] font-bold text-xs">
+                        <svg className="w-8 h-8 mb-1 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>NO IMAGE</span>
                       </div>
                     )}
+
+                    {/* Top Floating Badges */}
+                    <div className="absolute top-2.5 left-2.5 right-2.5 flex justify-between items-center pointer-events-none">
+                      <span className="bg-black/80 backdrop-blur-md text-[#8e8e93] font-bold text-[9px] px-2.5 py-1 rounded border border-white/10 uppercase tracking-wider">
+                        {card.categoryName}
+                      </span>
+                      <span
+                        className={`text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border shadow-md flex items-center gap-1.5 ${
+                          isLive
+                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                            : "bg-red-500/20 text-red-400 border-red-500/40"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`}></span>
+                        <span>{isLive ? "LIVE" : "HIDDEN"}</span>
+                      </span>
+                    </div>
+
+                    {/* Bottom Floating Variant Counter */}
+                    <div className="absolute bottom-2 left-2.5">
+                      <span className="bg-black/80 backdrop-blur-md text-white font-mono-meta font-bold text-[9px] px-2 py-0.5 rounded border border-white/10 uppercase">
+                        {card.variants.length} VARIANTS
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card Content */}
+                  <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      {/* Product Name */}
+                      <h3 className="text-white font-bold text-sm uppercase tracking-wide group-hover:text-emerald-400 transition-colors line-clamp-1">
+                        {card.name}
+                      </h3>
+
+                      {card.description && (
+                        <p className="text-[10px] text-[#71717a] mt-0.5 line-clamp-1">
+                          {card.description}
+                        </p>
+                      )}
+
+                      {/* Colors Swatches & Sizes Row */}
+                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-[rgba(255,255,255,0.04)] pt-2.5">
+                        {/* Colors */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {card.colors.map((c) => (
+                            <span
+                              key={c.colorId}
+                              title={c.name}
+                              className="w-3.5 h-3.5 rounded-full border border-white/20 shadow-sm"
+                              style={{ backgroundColor: c.hexCode || "#555" }}
+                            ></span>
+                          ))}
+                          <span className="text-[10px] text-[#8e8e93] font-bold uppercase ml-1">
+                            {card.colors.length} {card.colors.length === 1 ? "color" : "colors"}
+                          </span>
+                        </div>
+
+                        {/* Sizes */}
+                        <div className="text-[10px] font-mono-meta text-[#8e8e93] font-bold uppercase">
+                          {card.sizes.map((s) => s.name).join(" • ")}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Footer: Base Price & Total Stock */}
+                    <div className="pt-3 border-t border-[rgba(255,255,255,0.06)] flex justify-between items-end">
+                      <div>
+                        <span className="text-[9px] text-[#8e8e93] uppercase font-bold block">BASE PRICE</span>
+                        <span className="text-white font-mono-meta font-extrabold text-sm">
+                          ${card.basePrice.toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[9px] text-[#8e8e93] uppercase font-bold block">TOTAL STOCK</span>
+                        <span
+                          className={`font-mono-meta font-extrabold text-xs px-2 py-0.5 rounded border inline-block ${
+                            card.totalQuantity === 0
+                              ? "text-red-400 bg-red-950/40 border-red-900/40"
+                              : card.totalQuantity <= 10
+                              ? "text-amber-400 bg-amber-950/40 border-amber-900/40"
+                              : "text-white bg-[#161616] border-[rgba(255,255,255,0.08)]"
+                          }`}
+                        >
+                          {card.totalQuantity} units
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Bottom Actions */}
+                  <div className="p-3 bg-[#121212] border-t border-[rgba(255,255,255,0.04)] flex justify-between items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleProductVisibility(card.productId, card.status, e)}
+                      className={`flex-1 font-bold text-[9px] tracking-wider uppercase py-2 px-3 rounded transition-all text-center cursor-pointer flex items-center justify-center gap-1.5 ${
+                        isLive
+                          ? "bg-red-950/30 hover:bg-red-900/60 text-red-400 border border-red-800/40"
+                          : "bg-emerald-950/30 hover:bg-emerald-900/60 text-emerald-400 border border-emerald-800/40"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-red-400" : "bg-emerald-400"}`}></span>
+                      <span>{isLive ? "MAKE HIDDEN" : "MAKE LIVE"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteProduct(card.productId, e)}
+                      title="Delete Product"
+                      className="bg-red-950/30 text-[#ef4444] hover:bg-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] p-2 rounded transition-all cursor-pointer"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredProductCards.length === 0 && (
+              <div className="col-span-full py-20 text-center text-[#555] font-bold text-xs tracking-wider uppercase bg-[#0d0d0d] border border-[rgba(255,255,255,0.08)] rounded-xl">
+                No garments found in catalog. Click "+ ADD PRODUCT" to create one.
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* --- TAB: COLLECTIONS --- */}
+      {!loading && activeTab === "collections" && (
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+          <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-5 sm:p-7 shadow-sm">
+            <h2 className="text-xs font-bold tracking-[0.2em] text-white uppercase mb-6 border-b border-[#18181b] pb-4">
+              {collectionForm.id ? "Edit Collection" : "Add New Collection"}
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase mb-2">Collection Name</label>
+                <input
+                  type="text"
+                  value={collectionForm.name}
+                  onChange={(e) => setCollectionForm({ ...collectionForm, name: e.target.value })}
+                  placeholder="E.g. Oversized Heavyweight Tees, Summer 2026..."
+                  className="w-full bg-[#18181b] border border-[#27272a] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg px-4 py-2.5 text-xs text-white uppercase focus:outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase mb-2">Description</label>
+                <textarea
+                  rows={3}
+                  value={collectionForm.desc}
+                  onChange={(e) => setCollectionForm({ ...collectionForm, desc: e.target.value })}
+                  placeholder="Collection aesthetic, seasonal details, or fabric description..."
+                  className="w-full bg-[#18181b] border border-[#27272a] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
+                />
+              </div>
+              <div className="pt-4 flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={saveCollection}
+                  className="bg-white text-black hover:bg-[#eaeaea] font-bold text-xs tracking-widest px-8 py-3 rounded-lg uppercase transition-all shadow-md cursor-pointer active:scale-95"
+                >
+                  SAVE COLLECTION
+                </button>
+                {collectionForm.id && (
+                  <button
+                    type="button"
+                    onClick={() => setCollectionForm({ id: "", name: "", desc: "" })}
+                    className="text-[#8e8e93] hover:text-white font-bold text-xs tracking-widest px-6 py-3 uppercase hover:bg-white/5 border border-transparent hover:border-white/10 rounded-lg cursor-pointer transition-all"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-5 sm:p-7 shadow-sm">
+            <h2 className="text-xs font-bold tracking-[0.2em] text-white uppercase mb-6 border-b border-[#18181b] pb-4">
+              Existing Collections ({categories.length})
+            </h2>
+            <div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
+              {categories.map((c) => (
+                <div key={c.categoryId} className="flex justify-between items-center p-4 bg-[#141416] border border-[#27272a] rounded-lg hover:border-white/20 transition-all">
+                  <div>
+                    <span className="text-white font-bold text-xs uppercase tracking-wider block">{c.name}</span>
+                    <span className="text-[#666] text-[10px] mt-0.5 block">{c.description || "No description"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCollectionForm({ id: c.categoryId, name: c.name, desc: c.description || "" })}
+                      className="text-[9px] font-bold tracking-wider uppercase text-[#a1a1aa] hover:text-white bg-[#18181b] hover:bg-white/10 border border-[#27272a] px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteCollection(c.categoryId)}
+                      className="text-[9px] font-bold tracking-wider uppercase text-red-400 bg-[#18181b] hover:bg-red-950/60 border border-[#27272a] px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                    >
+                      Del
+                    </button>
                   </div>
                 </div>
               ))}
+              {categories.length === 0 && <div className="text-xs text-[#555] uppercase py-6 text-center font-bold">No collections created yet.</div>}
             </div>
           </div>
         </section>
       )}
 
-      {productModalOpen && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-black/85 p-6 backdrop-blur-sm">
-          <div className="my-6 w-full max-w-5xl rounded-lg border border-white/10 bg-[#0a0a0a] shadow-2xl">
-            <div className="flex items-start justify-between border-b border-white/[0.06] px-7 py-5">
+      {/* --- TAB: COLORS --- */}
+      {!loading && activeTab === "colors" && (
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+          <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-5 sm:p-7 shadow-sm">
+            <h2 className="text-xs font-bold tracking-[0.2em] text-white uppercase mb-6 border-b border-[#18181b] pb-4">
+              {editingColorId ? "Edit Color Entity" : "Add Color to Palette"}
+            </h2>
+            <div className="space-y-4">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">
-                  {productForm.inventoryId
-                    ? "Edit Product Variant & Stock"
-                    : "Add Product Variant & Opening Stock"}
-                </h2>
-                <p className="mt-2 text-[10px] text-[#666]">
-                  Product metadata, variant pricing, and branch inventory follow
-                  the database relationships.
+                <label className="block text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase mb-2">Color Name</label>
+                <input
+                  type="text"
+                  value={colorInput}
+                  onChange={(e) => setColorInput(e.target.value)}
+                  placeholder="E.g. Radioactive Moss, Crimson Red, Jet Black..."
+                  className="w-full bg-[#18181b] border border-[#27272a] focus:border-white/20 rounded-lg px-4 py-2.5 text-xs text-white uppercase focus:outline-none transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase mb-2">Hex Color Code</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={hexInput}
+                      onChange={(e) => setHexInput(e.target.value)}
+                      className="w-10 h-10 rounded-lg border border-[#27272a] bg-transparent cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={hexInput}
+                      onChange={(e) => setHexInput(e.target.value)}
+                      placeholder="#10B981"
+                      className="flex-1 bg-[#18181b] border border-[#27272a] focus:border-white/20 rounded-lg px-4 py-2.5 text-xs text-white font-mono uppercase focus:outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase mb-2">Color Swatch Image URL (Optional)</label>
+                  <input
+                    type="text"
+                    value={colorImageInput}
+                    onChange={(e) => setColorImageInput(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full bg-[#18181b] border border-[#27272a] focus:border-white/20 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={saveColor}
+                  className="bg-white text-black hover:bg-[#eaeaea] font-bold text-xs tracking-widest px-8 py-3 rounded-lg uppercase transition-all shadow-md cursor-pointer active:scale-95"
+                >
+                  {editingColorId ? "UPDATE COLOR" : "SAVE COLOR"}
+                </button>
+                {editingColorId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingColorId(null);
+                      setColorInput("");
+                      setHexInput("#10B981");
+                      setColorImageInput("");
+                    }}
+                    className="text-[#8e8e93] hover:text-white font-bold text-xs tracking-widest px-6 py-3 uppercase hover:bg-white/5 border border-transparent hover:border-white/10 rounded-lg cursor-pointer transition-all"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-5 sm:p-7 shadow-sm">
+            <h2 className="text-xs font-bold tracking-[0.2em] text-white uppercase mb-6 border-b border-[#18181b] pb-4">
+              Palette Colors ({colors.length})
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
+              {colors.map((c) => (
+                <div key={c.colorId} className="flex items-center justify-between bg-[#141416] border border-[#27272a] p-3 rounded-lg hover:border-white/20 transition-all">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-7 h-7 rounded-full border border-white/20 shadow-inner flex-shrink-0"
+                      style={{ backgroundColor: c.hexCode || "#555" }}
+                    ></span>
+                    <div>
+                      <span className="text-white font-bold text-xs uppercase tracking-wider block">{c.name}</span>
+                      <span className="text-[#666] font-mono text-[10px] block">{c.hexCode || "No Hex"}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingColorId(c.colorId);
+                        setColorInput(c.name);
+                        setHexInput(c.hexCode || "#10B981");
+                        setColorImageInput(c.imageUrl || "");
+                      }}
+                      className="text-[9px] font-bold tracking-wider uppercase text-[#a1a1aa] hover:text-white bg-[#18181b] hover:bg-white/10 border border-[#27272a] px-2.5 py-1 rounded cursor-pointer transition-all"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteColor(c.colorId)}
+                      className="text-[9px] font-bold tracking-wider uppercase text-red-400 bg-[#18181b] hover:bg-red-950/60 border border-[#27272a] px-2.5 py-1 rounded cursor-pointer transition-all"
+                    >
+                      Del
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {colors.length === 0 && <span className="text-xs text-[#555] uppercase py-6 text-center font-bold col-span-2">No colors in palette.</span>}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ======= UNIFIED MULTI-VARIANT PRODUCT MODAL (ADD & CARD EDIT) =========== */}
+      {/* ========================================================================= */}
+      {isProductModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 select-none animate-slide-in">
+          <div
+            className="w-full max-w-4xl bg-[#0d0d0d] border border-[rgba(255,255,255,0.08)] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-center px-6 py-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0d0d0d] flex-shrink-0">
+              <div>
+                <h3 className="text-sm font-bold tracking-widest uppercase text-white flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+                  {modalMode === "edit" ? `EDIT PRODUCT: ${productForm.name || "GARMENT"}` : "ADD CLOTH & MULTI-VARIANTS"}
+                </h3>
+                <p className="text-[10px] text-[#8e8e93] uppercase font-semibold mt-0.5">
+                  Configure garment, per-color photo gallery, sizes & stock matrix
                 </p>
               </div>
               <button
                 type="button"
-                autoFocus
-                onClick={() => setProductModalOpen(false)}
-                className="text-xl text-[#777] transition-colors hover:text-white"
+                onClick={() => setIsProductModalOpen(false)}
+                className="text-[#8e8e93] hover:text-white transition-colors cursor-pointer p-1"
               >
-                ×
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <form onSubmit={saveProduct} className="space-y-7 p-7">
-              <section>
-                <h3 className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8e8e93]">
-                  Product
-                </h3>
-                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-                  <label className="lg:col-span-2">
-                    <span className={labelClass}>Product Name</span>
+            {/* Modal Body (Scrollable) */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+              
+              {/* --- SECTION 1: CORE PRODUCT DETAILS --- */}
+              <div className="admin-card p-5 space-y-4">
+                <h4 className="text-[10px] font-bold text-white tracking-widest uppercase pb-2 border-b border-[rgba(255,255,255,0.04)]">
+                  1. GENERAL PRODUCT DETAILS
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Product Name */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                      PRODUCT NAME *
+                    </label>
                     <input
                       required
-                      minLength={2}
+                      type="text"
                       value={productForm.name}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          name: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
+                      onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                      placeholder="E.g. Oversized Heavyweight T-Shirt"
+                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white uppercase placeholder-[#555] focus:outline-none focus:border-white/20"
                     />
-                  </label>
-                  <label>
-                    <span className={labelClass}>Category</span>
+                  </div>
+
+                  {/* Collection Dropdown */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                      COLLECTION (CATEGORY) *
+                    </label>
                     <select
                       value={productForm.categoryId}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          categoryId: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
+                      onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
+                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer uppercase font-bold"
                     >
-                      <option value="">Unassigned</option>
-                      {catalog.categories.map((category) => (
-                        <option
-                          key={category.categoryId}
-                          value={category.categoryId}
-                        >
-                          {category.name}
+                      <option value="" className="bg-[#121212]">-- UNASSIGNED COLLECTION --</option>
+                      {categories.map((c) => (
+                        <option key={c.categoryId} value={c.categoryId} className="bg-[#121212]">
+                          {c.name}
                         </option>
                       ))}
                     </select>
-                  </label>
-                  <label>
-                    <span className={labelClass}>Supplier</span>
-                    <select
-                      required
-                      value={productForm.supplierId}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          supplierId: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                    >
-                      <option value="" disabled>
-                        Select supplier
-                      </option>
-                      {catalog.suppliers.map((supplier) => (
-                        <option
-                          key={supplier.supplierId}
-                          value={supplier.supplierId}
-                          disabled={
-                            supplier.status === "Inactive" &&
-                            supplier.supplierId !== productForm.supplierId
-                          }
-                        >
-                          {supplier.name}
-                          {supplier.status === "Inactive" ? " (Inactive)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="md:col-span-2">
-                    <span className={labelClass}>Description</span>
-                    <textarea
-                      value={productForm.description}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          description: event.target.value,
-                        }))
-                      }
-                      className={`${fieldClass} min-h-20 resize-y`}
-                    />
-                  </label>
-                  <label>
-                    <span className={labelClass}>Base Price (LKR)</span>
+                  </div>
+
+                  {/* Base Price */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                      BASE PRICE ($ / LKR) *
+                    </label>
                     <input
                       required
                       type="number"
+                      step="0.01"
                       min="0"
-                      step="0.01"
                       value={productForm.basePrice}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          basePrice: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
+                      onChange={(e) => setProductForm({ ...productForm, basePrice: e.target.value })}
+                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs font-mono-meta font-bold text-white focus:outline-none focus:border-white/20"
                     />
-                  </label>
-                  <label>
-                    <span className={labelClass}>Product Status</span>
-                    <select
-                      value={productForm.status}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          status: event.target.value as ProductStatus,
-                        }))
-                      }
-                      className={fieldClass}
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="active">Active</option>
-                    </select>
-                  </label>
-                </div>
-              </section>
+                  </div>
 
-              <section className="border-t border-white/[0.06] pt-6">
-                <h3 className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8e8e93]">
-                  Variant
-                </h3>
-                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-                  <label>
-                    <span className={labelClass}>SKU</span>
-                    <input
-                      required
-                      value={productForm.sku}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          sku: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                    />
-                  </label>
-                  <label>
-                    <span className={labelClass}>Color</span>
+                  {/* Supplier */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                      SUPPLIER
+                    </label>
                     <select
-                      required
-                      value={productForm.colorId}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          colorId: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
+                      value={productForm.supplierId}
+                      onChange={(e) => setProductForm({ ...productForm, supplierId: e.target.value })}
+                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer"
                     >
-                      <option value="" disabled>
-                        Select color
-                      </option>
-                      {colorOptions.map((option) => (
-                        <option
-                          key={option.optionId}
-                          value={option.optionId}
-                          disabled={
-                            option.status === "Inactive" &&
-                            option.optionId !== productForm.colorId
-                          }
-                        >
-                          {option.value}
-                          {option.status === "Inactive" ? " (Inactive)" : ""}
+                      <option value="" className="bg-[#121212]">-- NO SUPPLIER --</option>
+                      {suppliers.map((s) => (
+                        <option key={s.supplierId} value={s.supplierId} className="bg-[#121212]">
+                          {s.name}
                         </option>
                       ))}
                     </select>
-                  </label>
-                  <label>
-                    <span className={labelClass}>Size</span>
-                    <select
-                      required
-                      value={productForm.sizeId}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          sizeId: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                    >
-                      <option value="" disabled>
-                        Select size
-                      </option>
-                      {sizeOptions.map((option) => (
-                        <option
-                          key={option.optionId}
-                          value={option.optionId}
-                          disabled={
-                            option.status === "Inactive" &&
-                            option.optionId !== productForm.sizeId
-                          }
-                        >
-                          {option.value}
-                          {option.status === "Inactive" ? " (Inactive)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span className={labelClass}>Price Adjustment (LKR)</span>
-                    <input
-                      required
-                      type="number"
-                      step="0.01"
-                      value={productForm.priceAdjustment}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          priceAdjustment: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                    />
-                  </label>
-                  <label className="md:col-span-2 lg:col-span-4">
-                    <span className={labelClass}>Variant Image URL</span>
-                    <input
-                      type="url"
-                      value={productForm.imageUrl}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          imageUrl: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                      placeholder="https://..."
-                    />
-                  </label>
-                </div>
-              </section>
+                  </div>
 
-              {(!hasActiveColorOptions || !hasActiveSizeOptions) && (
-                <div className="rounded border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-[10px] text-amber-300">
-                  Add active Color and Size options before creating variants.{" "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProductModalOpen(false);
-                      setActiveTab("options");
-                    }}
-                    className="font-bold underline underline-offset-2"
-                  >
-                    Manage Colors & Sizes
-                  </button>
-                </div>
-              )}
-
-              <section className="border-t border-white/[0.06] pt-6">
-                <h3 className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8e8e93]">
-                  Branch Stock
-                </h3>
-                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-                  <label>
-                    <span className={labelClass}>Branch</span>
+                  {/* Primary Branch */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                      PRIMARY WAREHOUSE / BRANCH
+                    </label>
                     <select
                       value={productForm.branchId}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          branchId: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
+                      onChange={(e) => setProductForm({ ...productForm, branchId: e.target.value })}
+                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer"
                     >
-                      <option value="">Unassigned branch</option>
-                      {catalog.branches.map((branch) => (
-                        <option key={branch.branchId} value={branch.branchId}>
-                          {branch.name}
+                      <option value="" className="bg-[#121212]">-- UNASSIGNED BRANCH --</option>
+                      {branches.map((b) => (
+                        <option key={b.branchId} value={b.branchId} className="bg-[#121212]">
+                          {b.name}
                         </option>
                       ))}
                     </select>
-                  </label>
-                  <label>
-                    <span className={labelClass}>On-hand Quantity</span>
-                    <input
-                      required
-                      type="number"
-                      min={productForm.reservedQuantity}
-                      step="1"
-                      value={productForm.quantity}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          quantity: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
+                  </div>
+
+                  {/* Description */}
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                      DESCRIPTION & FIT DETAILS
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={productForm.description}
+                      onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                      placeholder="Fabric GSM, fit details, model sizing, streetwear aesthetics..."
+                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 placeholder-[#555]"
                     />
-                    {productForm.reservedQuantity > 0 && (
-                      <span className="mt-2 block text-[9px] text-amber-400">
-                        Minimum {productForm.reservedQuantity}: units are
-                        reserved by active checkouts.
-                      </span>
-                    )}
-                  </label>
-                  <label>
-                    <span className={labelClass}>Reorder Level</span>
-                    <input
-                      required
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={productForm.reorderLevel}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          reorderLevel: event.target.value,
-                        }))
-                      }
-                      className={fieldClass}
-                    />
-                  </label>
-                  <div className="rounded border border-white/[0.06] bg-[#111] px-4 py-3">
-                    <div className="text-[9px] font-bold uppercase tracking-widest text-[#666]">
-                      Selling Price
-                    </div>
-                    <div className="mt-2 font-mono text-sm font-bold text-white">
-                      LKR{" "}
-                      {(
-                        Number(productForm.basePrice || 0) +
-                        Number(productForm.priceAdjustment || 0)
-                      ).toFixed(2)}
-                    </div>
                   </div>
                 </div>
-              </section>
+              </div>
 
-              {catalog.suppliers.length === 0 && (
-                <div className="rounded border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-[10px] text-amber-300">
-                  Add a supplier before saving this product.{" "}
-                  <Link
-                    href="/admin/suppliers"
-                    className="font-bold underline underline-offset-2"
-                  >
-                    Open Supplier Management
-                  </Link>
+              {/* --- SECTION 2: COLORS & PER-COLOR GALLERIES --- */}
+              <div className="admin-card p-5 space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-[rgba(255,255,255,0.04)]">
+                  <h4 className="text-[10px] font-bold text-white tracking-widest uppercase">
+                    2. COLORS & COLOR GALLERIES ({selectedColorIds.length} SELECTED)
+                  </h4>
                 </div>
-              )}
 
-              <div className="flex justify-end gap-3 border-t border-white/[0.06] pt-5">
+                {/* Color Selector Chips */}
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-2">
+                    SELECT AVAILABLE COLORS:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {colors.map((c) => {
+                      const isSelected = selectedColorIds.includes(c.colorId);
+                      return (
+                        <button
+                          key={c.colorId}
+                          type="button"
+                          onClick={() => toggleColorSelection(c.colorId)}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-white text-black border border-white shadow-sm"
+                              : "bg-[#161616] text-[#8e8e93] hover:text-white border border-[rgba(255,255,255,0.08)]"
+                          }`}
+                        >
+                          <span
+                            className="w-3 h-3 rounded-full border border-black/20"
+                            style={{ backgroundColor: c.hexCode || "#555" }}
+                          ></span>
+                          <span>{c.name}</span>
+                          {isSelected && <span className="font-extrabold">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Per-Color Imagery Cards */}
+                {selectedColorIds.length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase">
+                      COLOR GALLERIES (PHOTOS PER COLOR):
+                    </label>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {selectedColorIds.map((colorId) => {
+                        const colorObj = colors.find((c) => c.colorId === colorId);
+                        const imgs = colorImages[colorId] || [];
+                        const isUploading = uploadingColorId === colorId;
+
+                        return (
+                          <div
+                            key={colorId}
+                            className="bg-[#121212] border border-[rgba(255,255,255,0.06)] rounded-lg p-3.5 space-y-3"
+                          >
+                            {/* Color Header */}
+                            <div className="flex justify-between items-center pb-2 border-b border-[rgba(255,255,255,0.04)]">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="w-3.5 h-3.5 rounded-full border border-white/20"
+                                  style={{ backgroundColor: colorObj?.hexCode || "#555" }}
+                                ></span>
+                                <span className="text-white font-bold text-xs uppercase tracking-wide">
+                                  {colorObj?.name}
+                                </span>
+                              </div>
+                              <span className="text-[9px] text-[#8e8e93] font-mono-meta">
+                                {imgs.length} photo{imgs.length !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+
+                            {/* Images Thumbnail List */}
+                            <div className="flex flex-wrap gap-2 min-h-[52px] items-center p-2 bg-[#0a0a0a] border border-[rgba(255,255,255,0.04)] rounded-md">
+                              {imgs.map((url, imgIdx) => (
+                                <div
+                                  key={imgIdx}
+                                  className="relative group w-12 h-12 rounded border border-[rgba(255,255,255,0.1)] bg-[#161616] overflow-hidden flex-shrink-0"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={`${colorObj?.name} photo ${imgIdx + 1}`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveImageFromColor(colorId, imgIdx)}
+                                    title="Delete Image"
+                                    className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 hover:text-red-300 transition-opacity cursor-pointer"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                  {imgIdx === 0 && (
+                                    <span className="absolute bottom-0 inset-x-0 bg-white text-black text-[7px] text-center font-extrabold uppercase py-0.2 pointer-events-none">
+                                      MAIN
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+
+                              {imgs.length === 0 && (
+                                <span className="text-[10px] text-[#555] uppercase font-bold text-center w-full">
+                                  No images attached for {colorObj?.name}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Upload & URL Inputs */}
+                            <div className="space-y-2">
+                              <div className="flex gap-2">
+                                <label className="flex-1 flex items-center justify-center gap-1.5 bg-white/5 hover:bg-white/10 border border-[rgba(255,255,255,0.1)] text-white text-[10px] font-bold tracking-wider uppercase py-1.5 px-3 rounded-md cursor-pointer transition-all">
+                                  <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                  </svg>
+                                  <span>{isUploading ? "UPLOADING..." : "UPLOAD PHOTO"}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    disabled={isUploading}
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (f) void handleFileUploadForColor(colorId, f);
+                                    }}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="Or paste photo URL..."
+                                  value={colorUrlInputs[colorId] || ""}
+                                  onChange={(e) =>
+                                    setColorUrlInputs({ ...colorUrlInputs, [colorId]: e.target.value })
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleAddImageUrlToColor(colorId);
+                                    }
+                                  }}
+                                  className="flex-1 bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-2.5 py-1 text-[10px] text-white focus:outline-none focus:border-white/20 placeholder-[#555]"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddImageUrlToColor(colorId)}
+                                  className="bg-white/10 hover:bg-white text-white hover:text-black font-bold text-[9px] uppercase tracking-wider px-3 py-1 rounded-md transition-all cursor-pointer"
+                                >
+                                  ADD
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* --- SECTION 3: SIZES & STOCK MATRIX TABLE --- */}
+              <div className="admin-card p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-2 border-b border-[rgba(255,255,255,0.04)]">
+                  <h4 className="text-[10px] font-bold text-white tracking-widest uppercase">
+                    3. SIZES & STOCK MATRIX ({matrixStats.totalVariants} VARIANTS)
+                  </h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset("standard")}
+                      className="text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded border border-[rgba(255,255,255,0.08)] cursor-pointer"
+                    >
+                      STANDARD (S, M, L, XL)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset("full")}
+                      className="text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded border border-[rgba(255,255,255,0.08)] cursor-pointer"
+                    >
+                      FULL RANGE (XS - 3XL)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset("all")}
+                      className="text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded border border-[rgba(255,255,255,0.08)] cursor-pointer"
+                    >
+                      ALL SIZES
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset("clear")}
+                      className="text-[9px] font-bold tracking-wider uppercase px-2 py-1 text-[#8e8e93] hover:text-white rounded hover:bg-white/5 cursor-pointer"
+                    >
+                      CLEAR
+                    </button>
+                  </div>
+                </div>
+
+                {/* Size Selector Chips */}
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-2">
+                    SELECT SIZES:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {sizes.map((s) => {
+                      const isSelected = selectedSizeIds.includes(s.sizeId);
+                      return (
+                        <button
+                          key={s.sizeId}
+                          type="button"
+                          onClick={() => toggleSizeSelection(s.sizeId)}
+                          className={`px-3.5 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-white text-black border border-white shadow-sm"
+                              : "bg-[#161616] text-[#8e8e93] hover:text-white border border-[rgba(255,255,255,0.08)]"
+                          }`}
+                        >
+                          {s.name} {isSelected && "✓"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Matrix Table & Bulk Toolbar */}
+                {selectedColorIds.length > 0 && selectedSizeIds.length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 bg-[#121212] border border-[rgba(255,255,255,0.06)] rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-[#8e8e93] uppercase">SET ALL QUANTITIES TO:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={bulkQtyValue}
+                          onChange={(e) => setBulkQtyValue(e.target.value)}
+                          className="w-16 bg-[#161616] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-xs font-mono-meta text-white text-center focus:outline-none focus:border-white/30"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => bulkApplyAllQuantities(parseInt(bulkQtyValue) || 0)}
+                          className="text-[9px] font-bold uppercase tracking-wider px-3 py-1.5 bg-white text-black hover:bg-[#eaeaea] rounded cursor-pointer transition-all"
+                        >
+                          APPLY TO ALL
+                        </button>
+                      </div>
+
+                      {selectedColorIds.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => copyQuantitiesToAllColors(selectedColorIds[0])}
+                          className="text-[9px] font-bold uppercase tracking-wider px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded border border-[rgba(255,255,255,0.1)] cursor-pointer"
+                        >
+                          COPY 1ST COLOR QUANTITIES ACROSS ALL
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Matrix Grid Table */}
+                    <div className="overflow-x-auto border border-[rgba(255,255,255,0.06)] rounded-lg custom-scrollbar max-h-[320px] overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[#080808] text-[#8e8e93] sticky top-0 z-10">
+                          <tr>
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)]">
+                              Color
+                            </th>
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)]">
+                              Size
+                            </th>
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)]">
+                              Generated SKU
+                            </th>
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)] w-36">
+                              Stock Qty
+                            </th>
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)] w-32">
+                              Price Adjust ($)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[rgba(255,255,255,0.03)] bg-[#0f0f0f]">
+                          {selectedColorIds.map((colorId) => {
+                            const colorObj = colors.find((c) => c.colorId === colorId);
+                            const colorName = colorObj?.name || "Color";
+                            const prefix = productForm.name.replace(/[^a-zA-Z0-9]/g, "").substring(0, 4).toUpperCase() || "VG";
+
+                            return selectedSizeIds.map((sizeId) => {
+                              const sizeObj = sizes.find((s) => s.sizeId === sizeId);
+                              const sizeName = sizeObj?.name || "Size";
+                              const key = `${colorId}_${sizeId}`;
+                              const currentData = variantMatrix[key] || { quantity: 0, priceAdjustment: 0 };
+                              const generatedSku = `VG-${prefix}-${colorName.substring(0, 3).toUpperCase()}-${sizeName.toUpperCase()}`;
+
+                              return (
+                                <tr key={key} className="hover:bg-white/[0.02] transition-colors">
+                                  <td className="py-2.5 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className="w-3 h-3 rounded-full border border-white/20 flex-shrink-0"
+                                        style={{ backgroundColor: colorObj?.hexCode || "#555" }}
+                                      ></span>
+                                      <span className="font-bold text-white uppercase text-[11px]">
+                                        {colorName}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="py-2.5 px-4">
+                                    <span className="bg-[#161616] text-white font-bold px-2 py-0.5 rounded border border-[rgba(255,255,255,0.08)] uppercase text-[10px]">
+                                      {sizeName}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-4 text-[#8e8e93] font-mono-meta text-[11px]">
+                                    {generatedSku}
+                                  </td>
+                                  <td className="py-2.5 px-4">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={currentData.quantity}
+                                      onChange={(e) =>
+                                        handleMatrixChange(colorId, sizeId, "quantity", parseInt(e.target.value) || 0)
+                                      }
+                                      className="w-24 bg-[#161616] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-xs font-mono-meta font-bold text-white focus:outline-none focus:border-white/30 text-center"
+                                    />
+                                  </td>
+                                  <td className="py-2.5 px-4">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={currentData.priceAdjustment}
+                                      onChange={(e) =>
+                                        handleMatrixChange(colorId, sizeId, "priceAdjustment", parseFloat(e.target.value) || 0)
+                                      }
+                                      placeholder="0.00"
+                                      className="w-24 bg-[#161616] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-xs font-mono-meta text-[#a1a1aa] focus:outline-none focus:border-white/30 text-center"
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-[rgba(255,255,255,0.06)] bg-[#0d0d0d] flex flex-col sm:flex-row justify-between items-center gap-4 flex-shrink-0">
+              <div className="flex items-center gap-3 text-xs text-[#8e8e93] font-mono-meta">
+                <span className="bg-white/5 text-white px-3 py-1.5 rounded border border-[rgba(255,255,255,0.08)] font-bold">
+                  {matrixStats.totalVariants} VARIANTS
+                </span>
+                <span>•</span>
+                <span className="bg-emerald-950/40 text-emerald-400 px-3 py-1.5 rounded border border-emerald-800/40 font-bold">
+                  {matrixStats.totalStock} TOTAL STOCK UNITS
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                {modalMode === "edit" && editingProductId && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteProduct(editingProductId)}
+                    className="bg-red-950/30 text-[#ef4444] hover:bg-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] font-bold text-xs tracking-widest px-4 py-2 rounded-md uppercase cursor-pointer transition-all mr-auto sm:mr-2"
+                  >
+                    DELETE
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setProductModalOpen(false)}
-                  className="rounded border border-white/10 px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-[#8e8e93] hover:text-white"
+                  onClick={() => setIsProductModalOpen(false)}
+                  className="bg-transparent hover:bg-white/5 border border-[rgba(255,255,255,0.1)] text-[#8e8e93] hover:text-white font-bold tracking-widest px-4 py-2 rounded-md transition-all uppercase cursor-pointer"
                 >
-                  Cancel
+                  CANCEL
                 </button>
                 <button
-                  type="submit"
-                  disabled={
-                    saving ||
-                    catalog.suppliers.length === 0 ||
-                    (!productForm.inventoryId &&
-                      (!hasActiveColorOptions || !hasActiveSizeOptions))
-                  }
-                  className="rounded bg-white px-6 py-2.5 text-[10px] font-bold uppercase tracking-widest text-black transition-colors hover:bg-[#e5e5e5] disabled:cursor-not-allowed disabled:opacity-40"
+                  type="button"
+                  onClick={() => void handleSaveMultiVariantProduct("hidden")}
+                  disabled={loading || matrixStats.totalVariants === 0}
+                  className="bg-[#161616] hover:bg-[#202020] border border-[rgba(255,255,255,0.15)] text-white font-bold text-xs tracking-widest px-5 py-2 rounded-md uppercase cursor-pointer transition-all disabled:opacity-50"
                 >
-                  {saving
-                    ? "Saving..."
-                    : productForm.inventoryId
-                      ? "Save Changes"
-                      : "Create Product & Stock"}
+                  SAVE AS HIDDEN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveMultiVariantProduct("live")}
+                  disabled={loading || matrixStats.totalVariants === 0}
+                  className="bg-white text-black hover:bg-[#eaeaea] font-bold text-xs tracking-widest px-6 py-2 rounded-md shadow-md shadow-white/5 uppercase cursor-pointer transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>{modalMode === "edit" ? "SAVE CHANGES & SET LIVE" : "SET PRODUCT LIVE"}</span>
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

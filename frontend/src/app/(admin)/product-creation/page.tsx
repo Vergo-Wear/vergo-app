@@ -136,7 +136,7 @@ export default function ProductCreationPage() {
     };
 
     // Section D Actions
-    const saveProduct = async (status: "draft" | "active") => {
+    const saveProduct = async (status: "hidden" | "live") => {
         const token = sessionStorage.getItem("vergo_access_token");
         if (!token) return setSaveError("Admin authentication is required.");
         if (!productName.trim() || variants.length === 0) return setSaveError("Add a product name and generate at least one variant.");
@@ -151,8 +151,8 @@ export default function ProductCreationPage() {
         if (!response.ok) { const body = await response.json().catch(() => ({})); return setSaveError(Array.isArray(body.message) ? body.message.join(" ") : body.message || "Unable to save product."); }
         router.push("/admin/inventory");
     };
-    const handleSaveDraft = () => void saveProduct("draft");
-    const handlePublish = () => void saveProduct("active");
+    const handleSaveHidden = () => void saveProduct("hidden");
+    const handlePublish = () => void saveProduct("live");
 
     return (
         <div className="flex flex-col min-h-screen bg-[#050505] text-[#f5f5f7] font-sans">
@@ -387,18 +387,18 @@ export default function ProductCreationPage() {
                         Cancel
                     </Link>
                     <button
-                        onClick={handleSaveDraft}
+                        onClick={handleSaveHidden}
                         disabled={isSaving}
                         className="bg-[#121212] hover:bg-[#1f1f1f] border border-[rgba(255,255,255,0.2)] text-white font-bold text-[11px] tracking-widest px-6 py-3 rounded-md transition-all uppercase shadow-md cursor-pointer"
                     >
-                        Save as Draft
+                        Save as Hidden
                     </button>
                     <button
                         onClick={handlePublish}
                         disabled={isSaving || !productName || variants.length === 0}
                         className="bg-white text-black hover:bg-[#eaeaea] disabled:bg-white/30 disabled:text-[#8e8e93] active:bg-[#d9d9d9] font-bold text-[11px] tracking-widest px-8 py-3 rounded-md transition-all uppercase shadow-md cursor-pointer"
                     >
-                        {isSaving ? "Saving..." : "Publish Product"}
+                        {isSaving ? "Saving..." : "Set Product Live"}
                     </button>
                 </div>
             </footer>

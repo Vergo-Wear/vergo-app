@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdmin } from "../AdminContext";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 
 // --- TYPES ---
 interface OrderCustomerDetails {
@@ -46,7 +47,6 @@ interface Order {
   pending_checkout: boolean;
   registered_customer: boolean;
 }
-
 
 interface ApiRecord {
   orderId?: string;
@@ -101,7 +101,16 @@ interface ApiItem {
   } | null;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const MANAGED_ORDER_STATUSES = [
+  "Ready to Process",
+  "Claimed",
+  "Preparing",
+  "Ready for Pickup",
+  "Sent",
+  "Delivered",
+  "Cancelled",
+  "Completed",
+];
 
 const paymentMethodLabel = (method: string): Order["payment_method"] =>
   method.toLowerCase().includes("bank") ? "Bank Transfer" : "Cash On Delivery";
@@ -182,172 +191,63 @@ const mapApiRecord = (record: ApiRecord, pendingCheckout: boolean): Order => {
     registered_customer: Boolean(record.customerId),
   };
 };
+
 // --- ICONS ---
 const Icons = {
   BadgeInfo: () => (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-      />
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
     </svg>
   ),
   CheckCircle: () => (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
   Clock: () => (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
   XCircle: () => (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
   AlertTriangle: () => (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-      />
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
     </svg>
   ),
   Ban: () => (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-      />
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
     </svg>
   ),
   Receipt: () => (
-    <svg
-      className="w-3.5 h-3.5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-      />
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
     </svg>
   ),
   Eye: () => (
-    <svg
-      className="w-3.5 h-3.5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-      />
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
     </svg>
   ),
   Close: () => (
-    <svg
-      className="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M6 18L18 6M6 6l12 12"
-      />
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   ),
   Check: () => (
-    <svg
-      className="w-3.5 h-3.5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2.5}
-    >
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
     </svg>
   ),
   Cross: () => (
-    <svg
-      className="w-3.5 h-3.5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2.5}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M6 18L18 6M6 6l12 12"
-      />
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   ),
 };
@@ -366,49 +266,32 @@ export default function OrdersDashboard() {
 
   // Modals & Drawers State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(
-    null,
-  );
-  const [shippingModalOrder, setShippingModalOrder] = useState<Order | null>(
-    null,
-  );
-  const [customerDrawerOrder, setCustomerDrawerOrder] = useState<Order | null>(
-    null,
-  );
+  const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(null);
+  const [customerDrawerOrder, setCustomerDrawerOrder] = useState<Order | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
     action: "confirmCOD" | "rejectCOD" | "approvePayment" | "rejectPayment";
     orderId: string;
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-
-  // Rejection reason is persisted by the backend as pending_checkout.admin_notes.
   const [rejectReason, setRejectReason] = useState("");
 
   const loadOrders = useCallback(async () => {
-    const token = sessionStorage.getItem("vergo_access_token");
-    if (!API_URL || !token) {
-      setIsLoading(false);
-      addNotification(
-        !API_URL
-          ? "NEXT_PUBLIC_API_URL is not configured."
-          : "Your admin session has expired. Please sign in again.",
-        "error",
-      );
-      return;
-    }
-
     setIsLoading(true);
     try {
-      const headers = { Authorization: `Bearer ${token}` };
       const [ordersResponse, checkoutsResponse] = await Promise.all([
-        fetch(`${API_URL}/orders/manage`, { headers, cache: "no-store" }),
-        fetch(`${API_URL}/orders/manage/pending-checkouts`, {
-          headers,
-          cache: "no-store",
-        }),
+        authenticatedFetch("/orders/manage"),
+        authenticatedFetch("/orders/manage/pending-checkouts"),
       ]);
+
+      if (!ordersResponse || !checkoutsResponse) {
+        addNotification("Session expired or connection failed loading orders.", "error");
+        setIsLoading(false);
+        return;
+      }
+
       const ordersBody = await ordersResponse.json().catch(() => ({}));
       const checkoutsBody = await checkoutsResponse.json().catch(() => ({}));
+
       if (!ordersResponse.ok || !checkoutsResponse.ok) {
         const body = !ordersResponse.ok ? ordersBody : checkoutsBody;
         const message = Array.isArray(body.message)
@@ -416,27 +299,28 @@ export default function OrdersDashboard() {
           : body.message;
         throw new Error(message || "Unable to load orders from the database.");
       }
+
       const nextOrders = [
-        ...(checkoutsBody as ApiRecord[]).map((record) =>
-          mapApiRecord(record, true),
+        ...(Array.isArray(checkoutsBody) ? checkoutsBody : []).map((record: ApiRecord) =>
+          mapApiRecord(record, true)
         ),
-        ...(ordersBody as ApiRecord[]).map((record) =>
-          mapApiRecord(record, false),
+        ...(Array.isArray(ordersBody) ? ordersBody : []).map((record: ApiRecord) =>
+          mapApiRecord(record, false)
         ),
       ];
+
       setOrders(nextOrders);
       setSelectedOrder((current) =>
         current
-          ? nextOrders.find((order) => order.order_id === current.order_id) ||
-            null
-          : null,
+          ? nextOrders.find((order) => order.order_id === current.order_id) || null
+          : null
       );
     } catch (error) {
       addNotification(
         error instanceof Error
           ? error.message
           : "Unable to load orders from the database.",
-        "error",
+        "error"
       );
     } finally {
       setIsLoading(false);
@@ -450,37 +334,33 @@ export default function OrdersDashboard() {
   // --- ACTIONS ---
   const confirmActionProcessor = async () => {
     if (!confirmAction) return;
-    const order = orders.find(
-      (item) => item.order_id === confirmAction.orderId,
-    );
-    const token = sessionStorage.getItem("vergo_access_token");
-    if (!order?.pending_checkout || !API_URL || !token) {
-      addNotification(
-        "This checkout can no longer be reviewed. Refresh and try again.",
-        "error",
-      );
+    const order = orders.find((item) => item.order_id === confirmAction.orderId);
+    if (!order?.pending_checkout) {
+      addNotification("This checkout can no longer be reviewed. Refresh and try again.", "error");
       return;
     }
 
-    const rejected =
-      confirmAction.action === "rejectCOD" ||
-      confirmAction.action === "rejectPayment";
+    const rejected = confirmAction.action === "rejectCOD" || confirmAction.action === "rejectPayment";
     setIsProcessing(true);
+
     try {
-      const response = await fetch(
-        `${API_URL}/orders/manage/pending-checkouts/${order.order_id}/review`,
+      const response = await authenticatedFetch(
+        `/orders/manage/pending-checkouts/${order.order_id}/review`,
         {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             status: rejected ? "Rejected" : "Approved",
             ...(rejected ? { adminNotes: rejectReason.trim() } : {}),
           }),
-        },
+        }
       );
+
+      if (!response) {
+        addNotification("Connection failed reviewing checkout.", "error");
+        return;
+      }
+
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         const message = Array.isArray(body.message)
@@ -488,20 +368,48 @@ export default function OrdersDashboard() {
           : body.message;
         throw new Error(message || "Unable to review this checkout.");
       }
+
       addNotification(
-        `${order.payment_method} ${rejected ? "rejected" : "approved"}.${order.registered_customer ? " Customer notification sent." : " Guest checkout; no customer notification was sent."}`,
-        "success",
+        `${order.payment_method} ${rejected ? "rejected" : "approved"}.${
+          order.registered_customer
+            ? " Customer notification sent."
+            : " Guest checkout; no customer notification sent."
+        }`,
+        "success"
       );
+
       setConfirmAction(null);
       setRejectReason("");
       await loadOrders();
     } catch (error) {
       addNotification(
-        error instanceof Error
-          ? error.message
-          : "Unable to review this checkout.",
-        "error",
+        error instanceof Error ? error.message : "Unable to review this checkout.",
+        "error"
       );
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    setIsProcessing(true);
+    try {
+      const res = await authenticatedFetch(`/orders/manage/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res && res.ok) {
+        addNotification(`Order status updated to ${newStatus}`, "success");
+        await loadOrders();
+      } else {
+        const body = res ? await res.json().catch(() => null) : null;
+        const msg = body?.message || "Failed to update order status";
+        addNotification(Array.isArray(msg) ? msg.join(" ") : msg, "error");
+      }
+    } catch (err: any) {
+      addNotification(err.message || "Failed to update order status", "error");
     } finally {
       setIsProcessing(false);
     }
@@ -527,9 +435,9 @@ export default function OrdersDashboard() {
     }
     if (order.payment_method === "Bank Transfer") {
       if (order.payment_proofs?.status) return order.payment_proofs.status;
-      return "Pending Upload"; // Fallback
+      return "Pending Upload";
     }
-    return "Approved"; // Fallback
+    return "Approved";
   };
 
   const statusConfig: Record<
@@ -537,45 +445,45 @@ export default function OrdersDashboard() {
     { color: string; bg: string; border: string; icon: any }
   > = {
     "Waiting COD": {
-      color: "text-[#3b82f6]",
-      bg: "bg-[#3b82f6]/15",
-      border: "border-[#3b82f6]/30",
+      color: "text-blue-400",
+      bg: "bg-blue-500/10",
+      border: "border-blue-500/30",
       icon: Icons.Clock,
     },
     "Pending Upload": {
-      color: "text-[#8e8e93]",
-      bg: "bg-[#252525]",
-      border: "border-white/5",
+      color: "text-zinc-400",
+      bg: "bg-zinc-800/50",
+      border: "border-zinc-700/50",
       icon: Icons.AlertTriangle,
     },
     "Pending Verification": {
-      color: "text-[#f59e0b]",
-      bg: "bg-[#f59e0b]/15",
-      border: "border-[#f59e0b]/30",
+      color: "text-amber-400",
+      bg: "bg-amber-500/10",
+      border: "border-amber-500/30",
       icon: Icons.BadgeInfo,
     },
     Approved: {
-      color: "text-[#10b981]",
-      bg: "bg-[#10b981]/15",
-      border: "border-[#10b981]/30",
+      color: "text-emerald-400",
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500/30",
       icon: Icons.CheckCircle,
     },
     Rejected: {
-      color: "text-[#ef4444]",
-      bg: "bg-[#ef4444]/15",
-      border: "border-[#ef4444]/30",
+      color: "text-red-400",
+      bg: "bg-red-500/10",
+      border: "border-red-500/30",
       icon: Icons.XCircle,
     },
     Expired: {
-      color: "text-[#a855f7]",
-      bg: "bg-[#a855f7]/15",
-      border: "border-[#a855f7]/30",
+      color: "text-purple-400",
+      bg: "bg-purple-500/10",
+      border: "border-purple-500/30",
       icon: Icons.Clock,
     },
     Cancelled: {
-      color: "text-[#8e8e93]",
-      bg: "bg-[#161616]",
-      border: "border-white/10",
+      color: "text-zinc-400",
+      bg: "bg-zinc-900/60",
+      border: "border-zinc-800",
       icon: Icons.Ban,
     },
   };
@@ -603,7 +511,7 @@ export default function OrdersDashboard() {
           o.order_id.toLowerCase().includes(sq) ||
           o.order_customer_details.first_name.toLowerCase().includes(sq) ||
           o.order_customer_details.last_name.toLowerCase().includes(sq) ||
-          o.order_customer_details.phone.includes(sq),
+          o.order_customer_details.phone.includes(sq)
       );
     }
     result.sort((a, b) => {
@@ -649,10 +557,10 @@ export default function OrdersDashboard() {
   }, [orders]);
 
   return (
-    <div className="space-y-8 select-none">
+    <div className="space-y-6 sm:space-y-8 px-4 sm:px-0">
       {/* PAGE TITLE */}
-      <div className="mb-8">
-        <h2 className="text-xl font-bold tracking-widest text-white uppercase mb-2">
+      <div>
+        <h2 className="text-lg sm:text-xl font-bold tracking-[0.2em] text-white uppercase mb-1 sm:mb-2">
           Order & Payment Management
         </h2>
         <p className="text-xs text-[#8e8e93] font-medium tracking-wide">
@@ -664,11 +572,10 @@ export default function OrdersDashboard() {
       {/* CONFIRM ACTION POPUP */}
       {confirmAction && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-[#0d0d0d] border border-white/10 shadow-2xl rounded-xl overflow-hidden animate-slide-in">
-            <div className="px-6 py-4 border-b border-white/10">
-              <h2 className="text-white font-bold tracking-widest uppercase text-sm">
-                {confirmAction.action === "approvePayment" &&
-                  "Approve Payment?"}
+          <div className="w-full max-w-sm bg-[#09090b] border border-[#27272a] shadow-2xl rounded-xl overflow-hidden animate-fade-in">
+            <div className="px-6 py-4 border-b border-[#18181b]">
+              <h2 className="text-white font-bold tracking-widest uppercase text-xs">
+                {confirmAction.action === "approvePayment" && "Approve Payment?"}
                 {confirmAction.action === "rejectPayment" && "Reject Payment?"}
                 {confirmAction.action === "confirmCOD" && "Confirm COD?"}
                 {confirmAction.action === "rejectCOD" && "Reject COD?"}
@@ -683,7 +590,7 @@ export default function OrdersDashboard() {
                     : "This will mark the Cash on Delivery request as confirmed. The order will become Ready to Process."}
                 </p>
               ) : (
-                <p className="text-[#ef4444] text-xs mb-4 font-bold border border-[#ef4444]/20 bg-[#ef4444]/5 p-3 rounded">
+                <p className="text-red-400 text-xs mb-4 font-bold border border-red-500/20 bg-red-500/10 p-3 rounded-lg">
                   Reserved stock will be released automatically.
                 </p>
               )}
@@ -693,14 +600,14 @@ export default function OrdersDashboard() {
                 <div className="space-y-4 mb-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">
-                      Reject Reason <span className="text-[#ef4444]">*</span>
+                      Reject Reason <span className="text-red-400">*</span>
                     </label>
                     <input
                       type="text"
                       value={rejectReason}
                       onChange={(e) => setRejectReason(e.target.value)}
                       placeholder="Required for rejection..."
-                      className="w-full bg-[#161616] border border-white/10 rounded px-3 py-2 text-xs text-white placeholder-[#555] focus:outline-none focus:border-white/30"
+                      className="w-full bg-[#18181b] border border-[#27272a] focus:border-emerald-500 rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#555] focus:outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -708,13 +615,15 @@ export default function OrdersDashboard() {
 
               <div className="flex gap-3 mt-4">
                 <button
+                  type="button"
                   disabled={isProcessing}
                   onClick={() => setConfirmAction(null)}
-                  className="disabled:opacity-50 flex-1 bg-transparent border border-white/10 hover:bg-white/5 text-white font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest"
+                  className="disabled:opacity-50 flex-1 bg-[#18181b] hover:bg-white/5 border border-[#27272a] text-white font-bold px-4 py-2.5 rounded-lg transition-colors uppercase text-[10px] tracking-widest cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   disabled={
                     isProcessing ||
                     ((confirmAction.action === "rejectPayment" ||
@@ -722,11 +631,11 @@ export default function OrdersDashboard() {
                       !rejectReason.trim())
                   }
                   onClick={confirmActionProcessor}
-                  className={`flex-1 font-bold px-4 py-2.5 rounded transition-colors uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  className={`flex-1 font-bold px-4 py-2.5 rounded-lg transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                     confirmAction.action === "rejectPayment" ||
                     confirmAction.action === "rejectCOD"
-                      ? "bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                      : "bg-[#10b981] hover:bg-[#059669] text-black"
+                      ? "bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-950/40"
+                      : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950/40"
                   }`}
                 >
                   {isProcessing
@@ -743,7 +652,7 @@ export default function OrdersDashboard() {
       )}
 
       {/* TOP SUMMARY CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4">
         {Object.keys(statCounts).map((status) => {
           const config = statusConfig[status];
           const isActive = statusFilter === status;
@@ -752,26 +661,22 @@ export default function OrdersDashboard() {
             <div
               key={status}
               onClick={() => setStatusFilter(isActive ? "All" : status)}
-              className={`p-4 rounded-xl border border-[rgba(255,255,255,0.04)] shadow-md shadow-black/20 cursor-pointer transition-all ${
+              className={`p-3.5 sm:p-4 rounded-xl border shadow-sm cursor-pointer transition-all ${
                 isActive
-                  ? "bg-[#161616] ring-1 ring-white/20"
-                  : "bg-[#0d0d0d] hover:bg-[#121212]"
+                  ? "bg-[#18181b] border-emerald-500/50 ring-1 ring-emerald-500/30"
+                  : "bg-[#09090b] border-[#27272a] hover:border-emerald-500/30 hover:bg-[#121215]"
               }`}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div
-                  className={`p-2 rounded-lg ${config.bg} ${config.color} border ${config.border}`}
-                >
+              <div className="flex items-start justify-between mb-2 sm:mb-3">
+                <div className={`p-2 rounded-lg ${config.bg} ${config.color} border ${config.border}`}>
                   <Icon />
                 </div>
               </div>
               <div>
-                <p className="text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-1">
+                <p className="text-[9px] sm:text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-1 truncate">
                   {status}
                 </p>
-                <h3
-                  className={`text-2xl font-bold font-mono-meta ${config.color}`}
-                >
+                <h3 className={`text-xl sm:text-2xl font-bold font-mono ${config.color}`}>
                   {statCounts[status]}
                 </h3>
               </div>
@@ -781,15 +686,15 @@ export default function OrdersDashboard() {
       </div>
 
       {/* FILTER BAR */}
-      <div className="bg-[#0d0d0d] p-4 rounded-xl border border-[rgba(255,255,255,0.04)] flex flex-wrap gap-4 items-end">
-        <div className="flex-1 min-w-[200px]">
+      <div className="bg-[#09090b] p-4 sm:p-5 rounded-xl border border-[#27272a] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+        <div>
           <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">
             Status Filter
           </label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full bg-[#161616] border border-white/5 rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer"
+            className="w-full bg-[#18181b] border border-[#27272a] focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-xs font-bold tracking-wider uppercase text-white cursor-pointer focus:outline-none transition-all"
           >
             <option value="All">All Statuses</option>
             {Object.keys(statCounts).map((s) => (
@@ -800,14 +705,14 @@ export default function OrdersDashboard() {
           </select>
         </div>
 
-        <div className="flex-1 min-w-[200px]">
+        <div>
           <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">
             Payment Method
           </label>
           <select
             value={paymentMethodFilter}
             onChange={(e) => setPaymentMethodFilter(e.target.value)}
-            className="w-full bg-[#161616] border border-white/5 rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer"
+            className="w-full bg-[#18181b] border border-[#27272a] focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-xs font-bold tracking-wider uppercase text-white cursor-pointer focus:outline-none transition-all"
           >
             <option value="All">All Methods</option>
             <option value="Cash On Delivery">Cash On Delivery</option>
@@ -815,14 +720,14 @@ export default function OrdersDashboard() {
           </select>
         </div>
 
-        <div className="flex-1 min-w-[200px]">
+        <div>
           <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">
             Date Range
           </label>
           <select
             value={dateRangeFilter}
             onChange={(e) => setDateRangeFilter(e.target.value)}
-            className="w-full bg-[#161616] border border-white/5 rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer"
+            className="w-full bg-[#18181b] border border-[#27272a] focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-xs font-bold tracking-wider uppercase text-white cursor-pointer focus:outline-none transition-all"
           >
             <option value="All">All Time</option>
             <option value="Today">Today</option>
@@ -832,14 +737,14 @@ export default function OrdersDashboard() {
           </select>
         </div>
 
-        <div className="flex-1 min-w-[200px]">
+        <div>
           <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">
             Sort By
           </label>
           <select
             value={sortOption}
             onChange={(e) => setSortOption(e.target.value)}
-            className="w-full bg-[#161616] border border-white/5 rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer"
+            className="w-full bg-[#18181b] border border-[#27272a] focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-xs font-bold tracking-wider uppercase text-white cursor-pointer focus:outline-none transition-all"
           >
             <option value="Newest First">Newest First</option>
             <option value="Oldest First">Oldest First</option>
@@ -850,13 +755,13 @@ export default function OrdersDashboard() {
       </div>
 
       {/* MAIN TABLE */}
-      <div className="bg-[#0d0d0d] rounded-xl border border-[rgba(255,255,255,0.04)] overflow-hidden shadow-lg">
+      <div className="bg-[#09090b] rounded-xl border border-[#27272a] overflow-hidden shadow-lg">
         <div className="overflow-x-auto custom-scrollbar">
           {isLoading ? (
             <div className="py-24 flex flex-col items-center justify-center text-center">
-              <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin mb-4" />
-              <p className="text-xs text-[#8e8e93] uppercase tracking-widest">
-                Loading database orders...
+              <div className="w-8 h-8 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4" />
+              <p className="text-xs text-emerald-400 uppercase tracking-widest font-mono">
+                Syncing database orders...
               </p>
             </div>
           ) : filteredOrders.length === 0 ? (
@@ -872,33 +777,33 @@ export default function OrdersDashboard() {
               </p>
             </div>
           ) : (
-            <table className="w-full text-left text-xs whitespace-nowrap border-collapse min-w-full">
+            <table className="w-full text-left text-xs whitespace-nowrap border-collapse min-w-[850px]">
               <thead>
-                <tr className="bg-[#121212] border-b border-[rgba(255,255,255,0.04)] text-[#8e8e93]">
-                  <th className="px-3 py-3 font-bold tracking-wider text-[10px] uppercase">
+                <tr className="bg-[#050505] border-b border-[#27272a] text-[#8e8e93]">
+                  <th className="px-4 py-3.5 font-bold tracking-widest text-[9px] uppercase">
                     Order ID / Date
                   </th>
-                  <th className="px-3 py-3 font-bold tracking-wider text-[10px] uppercase">
+                  <th className="px-4 py-3.5 font-bold tracking-widest text-[9px] uppercase">
                     Customer
                   </th>
-                  <th className="px-3 py-3 font-bold tracking-wider text-[10px] uppercase">
+                  <th className="px-4 py-3.5 font-bold tracking-widest text-[9px] uppercase">
                     Payment
                   </th>
-                  <th className="px-3 py-3 font-bold tracking-wider text-[10px] uppercase">
-                    Status Logics
+                  <th className="px-4 py-3.5 font-bold tracking-widest text-[9px] uppercase">
+                    Status
                   </th>
-                  <th className="px-3 py-3 font-bold tracking-wider text-[10px] uppercase">
+                  <th className="px-4 py-3.5 font-bold tracking-widest text-[9px] uppercase">
                     Receipt
                   </th>
-                  <th className="px-3 py-3 font-bold tracking-wider text-[10px] uppercase text-right">
+                  <th className="px-4 py-3.5 font-bold tracking-widest text-[9px] uppercase text-right">
                     Amount
                   </th>
-                  <th className="px-3 py-3 font-bold tracking-wider text-[10px] uppercase text-right">
+                  <th className="px-4 py-3.5 font-bold tracking-widest text-[9px] uppercase text-right">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[rgba(255,255,255,0.02)]">
+              <tbody className="divide-y divide-[#18181b] bg-[#0d0d0d]">
                 {filteredOrders.map((order) => {
                   const status = getDerivedStatus(order);
                   const config = statusConfig[status];
@@ -909,46 +814,46 @@ export default function OrdersDashboard() {
                       className="hover:bg-white/[0.02] transition-colors"
                     >
                       {/* Order ID & Date */}
-                      <td className="px-3 py-3">
-                        <div className="text-white font-bold font-mono-meta">
+                      <td className="px-4 py-3.5">
+                        <div className="text-white font-bold font-mono">
                           {order.order_id}
                         </div>
-                        <div className="text-[#8e8e93] text-[10px] mt-1">
+                        <div className="text-[#8e8e93] text-[10px] mt-1 font-mono">
                           {new Date(order.order_date).toLocaleString()}
                         </div>
                       </td>
 
                       {/* Customer */}
-                      <td className="px-3 py-3">
+                      <td className="px-4 py-3.5">
                         <div
-                          className="font-semibold text-white hover:text-white/80 cursor-pointer underline underline-offset-2 decoration-white/20"
+                          className="font-bold text-white hover:text-emerald-400 cursor-pointer transition-colors"
                           onClick={() => setCustomerDrawerOrder(order)}
                         >
                           {order.order_customer_details.first_name}{" "}
                           {order.order_customer_details.last_name}
                         </div>
-                        <div className="text-[#8e8e93] text-[10px] mt-1">
+                        <div className="text-[#8e8e93] text-[10px] mt-1 font-mono">
                           {order.order_customer_details.phone}
                         </div>
                       </td>
 
                       {/* Payment Method */}
-                      <td className="px-3 py-3">
-                        <div className="text-[#8e8e93] font-medium uppercase text-[10px] tracking-wide bg-white/5 inline-block px-2 py-1 rounded">
+                      <td className="px-4 py-3.5">
+                        <div className="text-[#8e8e93] font-bold uppercase text-[10px] tracking-wider bg-[#18181b] border border-[#27272a] inline-block px-2.5 py-1 rounded-md">
                           {order.payment_method}
                         </div>
                       </td>
 
                       {/* Status Badges */}
-                      <td className="px-3 py-3">
+                      <td className="px-4 py-3.5">
                         <div className="flex flex-col gap-1.5 items-start">
                           <span
-                            className={`text-[9px] font-bold px-2 py-0.5 rounded tracking-wide border uppercase ${config.bg} ${config.color} ${config.border}`}
+                            className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full tracking-wider border uppercase ${config.bg} ${config.color} ${config.border}`}
                           >
                             {status}
                           </span>
-                          {order.order_status !== "Pending" && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded tracking-wide border uppercase bg-white/5 text-[#8e8e93] border-white/10">
+                          {!order.pending_checkout && (
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md tracking-wider border uppercase bg-[#18181b] text-emerald-400 border-emerald-500/20">
                               Order: {order.order_status}
                             </span>
                           )}
@@ -956,11 +861,12 @@ export default function OrdersDashboard() {
                       </td>
 
                       {/* Receipt */}
-                      <td className="px-3 py-3">
+                      <td className="px-4 py-3.5">
                         {order.payment_proofs?.receipt_url ? (
                           <button
+                            type="button"
                             onClick={() => setReceiptModalOrder(order)}
-                            className="inline-flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-1.5 rounded transition-colors font-bold text-[9px] uppercase tracking-widest"
+                            className="inline-flex items-center gap-1.5 bg-[#18181b] hover:bg-emerald-950/60 text-white hover:text-emerald-400 border border-[#27272a] hover:border-emerald-500/40 px-3 py-1.5 rounded-lg transition-all font-bold text-[9px] uppercase tracking-widest cursor-pointer"
                           >
                             <Icons.Receipt /> View Receipt
                           </button>
@@ -972,24 +878,25 @@ export default function OrdersDashboard() {
                       </td>
 
                       {/* Amount */}
-                      <td className="px-3 py-3 text-right">
-                        <div className="text-white font-bold font-mono-meta">
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="text-white font-bold font-mono">
                           {order.total_amount.toLocaleString()} LKR
                         </div>
                         {order.delivery_fee > 0 && (
-                          <div className="text-[#8e8e93] text-[9px] mt-1">
+                          <div className="text-[#8e8e93] text-[9px] mt-1 font-mono">
                             +{order.delivery_fee.toLocaleString()} LKR Shipping
                           </div>
                         )}
                       </td>
 
                       {/* Actions */}
-                      <td className="px-3 py-3 text-right">
+                      <td className="px-4 py-3.5 text-right">
                         <div className="flex justify-end gap-2 items-center">
                           <button
+                            type="button"
                             onClick={() => setSelectedOrder(order)}
                             title="View Details"
-                            className="flex items-center justify-center w-8 h-8 bg-white/10 hover:bg-white/20 text-white rounded transition-colors"
+                            className="flex items-center justify-center w-8 h-8 bg-[#18181b] hover:bg-emerald-950/60 text-[#a1a1aa] hover:text-emerald-400 border border-[#27272a] hover:border-emerald-500/40 rounded-lg cursor-pointer transition-all"
                           >
                             <Icons.Eye />
                           </button>
@@ -997,6 +904,7 @@ export default function OrdersDashboard() {
                           {status === "Waiting COD" && (
                             <>
                               <button
+                                type="button"
                                 onClick={() =>
                                   setConfirmAction({
                                     action: "confirmCOD",
@@ -1004,11 +912,12 @@ export default function OrdersDashboard() {
                                   })
                                 }
                                 title="Confirm COD"
-                                className="flex items-center justify-center w-8 h-8 bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] rounded transition-colors border border-[#10b981]/30"
+                                className="flex items-center justify-center w-8 h-8 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-all border border-emerald-500/30 cursor-pointer active:scale-95"
                               >
                                 <Icons.CheckCircle />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
                                   setRejectReason("");
                                   setConfirmAction({
@@ -1017,7 +926,7 @@ export default function OrdersDashboard() {
                                   });
                                 }}
                                 title="Reject COD"
-                                className="flex items-center justify-center w-8 h-8 bg-[#ef4444]/20 hover:bg-[#ef4444]/30 text-[#ef4444] rounded transition-colors border border-[#ef4444]/30"
+                                className="flex items-center justify-center w-8 h-8 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-all border border-red-500/30 cursor-pointer active:scale-95"
                               >
                                 <Icons.Cross />
                               </button>
@@ -1027,6 +936,7 @@ export default function OrdersDashboard() {
                           {status === "Pending Verification" && (
                             <>
                               <button
+                                type="button"
                                 onClick={() =>
                                   setConfirmAction({
                                     action: "approvePayment",
@@ -1034,11 +944,12 @@ export default function OrdersDashboard() {
                                   })
                                 }
                                 title="Approve Payment"
-                                className="flex items-center justify-center w-8 h-8 bg-[#10b981] hover:bg-[#059669] text-black rounded transition-colors"
+                                className="flex items-center justify-center w-8 h-8 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all cursor-pointer shadow-md shadow-emerald-950/40 active:scale-95"
                               >
                                 <Icons.Check />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
                                   setRejectReason("");
                                   setConfirmAction({
@@ -1047,7 +958,7 @@ export default function OrdersDashboard() {
                                   });
                                 }}
                                 title="Reject Payment"
-                                className="flex items-center justify-center w-8 h-8 bg-[#ef4444] hover:bg-[#dc2626] text-white rounded transition-colors"
+                                className="flex items-center justify-center w-8 h-8 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-all cursor-pointer shadow-md shadow-red-950/40 active:scale-95"
                               >
                                 <Icons.Cross />
                               </button>
@@ -1071,31 +982,32 @@ export default function OrdersDashboard() {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
             onClick={() => setSelectedOrder(null)}
           />
-          <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-[#0d0d0d] border-l border-white/10 shadow-2xl z-[110] flex flex-col animate-slide-in select-text">
-            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between shrink-0">
+          <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-[#09090b] border-l border-[#27272a] shadow-2xl z-[110] flex flex-col animate-fade-in select-text">
+            <div className="px-6 py-4 border-b border-[#18181b] flex items-center justify-between shrink-0">
               <div>
-                <h2 className="text-white font-bold tracking-widest uppercase text-sm">
+                <h2 className="text-white font-bold tracking-widest uppercase text-xs">
                   Order Details
                 </h2>
-                <p className="text-[#8e8e93] text-[10px] font-mono-meta mt-1">
+                <p className="text-[#8e8e93] text-[10px] font-mono mt-1">
                   {selectedOrder.order_id}
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedOrder(null)}
-                className="text-[#8e8e93] hover:text-white transition-colors"
+                className="text-[#8e8e93] hover:text-white transition-colors p-1 cursor-pointer"
               >
                 <Icons.Close />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
               {/* Order Information */}
               <section>
-                <h3 className="text-xs font-bold text-[#8e8e93] tracking-widest uppercase mb-4 border-b border-white/5 pb-2">
+                <h3 className="text-xs font-bold text-[#8e8e93] tracking-widest uppercase mb-4 border-b border-[#18181b] pb-2">
                   Order Summary
                 </h3>
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono-meta">
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono">
                   <div>
                     <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                       Date
@@ -1106,13 +1018,35 @@ export default function OrdersDashboard() {
                   </div>
                   <div>
                     <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
-                      Status
+                      Order Status
                     </p>
-                    <p className="text-white uppercase">
+                    <p className="text-emerald-400 font-bold uppercase">
                       {selectedOrder.order_status}
                     </p>
                   </div>
                 </div>
+
+                {!selectedOrder.pending_checkout && (
+                  <div className="mt-4 bg-[#141416] p-3.5 rounded-lg border border-[#27272a]">
+                    <label className="block text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-2">
+                      Update Order Status (Database Sync)
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedOrder.order_status}
+                        onChange={(e) => updateOrderStatus(selectedOrder.order_id, e.target.value)}
+                        disabled={isProcessing}
+                        className="flex-1 bg-[#18181b] border border-[#27272a] focus:border-emerald-500 rounded-lg px-3 py-2 text-xs font-bold text-white cursor-pointer focus:outline-none transition-all"
+                      >
+                        {MANAGED_ORDER_STATUSES.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-4 space-y-3">
                   <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
@@ -1121,26 +1055,25 @@ export default function OrdersDashboard() {
                   {selectedOrder.items.map((item, i) => (
                     <div
                       key={i}
-                      className="flex justify-between items-center bg-[#161616] p-3 rounded"
+                      className="flex justify-between items-center bg-[#141416] p-3 rounded-lg border border-[#27272a]"
                     >
                       <div>
-                        <p className="text-white font-medium text-xs">
+                        <p className="text-white font-bold text-xs uppercase tracking-wide">
                           {item.name}
                         </p>
-                        <p className="text-[#8e8e93] text-[10px] mt-1 font-mono-meta">
-                          Qty: {item.quantity} Ã— {item.price.toLocaleString()}{" "}
-                          LKR
+                        <p className="text-[#8e8e93] text-[10px] mt-1 font-mono">
+                          Qty: {item.quantity} × {item.price.toLocaleString()} LKR
                         </p>
                       </div>
-                      <p className="text-white font-bold font-mono-meta">
+                      <p className="text-white font-bold font-mono">
                         {(item.quantity * item.price).toLocaleString()} LKR
                       </p>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-4 space-y-2 border-t border-white/5 pt-4">
-                  <div className="flex justify-between text-xs text-[#8e8e93] font-mono-meta">
+                <div className="mt-4 space-y-2 border-t border-[#18181b] pt-4">
+                  <div className="flex justify-between text-xs text-[#8e8e93] font-mono">
                     <span>Subtotal</span>
                     <span>
                       {(
@@ -1149,15 +1082,15 @@ export default function OrdersDashboard() {
                       LKR
                     </span>
                   </div>
-                  <div className="flex justify-between text-xs text-[#8e8e93] font-mono-meta">
+                  <div className="flex justify-between text-xs text-[#8e8e93] font-mono">
                     <span>Delivery Fee</span>
                     <span>
                       {selectedOrder.delivery_fee.toLocaleString()} LKR
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm text-white font-bold font-mono-meta pt-2">
+                  <div className="flex justify-between text-sm text-white font-bold font-mono pt-2">
                     <span>Total</span>
-                    <span className="text-[#10b981]">
+                    <span className="text-emerald-400">
                       {selectedOrder.total_amount.toLocaleString()} LKR
                     </span>
                   </div>
@@ -1166,7 +1099,7 @@ export default function OrdersDashboard() {
 
               {/* Customer Details */}
               <section>
-                <h3 className="text-xs font-bold text-[#8e8e93] tracking-widest uppercase mb-4 border-b border-white/5 pb-2">
+                <h3 className="text-xs font-bold text-[#8e8e93] tracking-widest uppercase mb-4 border-b border-[#18181b] pb-2">
                   Customer Details
                 </h3>
                 <div className="grid grid-cols-2 gap-4 text-xs">
@@ -1174,7 +1107,7 @@ export default function OrdersDashboard() {
                     <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                       Full Name
                     </p>
-                    <p className="text-white font-semibold">
+                    <p className="text-white font-bold">
                       {selectedOrder.order_customer_details.first_name}{" "}
                       {selectedOrder.order_customer_details.last_name}
                     </p>
@@ -1183,7 +1116,7 @@ export default function OrdersDashboard() {
                     <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                       Contact
                     </p>
-                    <p className="text-white font-mono-meta">
+                    <p className="text-white font-mono">
                       {selectedOrder.order_customer_details.phone}
                     </p>
                     <p className="text-[#8e8e93] mt-0.5 truncate">
@@ -1195,13 +1128,13 @@ export default function OrdersDashboard() {
 
               {/* Shipping Details */}
               <section>
-                <h3 className="text-xs font-bold text-[#8e8e93] tracking-widest uppercase mb-4 border-b border-white/5 pb-2">
+                <h3 className="text-xs font-bold text-[#8e8e93] tracking-widest uppercase mb-4 border-b border-[#18181b] pb-2">
                   Shipping Details
                 </h3>
-                <div className="bg-[#121212] p-4 rounded border border-white/5 text-xs space-y-1">
+                <div className="bg-[#141416] p-4 rounded-lg border border-[#27272a] text-xs space-y-1">
                   <p className="text-white font-bold mb-2">
                     {selectedOrder.order_shipping_details.receiver_name}{" "}
-                    <span className="text-[#8e8e93] ml-2 font-normal font-mono-meta">
+                    <span className="text-[#8e8e93] ml-2 font-normal font-mono">
                       {selectedOrder.order_shipping_details.phone}
                     </span>
                   </p>
@@ -1223,15 +1156,15 @@ export default function OrdersDashboard() {
 
               {/* Payment Details */}
               <section>
-                <h3 className="text-xs font-bold text-[#8e8e93] tracking-widest uppercase mb-4 border-b border-white/5 pb-2">
+                <h3 className="text-xs font-bold text-[#8e8e93] tracking-widest uppercase mb-4 border-b border-[#18181b] pb-2">
                   Payment Information
                 </h3>
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono-meta">
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono">
                   <div>
                     <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                       Method
                     </p>
-                    <p className="text-white uppercase">
+                    <p className="text-white uppercase font-bold">
                       {selectedOrder.payment_method}
                     </p>
                   </div>
@@ -1239,39 +1172,38 @@ export default function OrdersDashboard() {
                     <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                       Status
                     </p>
-                    <p
-                      className={`font-bold uppercase ${statusConfig[getDerivedStatus(selectedOrder)].color}`}
-                    >
+                    <p className={`font-bold uppercase ${statusConfig[getDerivedStatus(selectedOrder)].color}`}>
                       {getDerivedStatus(selectedOrder)}
                     </p>
                   </div>
                 </div>
 
                 {selectedOrder.payment_proofs && (
-                  <div className="mt-4 bg-[#121212] p-4 rounded border border-white/5">
+                  <div className="mt-4 bg-[#141416] p-4 rounded-lg border border-[#27272a]">
                     <p className="text-[#555] uppercase tracking-wider text-[9px] mb-2">
                       Receipt Preview
                     </p>
                     {selectedOrder.payment_proofs.uploaded_at && (
-                      <p className="text-xs text-[#8e8e93] font-mono-meta mb-1">
+                      <p className="text-xs text-[#8e8e93] font-mono mb-1">
                         Uploaded:{" "}
                         {new Date(
-                          selectedOrder.payment_proofs.uploaded_at,
+                          selectedOrder.payment_proofs.uploaded_at
                         ).toLocaleString()}
                       </p>
                     )}
                     {selectedOrder.payment_proofs.expires_at && (
-                      <p className="text-xs text-[#8e8e93] font-mono-meta mb-3">
+                      <p className="text-xs text-[#8e8e93] font-mono mb-3">
                         Expires:{" "}
                         {new Date(
-                          selectedOrder.payment_proofs.expires_at,
+                          selectedOrder.payment_proofs.expires_at
                         ).toLocaleString()}
                       </p>
                     )}
                     {selectedOrder.payment_proofs.receipt_url && (
                       <button
+                        type="button"
                         onClick={() => setReceiptModalOrder(selectedOrder)}
-                        className="bg-white/10 hover:bg-white/20 text-white text-[10px] uppercase tracking-widest font-bold px-3 py-1.5 rounded transition-colors w-full flex justify-center items-center gap-2"
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] uppercase tracking-widest font-bold px-3 py-2 rounded-lg transition-all w-full flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-emerald-950/40"
                       >
                         <Icons.Eye /> Preview Receipt
                       </button>
@@ -1280,7 +1212,7 @@ export default function OrdersDashboard() {
                 )}
               </section>
 
-              {/* Admin Log History (replaces old verification form) */}
+              {/* Verification Log */}
               {((selectedOrder.payment_method === "Bank Transfer" &&
                 (getDerivedStatus(selectedOrder) === "Approved" ||
                   getDerivedStatus(selectedOrder) === "Rejected")) ||
@@ -1290,16 +1222,16 @@ export default function OrdersDashboard() {
                   className={`border p-5 rounded-xl mt-6 relative overflow-hidden ${
                     getDerivedStatus(selectedOrder) === "Approved" ||
                     selectedOrder.confirmation_status === "Confirmed"
-                      ? "bg-[#121212] border-[#10b981]/10"
-                      : "bg-[#121212] border-[#ef4444]/10"
+                      ? "bg-[#141416] border-emerald-500/20"
+                      : "bg-[#141416] border-red-500/20"
                   }`}
                 >
                   <div
-                    className={`absolute top-0 left-0 w-1 h-full ${
+                    className={`absolute top-0 left-0 w-1.5 h-full ${
                       getDerivedStatus(selectedOrder) === "Approved" ||
                       selectedOrder.confirmation_status === "Confirmed"
-                        ? "bg-[#10b981]"
-                        : "bg-[#ef4444]"
+                        ? "bg-emerald-500"
+                        : "bg-red-500"
                     }`}
                   />
 
@@ -1316,7 +1248,7 @@ export default function OrdersDashboard() {
                       : "Rejection Verification Log"}
                   </h3>
 
-                  <div className="grid grid-cols-2 gap-4 text-xs font-mono-meta mb-3 bg-[#161616] p-3 rounded">
+                  <div className="grid grid-cols-2 gap-4 text-xs font-mono mb-3 bg-[#18181b] p-3 rounded-lg border border-[#27272a]">
                     <div>
                       <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                         Final Status
@@ -1340,31 +1272,25 @@ export default function OrdersDashboard() {
                         >
                           {getDerivedStatus(selectedOrder) === "Approved" ||
                           selectedOrder.confirmation_status === "Confirmed"
-                            ? "Approved Badge"
-                            : "Rejected Badge"}
+                            ? "Approved"
+                            : "Rejected"}
                         </span>
                       </div>
                     </div>
                     <div>
                       <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
-                        {getDerivedStatus(selectedOrder) === "Approved" ||
-                        selectedOrder.confirmation_status === "Confirmed"
-                          ? "Approved By"
-                          : "Rejected By"}
+                        Reviewed By
                       </p>
-                      <p className="text-white">Admin</p>
+                      <p className="text-white font-bold">Admin</p>
                     </div>
                     <div className="col-span-2">
                       <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
-                        {getDerivedStatus(selectedOrder) === "Approved" ||
-                        selectedOrder.confirmation_status === "Confirmed"
-                          ? "Approved Time"
-                          : "Rejected Time"}
+                        Review Timestamp
                       </p>
-                      <p className="text-white">
+                      <p className="text-white font-mono">
                         {selectedOrder.payment_proofs?.acted_at
                           ? new Date(
-                              selectedOrder.payment_proofs.acted_at,
+                              selectedOrder.payment_proofs.acted_at
                             ).toLocaleString()
                           : new Date().toLocaleString()}
                       </p>
@@ -1372,11 +1298,11 @@ export default function OrdersDashboard() {
                   </div>
 
                   {selectedOrder.payment_proofs?.rejected_reason && (
-                    <div className="bg-[#ef4444]/10 border border-[#ef4444]/20 p-3 rounded mt-3">
-                      <p className="text-[#ef4444] uppercase tracking-wider text-[9px] mb-1 font-bold">
+                    <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg mt-3">
+                      <p className="text-red-400 uppercase tracking-wider text-[9px] mb-1 font-bold">
                         Reject Reason
                       </p>
-                      <p className="text-[#fca5a5] text-xs font-medium">
+                      <p className="text-red-300 text-xs font-medium">
                         {selectedOrder.payment_proofs.rejected_reason}
                       </p>
                     </div>
@@ -1384,8 +1310,8 @@ export default function OrdersDashboard() {
                 </section>
               )}
 
-              <div className="bg-[#121212] p-4 rounded text-center text-[10px] text-[#555] uppercase tracking-widest mt-8">
-                End of Record
+              <div className="bg-[#141416] p-4 rounded-lg text-center text-[10px] text-[#555] uppercase tracking-widest mt-8 font-bold">
+                End of Order Record
               </div>
             </div>
           </div>
@@ -1394,21 +1320,22 @@ export default function OrdersDashboard() {
 
       {/* RECEIPT IMAGE MODAL */}
       {receiptModalOrder && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-          <div className="absolute top-6 right-6">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="absolute top-6 right-6 z-10">
             <button
+              type="button"
               onClick={() => setReceiptModalOrder(null)}
-              className="text-white/50 hover:text-white transition-colors bg-white/5 p-2 rounded-full"
+              className="text-white/70 hover:text-white transition-colors bg-white/10 p-2 rounded-full cursor-pointer"
             >
               <Icons.Close />
             </button>
           </div>
-          <div className="bg-[#121212] p-2 rounded-xl border border-white/10 flex flex-col items-center">
-            <div className="w-[450px] bg-[#161616] rounded-t-lg pt-4 px-6 border-b border-white/5 text-center">
-              <h3 className="text-white font-bold tracking-widest uppercase text-sm">
+          <div className="bg-[#09090b] p-2 rounded-xl border border-[#27272a] flex flex-col items-center shadow-2xl max-w-full">
+            <div className="w-[90vw] max-w-[450px] bg-[#141416] rounded-t-lg pt-4 px-6 border-b border-[#27272a] text-center">
+              <h3 className="text-white font-bold tracking-widest uppercase text-xs">
                 Receipt Preview
               </h3>
-              <div className="text-[10px] text-[#8e8e93] font-mono-meta mt-2 mb-4 grid grid-cols-2 gap-2 text-left">
+              <div className="text-[10px] text-[#8e8e93] font-mono mt-2 mb-4 grid grid-cols-2 gap-2 text-left">
                 <div>
                   <span className="text-[#555] uppercase tracking-wider">
                     Method:
@@ -1425,33 +1352,32 @@ export default function OrdersDashboard() {
                     {getDerivedStatus(receiptModalOrder)}
                   </p>
                 </div>
-                <div className="col-span-2 border-t border-white/5 pt-2 mt-1">
+                <div className="col-span-2 border-t border-[#27272a] pt-2 mt-1">
                   <span className="text-[#555] uppercase tracking-wider">
                     Uploaded:
                   </span>
-                  <p className="text-white mt-0.5">
+                  <p className="text-white mt-0.5 font-mono">
                     {receiptModalOrder.payment_proofs?.uploaded_at
                       ? new Date(
-                          receiptModalOrder.payment_proofs.uploaded_at,
+                          receiptModalOrder.payment_proofs.uploaded_at
                         ).toLocaleString()
                       : new Date().toLocaleString()}
                   </p>
                 </div>
               </div>
             </div>
-            <div className="w-[450px] h-[500px] rounded-b-lg bg-[#161616] flex items-center justify-center relative overflow-hidden">
-              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+            <div className="w-[90vw] max-w-[450px] h-[60vh] max-h-[500px] rounded-b-lg bg-[#141416] flex items-center justify-center relative overflow-hidden p-2">
               <object
                 data={receiptModalOrder.payment_proofs?.receipt_url}
                 type="image/*"
                 aria-label={`Payment receipt for ${receiptModalOrder.order_id}`}
-                className="relative z-10 w-full h-full object-contain"
+                className="relative z-10 w-full h-full object-contain rounded-lg"
               >
                 <a
                   href={receiptModalOrder.payment_proofs?.receipt_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="relative z-10 text-xs text-white underline"
+                  className="relative z-10 text-xs text-emerald-400 underline font-bold"
                 >
                   Open receipt in a new tab
                 </a>
@@ -1468,31 +1394,36 @@ export default function OrdersDashboard() {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
             onClick={() => setCustomerDrawerOrder(null)}
           />
-          <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-[#0d0d0d] border-l border-white/10 shadow-2xl z-[110] flex flex-col animate-slide-in select-text">
-            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between shrink-0">
-              <h2 className="text-white font-bold tracking-widest uppercase text-sm">
+          <div className="fixed inset-y-0 right-0 w-full max-w-sm bg-[#09090b] border-l border-[#27272a] shadow-2xl z-[110] flex flex-col animate-fade-in select-text">
+            <div className="px-6 py-4 border-b border-[#18181b] flex items-center justify-between shrink-0">
+              <h2 className="text-white font-bold tracking-widest uppercase text-xs">
                 Customer Info
               </h2>
               <button
+                type="button"
                 onClick={() => setCustomerDrawerOrder(null)}
-                className="text-[#8e8e93] hover:text-white transition-colors"
+                className="text-[#8e8e93] hover:text-white transition-colors cursor-pointer p-1"
               >
                 <Icons.Close />
               </button>
             </div>
             <div className="p-6 space-y-6">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-white/10 flex flex-col justify-center items-center text-white font-bold text-xl uppercase border border-white/5 shadow-inner">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-xl uppercase border border-emerald-500/30 flex justify-center items-center">
                   {customerDrawerOrder.order_customer_details.first_name[0]}
                   {customerDrawerOrder.order_customer_details.last_name[0]}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">
+                  <h3 className="text-base font-bold text-white uppercase tracking-wide">
                     {customerDrawerOrder.order_customer_details.first_name}{" "}
                     {customerDrawerOrder.order_customer_details.last_name}
                   </h3>
                   <p
-                    className={`text-xs font-mono-meta mt-1 ${customerDrawerOrder.registered_customer ? "text-[#10b981]" : "text-[#8e8e93]"}`}
+                    className={`text-[10px] font-mono uppercase mt-1 ${
+                      customerDrawerOrder.registered_customer
+                        ? "text-emerald-400 font-bold"
+                        : "text-[#8e8e93]"
+                    }`}
                   >
                     {customerDrawerOrder.registered_customer
                       ? "Registered Customer"
@@ -1501,12 +1432,12 @@ export default function OrdersDashboard() {
                 </div>
               </div>
 
-              <div className="space-y-4 bg-[#121212] p-4 rounded-xl border border-white/5">
+              <div className="space-y-4 bg-[#141416] p-4 rounded-xl border border-[#27272a]">
                 <div>
                   <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                     Email Address
                   </p>
-                  <p className="text-white text-sm">
+                  <p className="text-white text-xs font-mono">
                     {customerDrawerOrder.order_customer_details.email}
                   </p>
                 </div>
@@ -1514,7 +1445,7 @@ export default function OrdersDashboard() {
                   <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                     Phone Number
                   </p>
-                  <p className="text-white text-sm font-mono-meta">
+                  <p className="text-white text-xs font-mono">
                     {customerDrawerOrder.order_customer_details.phone}
                   </p>
                 </div>
