@@ -6,6 +6,7 @@ import {
   EmailContent,
   paymentExpiredEmail,
   paymentRejectedEmail,
+  employeeWelcomeEmail,
 } from './email.templates';
 
 /**
@@ -86,5 +87,15 @@ export class EmailService {
     orderNumber: string;
   }): Promise<boolean> {
     return this.send(params.to, paymentExpiredEmail(params));
+  }
+
+  async sendEmployeeWelcomeEmail(params: {
+    to: string;
+    employeeName: string;
+    email: string;
+    tempPassword: string;
+    branchName: string;
+  }): Promise<boolean> {
+    return this.send(params.to, employeeWelcomeEmail(params));
   }
 }

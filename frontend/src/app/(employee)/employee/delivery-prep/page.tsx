@@ -7,23 +7,24 @@ export default function DeliveryPrep() {
   const {
     orders,
     activeDeliveryPrepId,
-    waybillStatus,
-    pickupStatus,
+    submitCitypakShipment,
+    printCitypakWaybill,
     packageDimensions,
-    packageWeight,
-    pickupSlot,
     setDimensions,
-    setWeight,
-    setPickupSlot,
-    triggerWaybillGeneration,
-    triggerPickupRequest,
-    finalizeDelivery,
   } = useEmployee();
 
   // Find the active order in context
   const activeOrder = orders.find(o => o.id === activeDeliveryPrepId) || orders[0];
 
-  // Handle inputs
+  // Local state for shipment inputs
+  const [weightKg, setWeightKg] = useState("0.5");
+  const [pieces, setPieces] = useState("1");
+  const [customDescription, setCustomDescription] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [shipmentResult, setShipmentResult] = useState<any | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Handle dimension inputs
   const handleDimChange = (key: "length" | "width" | "height", value: string) => {
     setDimensions({
       ...packageDimensions,
@@ -31,16 +32,48 @@ export default function DeliveryPrep() {
     });
   };
 
-  // Mock Invoice print alert
   const handlePrintInvoice = () => {
-    alert("Sending PDF Invoice to Zebra Thermal Printer... [OK]");
+    window.print();
   };
 
-  const handleMarkAsSent = () => {
-    if (activeOrder) {
-      finalizeDelivery(activeOrder.id);
-      alert(`Order #${activeOrder.id} marked as SENT. Couriers notified.`);
-      window.location.href = "/employee/ready-orders";
+  const handleSubmitToCitypak = async () => {
+    if (!activeOrder) return;
+    setErrorMsg(null);
+
+    const parsedWeightKg = parseFloat(weightKg);
+    if (isNaN(parsedWeightKg) || parsedWeightKg <= 0) {
+      setErrorMsg("Please enter a valid package weight in kg (e.g., 0.5).");
+      return;
+    }
+
+    const weightGrams = Math.round(parsedWeightKg * 1000);
+    const numberOfPieces = parseInt(pieces, 10) || 1;
+
+    setIsSubmitting(true);
+    try {
+      const res = await submitCitypakShipment(activeOrder.id, {
+        weightGrams,
+        numberOfPieces,
+        description: customDescription.trim() || undefined,
+        lengthCm: packageDimensions.length ? parseFloat(packageDimensions.length) : undefined,
+        widthCm: packageDimensions.width ? parseFloat(packageDimensions.width) : undefined,
+        heightCm: packageDimensions.height ? parseFloat(packageDimensions.height) : undefined,
+      });
+
+      setShipmentResult(res);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to submit Citypak shipment.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenWaybill = async () => {
+    if (!activeOrder) return;
+    try {
+      await printCitypakWaybill(activeOrder.id);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to open waybill PDF.");
     }
   };
 
@@ -52,6 +85,9 @@ export default function DeliveryPrep() {
     );
   }
 
+  const codAmount =
+    activeOrder.paymentMethod === "COD" ? activeOrder.valuation : 0;
+
   return (
     <div>
       {/* Top Breadcrumb Header info */}
@@ -60,7 +96,7 @@ export default function DeliveryPrep() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M13 16h6m-6 0H6m13 0h3v-4a2 2 0 00-2-2h-4v6z" />
         </svg>
-        <span>Citypak Delivery Prep</span>
+        <span>Citypak Courier Fulfillment</span>
       </div>
 
       {/* Page Title Header with Actions */}
@@ -76,11 +112,17 @@ export default function DeliveryPrep() {
             </svg>
             <span>Print Invoice</span>
           </button>
-          <button className="emp-btn-claim w-full xs:w-auto" onClick={handleMarkAsSent} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3} style={{ width: 14, height: 14 }}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          
+          <button
+            className="emp-btn-claim w-full xs:w-auto"
+            onClick={handleOpenWaybill}
+            disabled={!shipmentResult && activeOrder.status !== "Ready for Pickup"}
+            style={{ display: "flex", alignItems: "center", gap: "6px" }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 14, height: 14 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
-            <span>Mark as Sent</span>
+            <span>Print Citypak Waybill</span>
           </button>
         </div>
       </div>
@@ -94,10 +136,10 @@ export default function DeliveryPrep() {
             <div className="emp-delivery-summary-header">
               <div>
                 <span className="emp-badge green" style={{ fontSize: "9px" }}>
-                  {activeOrder.status === "Ready for Pickup" ? "Packed & Ready" : activeOrder.status}
+                  {activeOrder.status}
                 </span>
                 <div style={{ marginTop: "10px" }}>
-                  <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--emp-text-muted)", textTransform: "uppercase" }}>Customer</div>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--emp-text-muted)", textTransform: "uppercase" }}>Consignee</div>
                   <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "4px" }}>{activeOrder.customerName}</div>
                   <div style={{ fontSize: "13px", color: "var(--emp-text-muted)", marginTop: "2px" }}>{activeOrder.customerEmail}</div>
                   <div style={{ fontSize: "13px", color: "var(--emp-text-muted)" }}>{activeOrder.customerPhone}</div>
@@ -105,14 +147,14 @@ export default function DeliveryPrep() {
               </div>
 
               <div className="emp-delivery-address-container" style={{ maxWidth: "300px" }}>
-                <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--emp-text-muted)", textTransform: "uppercase" }}>Shipping Address</span>
+                <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--emp-text-muted)", textTransform: "uppercase" }}>Immutable Order Shipping Snapshot</span>
                 <p style={{ fontSize: "13px", color: "#ffffff", marginTop: "4px", lineHeight: "1.4" }}>
-                  {activeOrder.customerAddress.split(", ").map((line, i) => (
+                  {activeOrder.customerAddress ? activeOrder.customerAddress.split(", ").map((line, i) => (
                     <React.Fragment key={i}>
                       {line}
                       <br />
                     </React.Fragment>
-                  ))}
+                  )) : "No address specified"}
                 </p>
               </div>
             </div>
@@ -128,7 +170,7 @@ export default function DeliveryPrep() {
               </div>
 
               <div className="w-full xs:w-auto xs:text-right text-left">
-                <span className="emp-delivery-value-lbl">Order Value</span>
+                <span className="emp-delivery-value-lbl">Total Payable ({activeOrder.paymentMethod})</span>
                 <div className="emp-delivery-value-val">
                   Rs. {activeOrder.valuation.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </div>
@@ -136,30 +178,24 @@ export default function DeliveryPrep() {
             </div>
           </div>
 
-          {/* Cash on Delivery bordered box */}
-          {activeOrder.paymentMethod === "COD" && (
-            <div className="emp-cod-box">
-              <div className="emp-cod-left">
-                <span className="emp-cod-badge">Cash on Delivery (COD) Action Required</span>
-                <span className="emp-cod-amount">
-                  Rs. {activeOrder.valuation.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </span>
-                <span className="emp-cod-details">Inclusive of Shipping & Fees</span>
-
-                <div className="emp-cod-info-line">
-                  <svg className="emp-cod-info-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Ensure the Citypak Waybill clearly denotes "COD Collection Only" before sealing the parcel.</span>
-                </div>
-              </div>
-
-              {/* Cash Icon Vector Fallback */}
-              <svg className="emp-cod-right-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: "rgba(0, 255, 157, 0.15)" }}>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
+          {/* Payment Method Details Box */}
+          <div className="emp-cod-box">
+            <div className="emp-cod-left">
+              <span className="emp-cod-badge">
+                {activeOrder.paymentMethod === "COD"
+                  ? "Cash on Delivery — Citypak Collects Payable Amount"
+                  : "Bank Transfer — Verified & Paid (Citypak Collection: Rs. 0.00)"}
+              </span>
+              <span className="emp-cod-amount">
+                Citypak COD Amount: Rs. {codAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </span>
+              <span className="emp-cod-details">
+                {activeOrder.paymentMethod === "COD"
+                  ? "Citypak will collect full total from customer."
+                  : "Payment verified by Admin prior to fulfillment."}
+              </span>
             </div>
-          )}
+          </div>
 
           {/* Verified Package Contents table */}
           <div className="emp-card">
@@ -199,16 +235,66 @@ export default function DeliveryPrep() {
         <div className="emp-card">
           <div className="emp-api-panel">
             <div className="emp-api-header-row">
-              <div className="emp-api-logo-fallback" style={{ fontSize: "9px", backgroundColor: "#e63946", color: "#ffffff", padding: "6px", borderRadius: "4px", fontWeight: 900, textAlign: "center", lineHeight: "1.1" }}>CITYPAK<br />EXPRESS</div>
+              <div className="emp-api-logo-fallback" style={{ fontSize: "9px", backgroundColor: "#e63946", color: "#ffffff", padding: "6px", borderRadius: "4px", fontWeight: 900, textAlign: "center", lineHeight: "1.1" }}>CITYPAK<br />FALCON</div>
               <div>
-                <h3 className="emp-api-title">Citypak Integration</h3>
-                <span className="emp-api-subtitle">Direct API Connected</span>
+                <h3 className="emp-api-title">Citypak Falcon API</h3>
+                <span className="emp-api-subtitle">Server-side Authenticated</span>
               </div>
             </div>
 
-            {/* Dimension settings */}
+            {errorMsg && (
+              <div style={{ backgroundColor: "rgba(230, 57, 70, 0.2)", border: "1px solid #e63946", color: "#ff8080", padding: "10px", borderRadius: "6px", fontSize: "12px", marginBottom: "12px" }}>
+                {errorMsg}
+              </div>
+            )}
+
+            {/* Weight Setting (kg) */}
             <div className="emp-api-form-row">
-              <label>Package Dimensions (CM)</label>
+              <label htmlFor="pweight">Package Weight (KG)</label>
+              <input
+                type="text"
+                id="pweight"
+                className="emp-api-input"
+                style={{ textAlign: "left" }}
+                value={weightKg}
+                onChange={(e) => setWeightKg(e.target.value)}
+                placeholder="e.g. 0.5"
+              />
+            </div>
+
+            {/* Number of Pieces */}
+            <div className="emp-api-form-row">
+              <label htmlFor="ppieces">Number of Pieces (Parcels)</label>
+              <input
+                type="number"
+                id="ppieces"
+                className="emp-api-input"
+                style={{ textAlign: "left" }}
+                value={pieces}
+                onChange={(e) => setPieces(e.target.value)}
+                min="1"
+                max="20"
+              />
+            </div>
+
+            {/* Package Description */}
+            <div className="emp-api-form-row">
+              <label htmlFor="pdesc">Courier Description (Max 128 chars)</label>
+              <input
+                type="text"
+                id="pdesc"
+                className="emp-api-input"
+                style={{ textAlign: "left" }}
+                value={customDescription}
+                onChange={(e) => setCustomDescription(e.target.value)}
+                placeholder="Auto-generated if empty"
+                maxLength={128}
+              />
+            </div>
+
+            {/* Optional Dimensions */}
+            <div className="emp-api-form-row">
+              <label>Optional Dimensions (CM)</label>
               <div className="emp-api-dim-grid">
                 <input
                   type="text"
@@ -234,102 +320,72 @@ export default function DeliveryPrep() {
               </div>
             </div>
 
-            {/* Weight Setting */}
-            <div className="emp-api-form-row">
-              <label htmlFor="pweight">Weight (KG)</label>
-              <input
-                type="text"
-                id="pweight"
-                className="emp-api-input"
-                style={{ textAlign: "left" }}
-                value={packageWeight}
-                onChange={(e) => setWeight(e.target.value)}
-              />
-            </div>
-
-            {/* Pickup slot drop selection */}
-            <div className="emp-api-form-row">
-              <label htmlFor="pslot">Pickup Slot</label>
-              <select
-                id="pslot"
-                className="emp-api-select"
-                value={pickupSlot}
-                onChange={(e) => setPickupSlot(e.target.value)}
-              >
-                <option value="Today, 14:00 - 16:00 (Standard)">Today, 14:00 - 16:00 (Standard)</option>
-                <option value="Tomorrow, 09:00 - 12:00 (Morning)">Tomorrow, 09:00 - 12:00 (Morning)</option>
-                <option value="Tomorrow, 14:00 - 17:00 (Standard)">Tomorrow, 14:00 - 17:00 (Standard)</option>
-              </select>
-            </div>
-
-            {/* Buttons */}
+            {/* Submit to Citypak button */}
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "10px" }}>
-              <button className="emp-api-btn-primary" onClick={triggerWaybillGeneration} disabled={waybillStatus === "generating"}>
-                {waybillStatus === "generating" ? (
+              <button
+                className="emp-api-btn-primary"
+                onClick={handleSubmitToCitypak}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
                   <>
                     <div className="emp-spinner"></div>
-                    <span>Generating...</span>
+                    <span>Submitting to Citypak...</span>
                   </>
                 ) : (
                   <>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ width: 15, height: 15 }}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                     </svg>
-                    <span>Generate Waybill</span>
+                    <span>Submit to Citypak</span>
                   </>
                 )}
               </button>
 
-              <button className="emp-api-btn-solid" onClick={triggerPickupRequest} disabled={pickupStatus === "requesting"}>
-                {pickupStatus === "requesting" ? (
-                  <>
-                    <div className="emp-spinner"></div>
-                    <span>Requesting...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 15, height: 15 }}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span>Request Pickup</span>
-                  </>
-                )}
-              </button>
+              {shipmentResult && (
+                <button
+                  className="emp-api-btn-solid"
+                  onClick={handleOpenWaybill}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 15, height: 15 }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  <span>Print Citypak Thermal Waybill</span>
+                </button>
+              )}
             </div>
 
-            {/* Waybill PDF result preview panel */}
-            <div className="emp-waybill-preview-box">
-              {waybillStatus === "idle" && (
+            {/* Result Box */}
+            <div className="emp-waybill-preview-box" style={{ marginTop: "16px" }}>
+              {!shipmentResult ? (
                 <>
                   <svg className="emp-waybill-preview-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                   <p className="emp-waybill-preview-text">
-                    Waybill will be generated as a high-fidelity PDF. Ready for thermal printing.
+                    Enter package weight & pieces above, then click "Submit to Citypak" to register the shipment and obtain a real tracking number.
                   </p>
                 </>
-              )}
-
-              {waybillStatus === "generating" && (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
-                  <div className="emp-spinner" style={{ width: 28, height: 28 }}></div>
-                  <span style={{ fontSize: "12px", color: "var(--emp-text-muted)" }}>Contacting Citypak Courier Server...</span>
-                </div>
-              )}
-
-              {waybillStatus === "generated" && (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", textAlign: "center" }}>
                   <svg className="emp-waybill-preview-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: "var(--emp-neon-green)" }}>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--emp-neon-green)" }}>WAYBILL GENERATED SUCCESSFULLY</div>
-                  <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); alert("Opening waybill thermal print preview window..."); }}
-                    style={{ fontSize: "11px", color: "#ffffff", fontWeight: 700, textDecoration: "underline", textTransform: "uppercase" }}
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--emp-neon-green)" }}>
+                    SHIPMENT REGISTERED WITH CITYPAK
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#ffffff" }}>
+                    Citypak Order ID: <strong style={{ color: "var(--emp-neon-green)" }}>{shipmentResult.citypakOrderId}</strong>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#ffffff" }}>
+                    Primary Tracking #: <strong style={{ color: "var(--emp-neon-green)" }}>{shipmentResult.primaryTrackingNumber}</strong>
+                  </div>
+                  <button
+                    onClick={handleOpenWaybill}
+                    style={{ fontSize: "11px", color: "#ffffff", fontWeight: 700, textDecoration: "underline", textTransform: "uppercase", background: "none", border: "none", cursor: "pointer", marginTop: "4px" }}
                   >
-                    Open Waybill PDF (Zebra Print Layout)
-                  </a>
+                    Open PDF Thermal Waybill
+                  </button>
                 </div>
               )}
             </div>

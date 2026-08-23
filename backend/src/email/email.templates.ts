@@ -78,3 +78,41 @@ export function paymentExpiredEmail(params: {
     ),
   };
 }
+
+export function employeeWelcomeEmail(params: {
+  employeeName: string;
+  email: string;
+  tempPassword: string;
+  branchName: string;
+}): EmailContent {
+  const { employeeName, email, tempPassword, branchName } = params;
+  return {
+    subject: `Welcome to Vergo Wear - Employee Account Created`,
+    text: [
+      `Hi ${employeeName},`,
+      '',
+      `Welcome to Vergo Wear! An employee account has been created for you assigned to ${branchName}.`,
+      '',
+      `Your login credentials:`,
+      `Email: ${email}`,
+      `Temporary Password: ${tempPassword}`,
+      '',
+      `Please sign in at http://localhost:3000/auth/login and you will be prompted to set your permanent password.`,
+      '',
+      `Best regards,`,
+      `Vergo Wear Team`,
+    ].join('\n'),
+    html: wrapHtml(
+      `Welcome to Vergo Wear Staff Team`,
+      `
+      <p>Hi <strong>${employeeName}</strong>,</p>
+      <p>Welcome to Vergo Wear! An employee account has been created for you assigned to <strong>${branchName}</strong>.</p>
+      <div style="background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 8px; padding: 16px; margin: 16px 0; font-family: monospace;">
+        <p style="margin: 0 0 8px 0;"><strong>Login Email:</strong> ${email}</p>
+        <p style="margin: 0;"><strong>Temporary Password:</strong> <span style="color: #059669; font-weight: bold;">${tempPassword}</span></p>
+      </div>
+      <p>Please sign in at <a href="http://localhost:3000/auth/login" style="color: #059669; font-weight: bold;">Vergo Employee Sign In</a>. Upon initial login, you will be prompted to set a permanent password.</p>
+      `,
+    ),
+  };
+}

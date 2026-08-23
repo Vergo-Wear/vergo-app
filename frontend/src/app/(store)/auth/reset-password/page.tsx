@@ -8,9 +8,12 @@ import { createSupabaseClient, getSupabaseRedirectSession } from "@/lib/supabase
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  
+
   const [session, setSession] = useState<any>(null);
   const [isVerifying, setIsVerifying] = useState(true);
+  const [isRequiredTempReset, setIsRequiredTempReset] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +21,31 @@ export default function ResetPasswordPage() {
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const isRequired = urlParams.get("required") === "true";
+    const emailParam = urlParams.get("email") || "";
+
+    const rawUser = sessionStorage.getItem("vergo_user");
+    let storedUser: any = null;
+    if (rawUser) {
+      try {
+        storedUser = JSON.parse(rawUser);
+      } catch (e) {
+        console.error("Error parsing vergo_user session:", e);
+      }
+    }
+
+    const mustChange = isRequired || Boolean(storedUser?.mustChangePassword);
+
+    if (mustChange) {
+      setIsRequiredTempReset(true);
+      setUserEmail(emailParam || storedUser?.email || "");
+      setIsVerifying(false);
+      return;
+    }
+
     const client = createSupabaseClient();
     if (!client) {
       setIsVerifying(false);
@@ -26,7 +54,6 @@ export default function ResetPasswordPage() {
 
     const checkSession = async () => {
       try {
-        // Exchange authorization code or hash tokens in the URL for an active session
         const sess = await getSupabaseRedirectSession(client);
         setSession(sess);
       } catch (err: any) {
@@ -55,14 +82,6 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!session) {
-      setMessage({
-        text: "No active recovery session found. Please request a new recovery link.",
-        type: "error",
-      });
-      return;
-    }
-
     if (newPassword.length < 6) {
       setMessage({ text: "Password must be at least 6 characters.", type: "error" });
       return;
@@ -74,13 +93,88 @@ export default function ResetPasswordPage() {
     }
 
     setIsSubmitting(true);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+    // Handle Required Employee Temporary Password Reset
+    if (isRequiredTempReset) {
+      if (!tempPassword.trim()) {
+        setMessage({ text: "Please enter your temporary password.", type: "error" });
+        setIsSubmitting(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiUrl}/auth/employee/reset-temp-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: userEmail,
+            currentPassword: tempPassword.trim(),
+            newPassword: newPassword.trim(),
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to update temporary password.");
+        }
+
+        // Update local session with new tokens & set mustChangePassword = false
+        const rawUser = sessionStorage.getItem("vergo_user");
+        if (rawUser) {
+          try {
+            const parsed = JSON.parse(rawUser);
+            parsed.mustChangePassword = false;
+            sessionStorage.setItem("vergo_user", JSON.stringify(parsed));
+          } catch (e) {
+            console.error("Error updating local user session:", e);
+          }
+        }
+
+        if (data.accessToken) {
+          sessionStorage.setItem("vergo_access_token", data.accessToken);
+        }
+        if (data.refreshToken) {
+          sessionStorage.setItem("vergo_refresh_token", data.refreshToken);
+        }
+
+        window.dispatchEvent(new Event("vergo-auth-change"));
+
+        setMessage({
+          text: "Password changed successfully! Redirecting to Employee Dashboard...",
+          type: "success",
+        });
+
+        setTimeout(() => {
+          router.push("/employee");
+        }, 1500);
+      } catch (err: any) {
+        setMessage({
+          text: err.message || "Failed to update temporary password. Please check your credentials.",
+          type: "error",
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    // Standard Email Password Recovery Flow
+    if (!session) {
+      setMessage({
+        text: "No active recovery session found. Please request a new recovery link.",
+        type: "error",
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const client = createSupabaseClient();
       if (!client) {
         throw new Error("Authentication provider is currently offline.");
       }
 
-      // Update password inside user profile
       const { error } = await client.auth.updateUser({
         password: newPassword,
       });
@@ -94,7 +188,6 @@ export default function ResetPasswordPage() {
         type: "success",
       });
 
-      // Clear tokens and credentials on log out so they must log in using the new password
       await client.auth.signOut();
       sessionStorage.removeItem("vergo_is_logged_in");
       sessionStorage.removeItem("vergo_access_token");
@@ -155,15 +248,23 @@ export default function ResetPasswordPage() {
             />
           </div>
 
-          <h1 className="register-title">CREATE NEW PASSWORD</h1>
+          <h1 className="register-title">
+            {isRequiredTempReset ? "SET PERMANENT PASSWORD" : "CREATE NEW PASSWORD"}
+          </h1>
+
+          {isRequiredTempReset && (
+            <p style={{ color: "rgba(255, 255, 255, 0.7)", fontSize: "0.8rem", marginBottom: "20px", textAlign: "center", lineHeight: "1.5" }}>
+              Welcome! You signed in using a temporary password set by Admin. Please set a new permanent password to access the employee portal.
+            </p>
+          )}
 
           {isVerifying ? (
-          <div style={{ textAlign: "center", padding: "12px 0" }}>
+            <div style={{ textAlign: "center", padding: "12px 0" }}>
               <p style={{ color: "var(--accent-muted, #8e8e93)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em", animation: "pulse 1.5s infinite" }}>
                 Verifying recovery tokens...
               </p>
             </div>
-          ) : !session ? (
+          ) : !isRequiredTempReset && !session ? (
             <div style={{ textAlign: "center" }}>
               <div style={{ padding: "16px", border: "1px solid rgba(255, 77, 77, 0.2)", borderRadius: "8px", backgroundColor: "rgba(255, 77, 77, 0.05)", marginBottom: "24px" }}>
                 <p style={{ color: "#ff4d4d", fontSize: "0.8rem", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", lineHeight: "1.4" }}>
@@ -183,15 +284,32 @@ export default function ResetPasswordPage() {
             </div>
           ) : (
             <form className="register-form" onSubmit={handleSubmit}>
+              {/* Temporary Password Input (only shown when reset is required for new employee) */}
+              {isRequiredTempReset && (
+                <div className="input-group">
+                  <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
+                    TEMPORARY PASSWORD
+                  </label>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter current temporary password"
+                    value={tempPassword}
+                    onChange={(e) => setTempPassword(e.target.value)}
+                    className="custom-input"
+                    required
+                  />
+                </div>
+              )}
+
               {/* New Password Input */}
               <div className="input-group">
                 <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
-                  NEW PASSWORD
+                  NEW PERMANENT PASSWORD
                 </label>
                 <div className="password-input-wrapper">
                   <input
                     type={showPassword ? "text" : "password"}
-                    placeholder="Enter new password"
+                    placeholder="Enter new password (min. 6 chars)"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     style={{
@@ -229,7 +347,7 @@ export default function ResetPasswordPage() {
               {/* Confirm Password Input */}
               <div className="input-group">
                 <label className="input-label" style={{ display: "block", color: "var(--text-primary, #ffffff)", fontSize: "0.85rem", fontWeight: "600", marginBottom: "6px", textAlign: "left" }}>
-                  CONFIRM NEW PASSWORD
+                  CONFIRM NEW PERMANENT PASSWORD
                 </label>
                 <input
                   type={showPassword ? "text" : "password"}
@@ -260,7 +378,7 @@ export default function ResetPasswordPage() {
                   marginTop: "16px"
                 }}
               >
-                {isSubmitting ? "SAVING PASSWORD..." : "UPDATE PASSWORD"}
+                {isSubmitting ? "SAVING NEW PASSWORD..." : "SAVE & GO TO DASHBOARD"}
               </button>
             </form>
           )}

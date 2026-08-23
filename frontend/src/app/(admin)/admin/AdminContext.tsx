@@ -4,7 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 
 export interface InventoryItem { inventoryId?: string; sku: string; name: string; location: string; inStock: number; status: "VERIFYING" | "PENDING" | "PROCESSING" | "SHIPPED"; reorderLevel?: number }
 export interface StockAlert { id: string; sku: string; name: string; node: string; units: number; status: "critical" | "warning" }
-export interface EmployeeRank { id: string; rank: number; name: string; avatar: string; status: "ON SHIFT" | "OFF SHIFT"; parcels: number }
+export interface EmployeeRank { id: string; rank: number; name: string; avatar: string; status: "ON DUTY" | "ON BREAK" | "ON SHIFT" | "OFF SHIFT"; parcels: number }
 export interface DashboardStats { completedUnits: number; activeNodes: number; activeStaff: number; pendingShipments: number }
 export interface ToastNotification { id: string; message: string; type: "success" | "error" | "info" }
 export interface CustomerDistributionRow { district: string; city: string; customers: number; orders: number; revenue: number; percentage: number }
@@ -89,9 +89,27 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       })
       .then((data) => {
         setInventory(data.inventory.map((item: InventoryItem) => ({ ...item, status: item.inStock <= (item.reorderLevel || 0) ? "PENDING" : "PROCESSING" })));
-        setEmployees(data.employees.map((employee: { id: string; name: string; status: string }, index: number) => ({ id: employee.id, rank: index + 1, name: employee.name, avatar: employee.name.split(" ").map((part) => part[0]).join("").slice(0, 2), status: employee.status === "active" ? "ON SHIFT" : "OFF SHIFT", parcels: 0 })));
+        setEmployees(data.employees.map((employee: { id: string; name: string; status: string }, index: number) => ({ id: employee.id, rank: index + 1, name: employee.name, avatar: employee.name.split(" ").map((part) => part[0]).join("").slice(0, 2), status: employee.status === "active" ? "ON DUTY" : "ON BREAK", parcels: 0 })));
         setStats(data.stats);
         setAnalytics(data.analytics || EMPTY_ANALYTICS);
+
+        fetch(`${API_URL}/admin/employee-logistics`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((logistics) => {
+            if (Array.isArray(logistics) && logistics.length > 0) {
+              setEmployees(
+                logistics.map((emp: any, index: number) => ({
+                  id: emp.employeeId,
+                  rank: index + 1,
+                  name: emp.name,
+                  avatar: emp.name.split(" ").map((part: string) => part[0]).join("").slice(0, 2).toUpperCase(),
+                  status: emp.availabilityStatus === "AVAILABLE" ? "ON DUTY" : "ON BREAK",
+                  parcels: emp.metrics?.dispatchedCount || 0,
+                }))
+              );
+            }
+          })
+          .catch(() => null);
       })
       .catch((error: Error) => addNotification(error.message, "error"));
   }, []);

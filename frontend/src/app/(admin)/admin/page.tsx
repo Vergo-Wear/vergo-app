@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useAdmin, InventoryItem } from "./AdminContext";
+import ParcelAnalyticsGraph from "./analytics/ParcelAnalyticsGraph";
 
 export default function DashboardPage() {
   const {
@@ -72,6 +73,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 select-none">
+      {/* Citypak Falcon Parcel Monitoring & Analytics Graph */}
+      <ParcelAnalyticsGraph />
+
       {/* 4 STATS CARDS GRID */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Card 1: Completed Units */}
@@ -153,7 +157,7 @@ export default function DashboardPage() {
                   <div key={alert.id} className="flex justify-between items-start text-xs border-b border-[rgba(255,255,255,0.02)] pb-3 last:border-0 last:pb-0">
                     <div>
                       <div className="font-bold text-white mb-0.5">{alert.name}</div>
-                      <div className="text-[10px] text-[#8e8e93] font-mono-meta">NODE: {alert.node.replace("NODE_", "").replace("_", "-")}</div>
+                      <div className="text-[10px] text-[#8e8e93] font-mono-meta">LOCATION: {alert.node}</div>
                     </div>
                     <div className="text-[#ef4444] font-bold font-mono-meta text-right">
                       {alert.units} units
@@ -185,17 +189,23 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <div className="font-bold text-white">{emp.name}</div>
-                      {/* Interactive toggle for shifts */}
-                      <button
-                        onClick={() => toggleEmployeeShift(emp.id)}
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 tracking-wider transition-all cursor-pointer ${
-                          emp.status === "ON SHIFT"
-                            ? "bg-[#10b981]/15 text-[#10b981]"
-                            : "bg-white/5 text-[#8e8e93]"
+                      {/* Live Duty Availability Badge */}
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 tracking-wider uppercase inline-flex items-center gap-1 border ${
+                          emp.status === "ON DUTY"
+                            ? "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                            : "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30"
                         }`}
                       >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            emp.status === "ON DUTY"
+                              ? "bg-[#10b981] animate-pulse"
+                              : "bg-[#f59e0b]"
+                          }`}
+                        ></span>
                         {emp.status}
-                      </button>
+                      </span>
                     </div>
                   </div>
                   <div className="text-right">

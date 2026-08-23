@@ -331,12 +331,13 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
     setMessage(null);
+    window.dispatchEvent(new Event("vergo-auth-submitting"));
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
     try {
       let signinData: any = null;
-      let loginError: string | null = null;
+      let lastErrorMessage: string | null = null;
       
       // Step 1: Try Customer Signin
       try {
@@ -344,80 +345,71 @@ export default function LoginPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            emailOrPhone: formData.emailOrMobile,
-            password: formData.password,
+            emailOrPhone: formData.emailOrMobile.trim(),
+            password: formData.password.trim(),
           }),
         });
         
         const data = await res.json();
         if (res.ok) {
           signinData = data;
-        } else {
-          // If status is 403 (Forbidden) and message suggests role mismatch, we'll try employee
-          // Otherwise, if profile is blocked or details are wrong, we stop
-          if (res.status === 403 && data.message && data.message.includes("role")) {
-            // role mismatch, continue to employee signin
-          } else {
-            loginError = data.message || "Sign in failed.";
-          }
+        } else if (res.status !== 403) {
+          lastErrorMessage = data.message || "Invalid credentials.";
         }
       } catch (err: any) {
-        loginError = err.message || "Failed to contact auth service.";
+        lastErrorMessage = err.message;
       }
 
-      // Step 2: Try Employee Signin (if not authenticated and no other block errors)
-      if (!signinData && !loginError) {
+      // Step 2: Try Employee Signin
+      if (!signinData) {
         try {
           const res = await fetch(`${apiUrl}/auth/employee/signin`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              emailOrPhone: formData.emailOrMobile,
-              password: formData.password,
+              emailOrPhone: formData.emailOrMobile.trim(),
+              password: formData.password.trim(),
             }),
           });
           
           const data = await res.json();
           if (res.ok) {
             signinData = data;
-          } else {
-            if (res.status === 403 && data.message && data.message.includes("role")) {
-              // role mismatch, continue to admin signin
-            } else {
-              loginError = data.message || "Sign in failed.";
-            }
+          } else if (res.status !== 403) {
+            lastErrorMessage = data.message || "Invalid credentials.";
           }
         } catch (err: any) {
-          loginError = err.message || "Failed to contact auth service.";
+          lastErrorMessage = err.message;
         }
       }
 
-      // Step 3: Try Admin Signin (if not authenticated and no other block errors)
-      if (!signinData && !loginError) {
+      // Step 3: Try Admin Signin
+      if (!signinData) {
         try {
           const res = await fetch(`${apiUrl}/auth/admin/signin`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              emailOrPhone: formData.emailOrMobile,
-              password: formData.password,
+              emailOrPhone: formData.emailOrMobile.trim(),
+              password: formData.password.trim(),
             }),
           });
           
           const data = await res.json();
           if (res.ok) {
             signinData = data;
-          } else {
-            loginError = data.message || "Sign in failed.";
+          } else if (res.status !== 403) {
+            lastErrorMessage = data.message || "Invalid credentials.";
           }
         } catch (err: any) {
-          loginError = err.message || "Failed to contact auth service.";
+          lastErrorMessage = err.message;
         }
       }
 
-      // If we still don't have signinData, throw the error
+      // If we still don't have signinData, throw error and announce submitting done
       if (!signinData) {
-        throw new Error(loginError || "Invalid credentials.");
+        window.dispatchEvent(new Event("vergo-auth-submitting-done"));
+        throw new Error(lastErrorMessage || "Invalid email/phone number or password.");
       }
 
       // Step 4: Login succeeded! Now resolve the user's display name
@@ -454,6 +446,9 @@ export default function LoginPage() {
       if (!displayName) {
         displayName = userRole === "Admin" ? "Vergo Admin" : (signinData.user.email.split("@")[0].toUpperCase());
       }
+      const mustChangePassword = Boolean(
+        signinData.mustChangePassword || signinData.user?.mustChangePassword
+      );
 
       // Step 5: Store authentication details in localStorage
       sessionStorage.setItem("vergo_is_logged_in", "true");
@@ -467,12 +462,28 @@ export default function LoginPage() {
           email: signinData.user.email,
           avatarUrl: "/images/default-avatar.png",
           role: userRole,
+          mustChangePassword,
           ...databaseProfile,
         })
       );
 
       // Dispatch authentication change event to trigger Navbar update
       window.dispatchEvent(new Event("vergo-auth-change"));
+
+      if (userRole === "Employee" && mustChangePassword) {
+        setMessage({
+          text: "Temporary password detected. Please set your new password...",
+          type: "success",
+        });
+        setTimeout(() => {
+          router.push(
+            `/auth/reset-password?required=true&email=${encodeURIComponent(
+              signinData.user.email,
+            )}`,
+          );
+        }, 1000);
+        return;
+      }
 
       setMessage({ text: "Sign in successful! Redirecting...", type: "success" });
       

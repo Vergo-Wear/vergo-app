@@ -48,6 +48,20 @@ export class AuthController {
     return this.authService.signin(dto, 'Employee');
   }
 
+  @Post('employee/reset-temp-password')
+  @HttpCode(HttpStatus.OK)
+  async employeeResetTempPassword(
+    @Body()
+    dto: {
+      email: string;
+      currentPassword?: string;
+      newPassword?: string;
+      tempPassword?: string;
+    },
+  ) {
+    return this.authService.resetTempPassword(dto);
+  }
+
   /**
    * Authenticats an admin with email or phone number and password.
    */

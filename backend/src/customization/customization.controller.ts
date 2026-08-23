@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { CustomizationService } from './customization.service';
 import { UpdateCustomizationDto } from './dto/update-customization.dto';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
@@ -19,5 +19,10 @@ export class CustomizationController {
   @Roles('Admin')
   updateCustomization(@Body() dto: UpdateCustomizationDto) {
     return this.customizationService.updateCustomization(dto);
+  }
+
+  @Post('newsletter/subscribe')
+  subscribeNewsletter(@Body('email') email: string) {
+    return this.customizationService.subscribeNewsletter(email);
   }
 }

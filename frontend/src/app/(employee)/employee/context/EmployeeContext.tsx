@@ -133,6 +133,33 @@ interface EmployeeContextType {
   triggerWaybillGeneration: () => void;
   triggerPickupRequest: () => void;
   selectActiveDeliveryPrep: (id: string) => void;
+  submitCitypakShipment: (
+    orderId: string,
+    data: {
+      weightGrams: number;
+      numberOfPieces: number;
+      description?: string;
+      lengthCm?: number;
+      widthCm?: number;
+      heightCm?: number;
+    },
+  ) => Promise<any>;
+  printCitypakWaybill: (orderId: string) => Promise<void>;
+  requestCitypakPickup: (pickupData: {
+    orderIds: string[];
+    pickupAddressLine1: string;
+    pickupAddressLine2?: string;
+    pickupAddressLine3?: string;
+    pickupAddressLine4City: string;
+    pickupContactPerson: string;
+    pickupContactNumber1: string;
+    pickupFromDatetime: string;
+    pickupToDatetime: string;
+  }) => Promise<any>;
+  refreshCitypakTracking: (trackingNumber: string) => Promise<any>;
+  syncCitypakStatus: () => Promise<any>;
+  lastSyncTime: string | null;
+  fetchOrders: () => Promise<void>;
   addNotification: (
     title: string,
     message: string,
@@ -486,6 +513,189 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     window.location.href = "/auth/login";
   };
 
+  const fetchOrders = async () => {
+    const auth = token();
+    if (!auth) return;
+    try {
+      const res = await fetch(`${API_URL}/orders/manage`, {
+        headers: { Authorization: `Bearer ${auth}` },
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const rawOrders = await res.json();
+        setOrders(
+          (rawOrders as RawOrder[])
+            .map(mapOrder)
+            .filter((order): order is OrderItem => order !== null),
+        );
+      }
+    } catch (err) {
+      console.error("Error refreshing orders:", err);
+    }
+  };
+
+  const submitCitypakShipment = async (
+    orderId: string,
+    data: {
+      weightGrams: number;
+      numberOfPieces: number;
+      description?: string;
+      lengthCm?: number;
+      widthCm?: number;
+      heightCm?: number;
+    },
+  ) => {
+    const auth = token();
+    if (!auth) {
+      addNotification("Session Expired", "Please sign in again.", "error");
+      throw new Error("Session expired");
+    }
+    setWaybillStatus("generating");
+    try {
+      const res = await fetch(`${API_URL}/integrations/citypak/shipments/${orderId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${auth}`,
+        },
+        body: JSON.stringify(data),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setWaybillStatus("idle");
+        throw new Error(body.message || "Failed to create Citypak shipment.");
+      }
+      setWaybillStatus("generated");
+      addNotification(
+        "Citypak Shipment Created",
+        `Tracking #${body.primaryTrackingNumber || body.waybills?.[0]}`,
+        "success",
+      );
+      await fetchOrders();
+      return body;
+    } catch (err: any) {
+      setWaybillStatus("idle");
+      addNotification(
+        "Shipment Failed",
+        err.message || "Unable to submit Citypak shipment.",
+        "error",
+      );
+      throw err;
+    }
+  };
+
+  const printCitypakWaybill = async (orderId: string) => {
+    const auth = token();
+    if (!auth) {
+      addNotification("Session Expired", "Please sign in again.", "error");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/integrations/citypak/waybills/order/${orderId}`, {
+        headers: { Authorization: `Bearer ${auth}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Failed to retrieve waybill PDF.");
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
+    } catch (err: any) {
+      addNotification(
+        "Waybill Error",
+        err.message || "Could not print Citypak waybill.",
+        "error",
+      );
+    }
+  };
+
+  const requestCitypakPickup = async (pickupData: {
+    orderIds: string[];
+    pickupAddressLine1: string;
+    pickupAddressLine2?: string;
+    pickupAddressLine3?: string;
+    pickupAddressLine4City: string;
+    pickupContactPerson: string;
+    pickupContactNumber1: string;
+    pickupFromDatetime: string;
+    pickupToDatetime: string;
+  }) => {
+    const auth = token();
+    if (!auth) throw new Error("Session expired");
+    setPickupStatus("requesting");
+    try {
+      const res = await fetch(`${API_URL}/integrations/citypak/pickups`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${auth}`,
+        },
+        body: JSON.stringify(pickupData),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setPickupStatus("idle");
+        throw new Error(body.message || "Failed to request Citypak pickup.");
+      }
+      setPickupStatus("requested");
+      addNotification("Pickup Requested", body.message, "success");
+      await fetchOrders();
+      return body;
+    } catch (err: any) {
+      setPickupStatus("idle");
+      addNotification(
+        "Pickup Failed",
+        err.message || "Unable to request Citypak pickup.",
+        "error",
+      );
+      throw err;
+    }
+  };
+
+  const refreshCitypakTracking = async (trackingNumber: string) => {
+    const auth = token();
+    if (!auth) throw new Error("Session expired");
+    try {
+      const res = await fetch(
+        `${API_URL}/integrations/citypak/track/${encodeURIComponent(trackingNumber)}`,
+        {
+          headers: { Authorization: `Bearer ${auth}` },
+        },
+      );
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message || "Failed to track shipment.");
+      await fetchOrders();
+      return body;
+    } catch (err: any) {
+      addNotification("Tracking Error", err.message || "Unable to refresh tracking.", "error");
+      throw err;
+    }
+  };
+
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+
+  const syncCitypakStatus = async () => {
+    const auth = token();
+    if (!auth) throw new Error("Session expired");
+    try {
+      const res = await fetch(`${API_URL}/integrations/citypak/sync`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${auth}` },
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message || "Sync failed.");
+      const syncTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastSyncTime(syncTime);
+      addNotification("Citypak Synced", `Updated active courier statuses at ${syncTime}.`, "success");
+      await fetchOrders();
+      return body;
+    } catch (err: any) {
+      addNotification("Sync Error", err.message || "Failed to sync Citypak status.", "error");
+      throw err;
+    }
+  };
+
   const value: EmployeeContextType = {
     searchQuery,
     setSearchQuery,
@@ -537,6 +747,13 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     triggerWaybillGeneration: () => setWaybillStatus("generated"),
     triggerPickupRequest: () => setPickupStatus("requested"),
     selectActiveDeliveryPrep: setActiveDeliveryPrepId,
+    submitCitypakShipment,
+    printCitypakWaybill,
+    requestCitypakPickup,
+    refreshCitypakTracking,
+    syncCitypakStatus,
+    lastSyncTime,
+    fetchOrders,
     addNotification,
     clearNotifications: () => setNotifications([]),
     requestStockFromAdmin: () =>
