@@ -37,9 +37,10 @@ model Profiles {
   id         String    @id @db.Uuid
   roleId     String    @map("role_id") @db.Uuid
   username   String?   @unique
-  status     String?   @default("active")
-  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  status             String?   @default("active")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt         DateTime? @map("last_seen_at") @db.Timestamptz(6)
 
   authUser              AuthUser          @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   role                  Role              @relation(fields: [roleId], references: [roleId], onDelete: Restrict, onUpdate: NoAction)
@@ -145,6 +146,9 @@ model Employee {
   commissions    EmployeeCommission[]
   purchaseOrders PurchaseOrder[]
 
+  submittedDeliveries Delivery[]              @relation("DeliverySubmittedBy")
+  requestedPickups    CourierPickupRequest[]  @relation("PickupRequestedBy")
+
   @@map("employee")
   @@schema("public")
 }
@@ -155,9 +159,11 @@ model Branch {
   address  String
   phone    String
 
-  employees Employee[]
-  inventory Inventory[]
-  orders    Orders[]
+  employees       Employee[]
+  inventory       Inventory[]
+  orders          Orders[]
+  shipperProfiles CourierShipperProfile[]
+  pickupRequests  CourierPickupRequest[]
 
   @@map("branch")
   @@schema("public")
@@ -398,22 +404,149 @@ model SalaryRecord {
 }
 
 model Delivery {
-  deliveryId       String    @id @default(dbgenerated("gen_random_uuid()")) @map("delivery_id") @db.Uuid
-  orderId          String    @map("order_id") @db.Uuid
-  deliveryStatus   String    @default("Pending") @map("delivery_status")
-  deliveredAt      DateTime? @map("delivered_at") @db.Timestamptz(6)
-  courierName      String    @default("Koombiyo") @map("courier_name")
-  courierReference String?   @map("courier_reference")
-  waybillNumber    String?   @map("waybill_number")
-  submissionStatus String    @default("Pending") @map("submission_status")
-  submittedAt      DateTime? @map("submitted_at") @db.Timestamptz(6)
-  failureReason    String?   @map("failure_reason")
-  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deliveryId            String    @id @default(dbgenerated("gen_random_uuid()")) @map("delivery_id") @db.Uuid
+  orderId               String    @map("order_id") @db.Uuid
+  deliveryStatus        String    @default("Pending") @map("delivery_status")
+  deliveredAt           DateTime? @map("delivered_at") @db.Timestamptz(6)
+  courierName           String    @default("Citypak") @map("courier_name")
+  courierReference      String?   @map("courier_reference")
+  waybillNumber         String?   @map("waybill_number")
+  submissionStatus      String    @default("Pending") @map("submission_status")
+  submittedAt           DateTime? @map("submitted_at") @db.Timestamptz(6)
+  failureReason         String?   @map("failure_reason")
+  shipmentReference     String?   @map("shipment_reference")
+  externalOrderId       String?   @map("external_order_id")
+  packageWeightGrams    Int?      @map("package_weight_grams")
+  numberOfPieces        Int       @default(1) @map("number_of_pieces")
+  packageDescription    String?   @map("package_description")
+  codAmount             Decimal   @default(0) @map("cod_amount") @db.Decimal
+  courierStatus         String?   @map("courier_status")
+  courierStatusType     String?   @map("courier_status_type")
+  lastTrackingSyncAt    DateTime? @map("last_tracking_sync_at") @db.Timestamptz(6)
+  podImageUrl           String?   @map("pod_image_url")
+  receiverName          String?   @map("receiver_name")
+  receiverNic           String?   @map("receiver_nic")
+  submittedByEmployeeId String?   @map("submitted_by_employee_id") @db.Uuid
+  packageLengthCm       Decimal?  @map("package_length_cm") @db.Decimal
+  packageWidthCm        Decimal?  @map("package_width_cm") @db.Decimal
+  packageHeightCm       Decimal?  @map("package_height_cm") @db.Decimal
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  order Orders @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  order            Orders                  @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+  submittedBy      Employee?               @relation("DeliverySubmittedBy", fields: [submittedByEmployeeId], references: [employeeId], onDelete: SetNull)
+  waybills         DeliveryWaybill[]
+  trackingEvents   DeliveryTrackingEvent[]
+  pickupDeliveries CourierPickupDelivery[]
 
   @@unique([orderId])
   @@map("delivery")
+  @@schema("public")
+}
+
+model CourierShipperProfile {
+  profileId        String   @id @default(dbgenerated("gen_random_uuid()")) @map("profile_id") @db.Uuid
+  courierName      String   @default("Citypak") @map("courier_name")
+  branchId         String?  @map("branch_id") @db.Uuid
+  shipperName      String   @map("shipper_name")
+  addressLine1     String   @map("address_line_1")
+  addressLine2     String?  @map("address_line_2")
+  addressLine3     String?  @map("address_line_3")
+  addressLine4City String   @map("address_line_4_city")
+  contactName      String   @map("contact_name")
+  contactNumber1   String   @map("contact_number_1")
+  contactNumber2   String?  @map("contact_number_2")
+  isDefault        Boolean  @default(true) @map("is_default")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  branch Branch? @relation(fields: [branchId], references: [branchId], onDelete: SetNull)
+
+  @@map("courier_shipper_profile")
+  @@schema("public")
+}
+
+model DeliveryWaybill {
+  waybillId            String   @id @default(dbgenerated("gen_random_uuid()")) @map("waybill_id") @db.Uuid
+  deliveryId           String   @map("delivery_id") @db.Uuid
+  trackingNumber       String   @unique @map("tracking_number")
+  reference            String?
+  deliveryFacilityCode String?  @map("delivery_facility_code")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  delivery       Delivery                @relation(fields: [deliveryId], references: [deliveryId], onDelete: Cascade)
+  trackingEvents DeliveryTrackingEvent[]
+
+  @@index([deliveryId])
+  @@map("delivery_waybill")
+  @@schema("public")
+}
+
+model DeliveryTrackingEvent {
+  eventId        String   @id @default(dbgenerated("gen_random_uuid()")) @map("event_id") @db.Uuid
+  deliveryId     String   @map("delivery_id") @db.Uuid
+  waybillId      String?  @map("waybill_id") @db.Uuid
+  trackingNumber String   @map("tracking_number")
+  status         String
+  statusType     String?  @map("status_type")
+  statusCode     String?  @map("status_code")
+  description    String?
+  reason         String?
+  location       String?
+  eventAt        DateTime @map("event_at") @db.Timestamptz(6)
+  source         String   @default("TRACKING_API")
+  externalItemId Int?     @map("external_item_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  delivery Delivery         @relation(fields: [deliveryId], references: [deliveryId], onDelete: Cascade)
+  waybill  DeliveryWaybill? @relation(fields: [waybillId], references: [waybillId], onDelete: SetNull)
+
+  @@unique([trackingNumber, status, eventAt])
+  @@index([deliveryId])
+  @@map("delivery_tracking_event")
+  @@schema("public")
+}
+
+model CourierPickupRequest {
+  pickupRequestId             String   @id @default(dbgenerated("gen_random_uuid()")) @map("pickup_request_id") @db.Uuid
+  courierName                 String   @default("Citypak") @map("courier_name")
+  externalPickupId            Int?     @map("external_pickup_id")
+  requestedByEmployeeId       String?  @map("requested_by_employee_id") @db.Uuid
+  branchId                    String?  @map("branch_id") @db.Uuid
+  pickupAddressLine1          String   @map("pickup_address_line_1")
+  pickupAddressLine2          String?  @map("pickup_address_line_2")
+  pickupAddressLine3          String?  @map("pickup_address_line_3")
+  pickupAddressLine4City      String   @map("pickup_address_line_4_city")
+  pickupContactPerson         String   @map("pickup_contact_person")
+  pickupContactNumber1        String   @map("pickup_contact_number_1")
+  estimatedPickupWeightGrams Int      @map("estimated_pickup_weight_grams")
+  estimatedWaybillCount       Int      @map("estimated_waybill_count")
+  pickupFromDatetime          DateTime @map("pickup_from_datetime") @db.Timestamptz(6)
+  pickupToDatetime            DateTime @map("pickup_to_datetime") @db.Timestamptz(6)
+  status                      String   @default("Requested")
+  submittedAt                 DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  failureReason               String?  @map("failure_reason")
+  createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  deliveries  CourierPickupDelivery[]
+  requestedBy Employee?               @relation("PickupRequestedBy", fields: [requestedByEmployeeId], references: [employeeId], onDelete: SetNull)
+  branch      Branch?                 @relation(fields: [branchId], references: [branchId], onDelete: SetNull)
+
+  @@map("courier_pickup_request")
+  @@schema("public")
+}
+
+model CourierPickupDelivery {
+  pickupRequestId String   @map("pickup_request_id") @db.Uuid
+  deliveryId      String   @map("delivery_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  pickupRequest CourierPickupRequest @relation(fields: [pickupRequestId], references: [pickupRequestId], onDelete: Cascade)
+  delivery      Delivery             @relation(fields: [deliveryId], references: [deliveryId], onDelete: Cascade)
+
+  @@id([pickupRequestId, deliveryId])
+  @@map("courier_pickup_delivery")
   @@schema("public")
 }
 

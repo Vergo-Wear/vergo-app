@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { createSupabaseClient } from "@/lib/supabase";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
@@ -37,12 +37,33 @@ export default function Navbar({
   const { cartCount } = useCart();
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   const [currentUser, setCurrentUser] = useState<NavbarProps["user"]>(user);
   const [loggedInState, setLoggedInState] = useState<boolean>(isLoggedIn);
   const [isCustomer, setIsCustomer] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [hideNavbar, setHideNavbar] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && pathname === "/auth/reset-password") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isRequired = urlParams.get("required") === "true";
+      const rawUser = sessionStorage.getItem("vergo_user");
+      let storedUser: any = null;
+      if (rawUser) {
+        try {
+          storedUser = JSON.parse(rawUser);
+        } catch (e) {}
+      }
+      if (isRequired || Boolean(storedUser?.mustChangePassword)) {
+        setHideNavbar(true);
+        return;
+      }
+    }
+    setHideNavbar(false);
+  }, [pathname]);
 
   useEffect(() => {
     const loadAuthState = () => {
@@ -73,11 +94,23 @@ export default function Navbar({
       loadAuthState();
     };
 
+    const handleAuthSubmitting = () => {
+      setHideNavbar(true);
+    };
+
+    const handleAuthSubmittingDone = () => {
+      setHideNavbar(false);
+    };
+
     window.addEventListener("vergo-auth-change", handleAuthChange);
+    window.addEventListener("vergo-auth-submitting", handleAuthSubmitting);
+    window.addEventListener("vergo-auth-submitting-done", handleAuthSubmittingDone);
     window.addEventListener("storage", handleAuthChange);
 
     return () => {
       window.removeEventListener("vergo-auth-change", handleAuthChange);
+      window.removeEventListener("vergo-auth-submitting", handleAuthSubmitting);
+      window.removeEventListener("vergo-auth-submitting-done", handleAuthSubmittingDone);
       window.removeEventListener("storage", handleAuthChange);
     };
   }, [user, isLoggedIn]);
@@ -125,6 +158,8 @@ export default function Navbar({
   }, [showDropdown]);
 
   const navLinks = links || defaultLinks;
+
+  if (hideNavbar) return null;
 
   return (
     <nav className="navbar">
@@ -197,7 +232,7 @@ export default function Navbar({
             </Link>
           )}
 
-          {loggedInState ? (
+          {loggedInState && isCustomer ? (
             <div className="user-profile-menu">
               <div
                 className="user-initials"
@@ -222,6 +257,7 @@ export default function Navbar({
                 <span className="user-email">{currentUser?.email || "user@vergowear.com"}</span>
                 <hr className="dropdown-divider" />
                 <Link href="/profile" className="dropdown-item" onClick={() => setShowDropdown(false)}>My Account</Link>
+                <Link href="/profile/orders" className="dropdown-item" onClick={() => setShowDropdown(false)}>Order History</Link>
                 <button
                   onClick={async () => {
                     setShowDropdown(false);
@@ -243,6 +279,18 @@ export default function Navbar({
                 </button>
               </div>
             </div>
+          ) : loggedInState && !isCustomer ? (
+            <Link
+              href={
+                String((currentUser as any)?.role || "").toLowerCase() === "employee"
+                  ? "/employee"
+                  : "/admin"
+              }
+              className="login-btn"
+              style={{ background: "#00ff9d", color: "#000", fontWeight: 700 }}
+            >
+              PORTAL
+            </Link>
           ) : (
             <>
               <Link href="/auth/register" className="nav-register-link">
@@ -299,6 +347,11 @@ export default function Navbar({
               <li>
                 <Link href="/profile" onClick={() => setIsOpen(false)}>
                   MY ACCOUNT
+                </Link>
+              </li>
+              <li>
+                <Link href="/profile/orders" onClick={() => setIsOpen(false)}>
+                  ORDER HISTORY
                 </Link>
               </li>
               <li>

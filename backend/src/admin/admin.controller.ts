@@ -12,6 +12,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -37,6 +38,7 @@ import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { EmployeesService } from '../employees/employees.service';
 import { CreateEmployeeAccountDto } from '../employees/dto/create-employee-account.dto';
+import { UpdateEmployeeDto } from '../employees/dto/update-employee.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('admin')
@@ -237,5 +239,50 @@ export class AdminController {
   @Delete('employees/:id')
   removeEmployee(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.employeesService.removeEmployeeAccount(id);
+  }
+
+  @Patch('employees/:id')
+  updateEmployee(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateEmployeeDto,
+  ) {
+    return this.employeesService.update(id, dto);
+  }
+
+  @Get('parcel-analytics')
+  getParcelAnalytics(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.adminService.getParcelAnalytics(from, to);
+  }
+
+  @Get('employee-logistics')
+  getEmployeeLogistics() {
+    return this.adminService.getCentralizedEmployeeLogistics();
+  }
+
+  @Get('branches/:branchId/shipper-profile')
+  getBranchShipperProfile(
+    @Param('branchId', new ParseUUIDPipe({ version: '4' })) branchId: string,
+  ) {
+    return this.adminService.getBranchShipperProfile(branchId);
+  }
+
+  @Post('branches/:branchId/shipper-profile')
+  upsertBranchShipperProfile(
+    @Param('branchId', new ParseUUIDPipe({ version: '4' })) branchId: string,
+    @Body() dto: {
+      shipperName: string;
+      addressLine1: string;
+      addressLine2?: string;
+      addressLine3?: string;
+      addressLine4City: string;
+      contactName: string;
+      contactNumber1: string;
+      contactNumber2?: string;
+    },
+  ) {
+    return this.adminService.upsertBranchShipperProfile(branchId, dto);
   }
 }

@@ -55,4 +55,61 @@ export class CustomizationService {
       throw error;
     }
   }
+
+  async subscribeNewsletter(email: string) {
+    if (!email || !email.includes('@')) {
+      return { status: 'error', message: 'Please provide a valid email address.' };
+    }
+
+    const normalized = email.trim().toLowerCase();
+    const subscribersPath = path.resolve(process.cwd(), 'src/customization/subscribers.json');
+
+    let subscribers: Array<{ email: string; subscribedAt: string }> = [];
+    try {
+      if (fs.existsSync(subscribersPath)) {
+        const raw = fs.readFileSync(subscribersPath, 'utf8');
+        subscribers = JSON.parse(raw);
+      }
+    } catch (err) {
+      this.logger.error('Error reading subscribers file:', err);
+    }
+
+    const exists = subscribers.some(s => s.email.toLowerCase() === normalized);
+    if (exists) {
+      return {
+        status: 'already_subscribed',
+        message: 'This email is already registered on our customer list.',
+      };
+    }
+
+    // Save locally
+    subscribers.push({ email: normalized, subscribedAt: new Date().toISOString() });
+    try {
+      fs.mkdirSync(path.dirname(subscribersPath), { recursive: true });
+      fs.writeFileSync(subscribersPath, JSON.stringify(subscribers, null, 2), 'utf8');
+    } catch (err) {
+      this.logger.error('Error saving subscriber locally:', err);
+    }
+
+    // Submit to Google Form
+    try {
+      const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLScF53RVDt07H3U9TJKbpzKsW8fVLxS9jL2h14ihgO-YB3TtCg/formResponse';
+      const body = new URLSearchParams();
+      body.append('entry.2064532578', normalized);
+
+      await fetch(formUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+      this.logger.log(`Successfully added email ${normalized} to Google Form / Sheet.`);
+    } catch (err) {
+      this.logger.error('Error submitting email to Google Form:', err);
+    }
+
+    return {
+      status: 'success',
+      message: 'You have been added to our customer list!',
+    };
+  }
 }

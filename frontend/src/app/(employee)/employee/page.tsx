@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useEmployee, OrderItem } from "./context/EmployeeContext";
 
@@ -20,13 +20,73 @@ export default function EmployeeDashboard() {
   // Selected order details for popup modal
   const [selectedDetailsOrder, setSelectedDetailsOrder] = useState<OrderItem | null>(null);
 
+  // Dynamic Logged-in Employee Profile State
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  useEffect(() => {
+    const localUserRaw = typeof window !== "undefined" ? sessionStorage.getItem("vergo_user") : null;
+    const localUser = localUserRaw ? JSON.parse(localUserRaw) : null;
+    const userId = localUser?.id || localUser?.profileId;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+    if (userId) {
+      fetch(`${apiUrl}/employees/profile/${userId}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) setProfileData(data);
+        })
+        .catch((err) => console.warn("Failed to fetch employee profile:", err))
+        .finally(() => setLoadingProfile(false));
+    } else {
+      setLoadingProfile(false);
+    }
+  }, []);
+
+  const localUserRaw = typeof window !== "undefined" ? sessionStorage.getItem("vergo_user") : null;
+  const localUser = localUserRaw ? JSON.parse(localUserRaw) : null;
+
+  const employeeName = profileData?.firstName && profileData?.lastName
+    ? `${profileData.firstName} ${profileData.lastName}`
+    : localUser?.name || "Employee";
+
+  const employeeRole = profileData?.position || localUser?.position || "Fulfillment Specialist";
+
+  const employeeId = profileData?.employeeId
+    ? `EMP-${profileData.employeeId.slice(0, 8).toUpperCase()}`
+    : "EMP-VERGO";
+
+  const branchName = profileData?.branch?.name || localUser?.branchName || "Main Distribution Hub";
+
+  const joinedDate = profileData?.hireDate
+    ? new Date(profileData.hireDate).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "Active Staff Member";
+
+  const commissionText = profileData?.commissionPerParcel && Number(profileData.commissionPerParcel) > 0
+    ? `${Number(profileData.commissionPerParcel)}% / parcel`
+    : "Standard Base";
+
+  const phone = profileData?.phone || localUser?.phone || "N/A";
+  const email = profileData?.profile?.authUser?.email || localUser?.email || "N/A";
+
   // Filter tasks that are pending
   const pendingTasks = pickingQueue.filter(t => t.status === "pending").slice(0, 5);
 
-  // Leaderboard data
+  // Dynamic Leaderboard data
+  const userInitials = employeeName
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
   const leaderboard = [
     { rank: 1, name: "Elena S.", role: "Night Shift Lead", items: 1492, isMe: false, initials: "ES" },
-    { rank: 2, name: "Mark V. (You)", role: "Senior Picker", items: dailyTotal, isMe: true, initials: "MV" },
+    { rank: 2, name: `${employeeName} (You)`, role: employeeRole, items: dailyTotal, isMe: true, initials: userInitials },
     { rank: 3, name: "James K.", role: "Warehouse Assoc.", items: 1156, isMe: false, initials: "JK" },
   ].sort((a, b) => b.items - a.items);
 
@@ -35,14 +95,14 @@ export default function EmployeeDashboard() {
     item.rank = index + 1;
   });
 
-  // Employee Metadata
+  // Employee Metadata for PDF Report
   const employeeInfo = {
-    name: "Vergo Mark",
-    role: "Senior Picker & Fulfillment Specialist",
-    id: "EMP-40992",
-    zone: "Sector A-12 / A-15",
-    joinedDate: "January 12, 2026",
-    shift: "Night Shift (10:00 PM - 06:00 AM)",
+    name: employeeName,
+    role: employeeRole,
+    id: employeeId,
+    zone: `${branchName} / Sector A-12`,
+    joinedDate: joinedDate,
+    shift: "Active Shift",
     accuracy: "99.8%"
   };
 
@@ -211,9 +271,9 @@ export default function EmployeeDashboard() {
       <div className="emp-page-header">
         <div className="emp-page-title-group">
           <h1>Employee Dashboard</h1>
-          <p>Warehouse Zone A-12 | Active Shift</p>
+          <p>{branchName} | Active Shift</p>
         </div>
-        
+
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button
             className="emp-prep-btn-secondary"
@@ -222,20 +282,189 @@ export default function EmployeeDashboard() {
               alignItems: "center",
               gap: "6px",
               padding: "8px 14px",
-              fontSize: "12px"
+              fontSize: "12px",
             }}
             onClick={handleDownloadPDFReport}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ width: 14, height: 14 }}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              style={{ width: 14, height: 14 }}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+              />
             </svg>
             <span>Download Report</span>
           </button>
-          
+
           <div className="emp-system-status">
             <span>SYSTEM STATUS</span>
-            <span className={`emp-status-dot ${systemStatus !== "Operational" ? "degraded" : ""}`}></span>
-            <span style={{ color: "#ffffff", fontWeight: 700 }}>{systemStatus}</span>
+            <span
+              className={`emp-status-dot ${systemStatus !== "Operational" ? "degraded" : ""}`}
+            ></span>
+            <span style={{ color: "#ffffff", fontWeight: 700 }}>
+              {systemStatus}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Logged-in Employee Summary Banner Card */}
+      <div
+        className="emp-card"
+        style={{
+          marginBottom: "24px",
+          background:
+            "linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(20, 20, 23, 0.95) 100%)",
+          border: "1px solid rgba(16, 185, 129, 0.2)",
+          padding: "20px 24px",
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "20px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div
+            style={{
+              width: "50px",
+              height: "50px",
+              borderRadius: "12px",
+              background: "rgba(16, 185, 129, 0.15)",
+              border: "1.5px solid rgba(16, 185, 129, 0.4)",
+              color: "#10b981",
+              fontWeight: 800,
+              fontSize: "17px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 4px 12px rgba(16, 185, 129, 0.15)",
+            }}
+          >
+            {userInitials}
+          </div>
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "17px",
+                  fontWeight: 800,
+                  color: "#ffffff",
+                  margin: 0,
+                }}
+              >
+                {employeeName}
+              </h2>
+              <span
+                className="emp-badge"
+                style={{
+                  backgroundColor: "rgba(16, 185, 129, 0.15)",
+                  color: "#10b981",
+                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                }}
+              >
+                {employeeRole}
+              </span>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontFamily: "monospace",
+                  color: "var(--emp-text-muted)",
+                  background: "rgba(255,255,255,0.05)",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                }}
+              >
+                {employeeId}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--emp-text-muted)",
+                marginTop: "4px",
+                display: "flex",
+                gap: "16px",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                Branch: <strong style={{ color: "#ffffff" }}>{branchName}</strong>
+              </span>
+              <span>
+                Email: <strong style={{ color: "#ffffff" }}>{email}</strong>
+              </span>
+              <span>
+                Phone:{" "}
+                <strong
+                  style={{ color: "#ffffff", fontFamily: "monospace" }}
+                >
+                  {phone}
+                </strong>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+          <div style={{ textAlign: "right" }}>
+            <span
+              style={{
+                fontSize: "9px",
+                textTransform: "uppercase",
+                color: "var(--emp-text-muted)",
+                fontWeight: 700,
+                letterSpacing: "0.5px",
+                display: "block",
+              }}
+            >
+              COMMISSION RATE
+            </span>
+            <span
+              style={{ fontSize: "14px", fontWeight: 800, color: "#10b981" }}
+            >
+              {commissionText}
+            </span>
+          </div>
+          <div
+            style={{
+              width: "1px",
+              height: "28px",
+              background: "var(--emp-border)",
+            }}
+          ></div>
+          <div style={{ textAlign: "right" }}>
+            <span
+              style={{
+                fontSize: "9px",
+                textTransform: "uppercase",
+                color: "var(--emp-text-muted)",
+                fontWeight: 700,
+                letterSpacing: "0.5px",
+                display: "block",
+              }}
+            >
+              JOINED DATE
+            </span>
+            <span
+              style={{ fontSize: "13px", fontWeight: 700, color: "#ffffff" }}
+            >
+              {joinedDate}
+            </span>
           </div>
         </div>
       </div>

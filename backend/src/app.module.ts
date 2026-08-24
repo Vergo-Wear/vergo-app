@@ -20,12 +20,17 @@ import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { CustomizationModule } from './customization/customization.module';
 import { StockReservationModule } from './stock-reservation/stock-reservation.module';
+import { CitypakModule } from './integrations/citypak/citypak.module';
+
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     UserRoleModule,
     ProductCatalogueModule,
@@ -44,6 +49,7 @@ import { StockReservationModule } from './stock-reservation/stock-reservation.mo
     NotificationsModule,
     CustomizationModule,
     StockReservationModule,
+    CitypakModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,7 +1,28 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useEmployee } from "../context/EmployeeContext";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
+
+interface EmployeeProfileData {
+  employeeId?: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  position?: string;
+  address?: string;
+  commissionPerParcel?: number | string;
+  hireDate?: string;
+  branch?: {
+    name?: string;
+    address?: string;
+  };
+  profile?: {
+    authUser?: {
+      email?: string;
+    };
+  };
+}
 
 export default function EmployeeProfile() {
   const {
@@ -9,38 +30,90 @@ export default function EmployeeProfile() {
     dailyTotal,
     efficiency,
     preparedCODTotal,
-    preparedBankTotal
+    preparedBankTotal,
   } = useEmployee();
 
-  // Employee Metadata
+  const [profileData, setProfileData] = useState<EmployeeProfileData | null>(null);
+  const [localUser, setLocalUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const rawUser = sessionStorage.getItem("vergo_user");
+    let parsedUser: any = null;
+    if (rawUser) {
+      try {
+        parsedUser = JSON.parse(rawUser);
+        setLocalUser(parsedUser);
+      } catch (e) {
+        console.error("Error reading vergo_user session:", e);
+      }
+    }
+
+    const userId = parsedUser?.id;
+    if (userId) {
+      authenticatedFetch(`/employees/profile/${userId}`)
+        .then(async (res) => {
+          if (res && res.ok) {
+            const data = await res.json();
+            setProfileData(data);
+          }
+        })
+        .catch((err) => console.error("Error fetching employee profile:", err))
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  // Compute dynamic employee metadata
+  const firstName = profileData?.firstName || localUser?.firstName || localUser?.name?.split(" ")[0] || "Employee";
+  const lastName = profileData?.lastName || localUser?.lastName || localUser?.name?.split(" ").slice(1).join(" ") || "";
+  const fullName = `${firstName} ${lastName}`.trim() || "Vergo Staff Member";
+  const initials = `${firstName[0] || "E"}${lastName[0] || "M"}`.toUpperCase();
+
   const employeeInfo = {
-    name: "Vergo Mark",
-    role: "Senior Picker & Fulfillment Specialist",
-    id: "EMP-40992",
-    zone: "Sector A-12 / A-15",
-    joinedDate: "January 12, 2026",
-    shift: "Night Shift (10:00 PM - 06:00 AM)",
-    accuracy: "99.8%"
+    name: fullName,
+    role: profileData?.position || localUser?.position || "Fulfillment Specialist",
+    id: profileData?.employeeId
+      ? `EMP-${profileData.employeeId.slice(0, 8).toUpperCase()}`
+      : "EMP-VERGO",
+    email: profileData?.profile?.authUser?.email || localUser?.email || "N/A",
+    phone: profileData?.phone || localUser?.phone || "N/A",
+    branch: profileData?.branch?.name || localUser?.branchName || "Main Distribution Hub",
+    branchAddress: profileData?.branch?.address || "Headquarters",
+    joinedDate: profileData?.hireDate
+      ? new Date(profileData.hireDate).toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : "Active Staff Member",
+    commission: profileData?.commissionPerParcel && Number(profileData.commissionPerParcel) > 0
+      ? `${Number(profileData.commissionPerParcel)}% / parcel`
+      : "Standard Base",
+    address: profileData?.address || "Sri Lanka",
+    accuracy: "99.8%",
   };
 
   // Filter orders worked on by this employee
-  const myWorkOrders = orders.filter(o => 
-    o.claimedBy !== null && 
-    (o.claimedBy.includes("Mark V.") || o.claimedBy.includes("You"))
-  );
+  const myWorkOrders = orders.filter((o) => o.claimedBy !== null);
 
   // Generate Report and Trigger PDF Print
   const handleDownloadPDFReport = () => {
     const reportDate = new Date().toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
 
     // Compile rows HTML
-    const rowsHtml = myWorkOrders.map(order => `
+    const rowsHtml = myWorkOrders
+      .map(
+        (order) => `
       <tr style="border-bottom: 1px solid #e2e8f0;">
         <td style="padding: 10px; font-weight: bold; font-family: monospace;">#${order.id}</td>
         <td style="padding: 10px;">${order.customerName}</td>
@@ -49,11 +122,15 @@ export default function EmployeeProfile() {
         <td style="padding: 10px; color: ${order.status === "Sent" ? "#22c55e" : "#eab308"}; font-weight: 700;">${order.status}</td>
         <td style="padding: 10px; text-align: right; font-weight: bold;">Rs. ${order.valuation.toLocaleString()}</td>
       </tr>
-    `).join("");
+    `,
+      )
+      .join("");
 
     const reportWindow = window.open("", "_blank");
     if (!reportWindow) {
-      alert("Popup blocker prevented opening report window. Please allow popups and try again.");
+      alert(
+        "Popup blocker prevented opening report window. Please allow popups and try again.",
+      );
       return;
     }
 
@@ -83,7 +160,7 @@ export default function EmployeeProfile() {
           </style>
         </head>
         <body>
-          <table className="header-table" style="width: 100%; margin-bottom: 30px;">
+          <table class="header-table" style="width: 100%; margin-bottom: 30px;">
             <tr>
               <td class="logo">VERGO WEAR <span style="font-weight: 300;">FULFILLMENT</span></td>
               <td class="report-title">Employee Performance Report</td>
@@ -101,14 +178,14 @@ export default function EmployeeProfile() {
                 <div class="meta-val">${employeeInfo.id}</div>
               </div>
               <div style="margin-top: 12px;">
-                <span class="meta-label">Primary Zone</span>
-                <div class="meta-val">${employeeInfo.zone}</div>
+                <span class="meta-label">Assigned Branch</span>
+                <div class="meta-val">${employeeInfo.branch}</div>
               </div>
             </div>
             <div>
               <div>
-                <span class="meta-label">Fulfillment Shift</span>
-                <div class="meta-val">${employeeInfo.shift}</div>
+                <span class="meta-label">Designation / Role</span>
+                <div class="meta-val">${employeeInfo.role}</div>
               </div>
               <div style="margin-top: 12px;">
                 <span class="meta-label">Date Generated</span>
@@ -116,7 +193,7 @@ export default function EmployeeProfile() {
               </div>
               <div style="margin-top: 12px;">
                 <span class="meta-label">Report Validity</span>
-                <div class="meta-val" style="color: #22c55e;">Verified - Active Terminals</div>
+                <div class="meta-val" style="color: #22c55e;">Verified - Active Terminal</div>
               </div>
             </div>
           </div>
@@ -158,18 +235,22 @@ export default function EmployeeProfile() {
               </tr>
             </thead>
             <tbody>
-              ${myWorkOrders.length === 0 ? `
+              ${
+                myWorkOrders.length === 0
+                  ? `
                 <tr>
                   <td colspan="6" style="padding: 20px; text-align: center; color: #94a3b8;">
                     No work logs found for the current period.
                   </td>
                 </tr>
-              ` : rowsHtml}
+              `
+                  : rowsHtml
+              }
             </tbody>
           </table>
 
           <div class="footer">
-            Vortex Wear (Pvt) Ltd, Sri Lanka &copy; 2026. All rights reserved. System Generated Fulfillment Log.
+            Vergo Wear (Pvt) Ltd, Sri Lanka &copy; 2026. All rights reserved. System Generated Fulfillment Log.
           </div>
 
           <script>
@@ -188,10 +269,12 @@ export default function EmployeeProfile() {
       {/* Page Header */}
       <div className="emp-page-header">
         <div className="emp-page-title-group">
-          <h1>My Account</h1>
-          <p>Review your personal stats, shift activity, and download performance reports.</p>
+          <h1>My Profile</h1>
+          <p>
+            Review your employee details, contact info, branch assignment, and shift metrics.
+          </p>
         </div>
-        
+
         <button
           className="emp-btn-claim"
           style={{
@@ -199,59 +282,243 @@ export default function EmployeeProfile() {
             alignItems: "center",
             gap: "8px",
             padding: "10px 18px",
-            fontSize: "12.5px"
+            fontSize: "12.5px",
           }}
           onClick={handleDownloadPDFReport}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ width: 15, height: 15 }}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            style={{ width: 15, height: 15 }}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+            />
           </svg>
-          <span>Download PDF Report</span>
+          <span>Download Performance PDF</span>
         </button>
       </div>
 
       {/* Main Profile Grid */}
       <div className="emp-grid-2col">
         {/* Profile Card Summary */}
-        <div className="emp-card" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "20px", borderBottom: "1px solid var(--emp-border)", paddingBottom: "20px" }}>
+        <div
+          className="emp-card"
+          style={{ display: "flex", flexDirection: "column", gap: "20px" }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "20px",
+              borderBottom: "1px solid var(--emp-border)",
+              paddingBottom: "20px",
+            }}
+          >
             <div
               style={{
                 width: "72px",
                 height: "72px",
                 borderRadius: "50%",
-                background: "linear-gradient(135deg, var(--emp-neon-green), var(--emp-info-blue))",
+                background:
+                  "linear-gradient(135deg, var(--emp-neon-green), var(--emp-info-blue))",
                 color: "#16161a",
                 fontSize: "24px",
                 fontWeight: 800,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 0 15px var(--emp-neon-green-glow)"
+                boxShadow: "0 0 15px var(--emp-neon-green-glow)",
+                flexShrink: 0,
               }}
             >
-              VM
+              {initials}
             </div>
             <div>
-              <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#ffffff" }}>{employeeInfo.name}</h2>
-              <p style={{ fontSize: "13px", color: "var(--emp-neon-green)", fontWeight: 700, marginTop: "2px" }}>{employeeInfo.role}</p>
-              <div style={{ fontSize: "11px", color: "var(--emp-text-muted)", marginTop: "4px" }}>Shift ID: {employeeInfo.id}</div>
+              <h2
+                style={{ fontSize: "20px", fontWeight: 800, color: "#ffffff" }}
+              >
+                {employeeInfo.name}
+              </h2>
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "var(--emp-neon-green)",
+                  fontWeight: 700,
+                  marginTop: "2px",
+                }}
+              >
+                {employeeInfo.role}
+              </p>
+              <div
+                style={{
+                  fontSize: "11px",
+                  color: "var(--emp-text-muted)",
+                  marginTop: "4px",
+                  fontFamily: "monospace",
+                }}
+              >
+                {employeeInfo.id}
+              </div>
             </div>
           </div>
 
           {/* Account Metadata Detail Fields */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div>
-              <span style={{ fontSize: "9px", color: "var(--emp-text-muted)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Assigned Warehouse Zone</span>
-              <div style={{ fontSize: "14px", fontWeight: 700, color: "#ffffff", marginTop: "2px" }}>{employeeInfo.zone}</div>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    color: "var(--emp-text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  EMAIL ADDRESS
+                </span>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#ffffff",
+                    marginTop: "2px",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {employeeInfo.email}
+                </div>
+              </div>
+              <div>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    color: "var(--emp-text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  PHONE NUMBER
+                </span>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#ffffff",
+                    marginTop: "2px",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {employeeInfo.phone}
+                </div>
+              </div>
             </div>
-            <div>
-              <span style={{ fontSize: "9px", color: "var(--emp-text-muted)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Shift Hours</span>
-              <div style={{ fontSize: "14px", fontWeight: 700, color: "#ffffff", marginTop: "2px" }}>{employeeInfo.shift}</div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    color: "var(--emp-text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  ASSIGNED BRANCH
+                </span>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#ffffff",
+                    marginTop: "2px",
+                  }}
+                >
+                  {employeeInfo.branch}
+                </div>
+              </div>
+              <div>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    color: "var(--emp-text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  JOINED DATE
+                </span>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#ffffff",
+                    marginTop: "2px",
+                  }}
+                >
+                  {employeeInfo.joinedDate}
+                </div>
+              </div>
             </div>
-            <div>
-              <span style={{ fontSize: "9px", color: "var(--emp-text-muted)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Joined Date</span>
-              <div style={{ fontSize: "14px", fontWeight: 700, color: "#ffffff", marginTop: "2px" }}>{employeeInfo.joinedDate}</div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    color: "var(--emp-text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  COMMISSION PER PARCEL
+                </span>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "var(--emp-neon-green)",
+                    marginTop: "2px",
+                  }}
+                >
+                  {employeeInfo.commission}
+                </div>
+              </div>
+              <div>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    color: "var(--emp-text-muted)",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  ADDRESS
+                </span>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#ffffff",
+                    marginTop: "2px",
+                  }}
+                >
+                  {employeeInfo.address}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -260,26 +527,94 @@ export default function EmployeeProfile() {
         <div className="grid grid-cols-1 xs:grid-cols-2 gap-4 h-fit">
           <div className="emp-stat-card accented" style={{ padding: "16px 20px" }}>
             <span className="emp-stat-label">Total Picked</span>
-            <div className="emp-stat-value" style={{ fontSize: "24px", marginTop: "4px" }}>{dailyTotal}</div>
-            <div style={{ fontSize: "9px", color: "var(--emp-text-muted)", textTransform: "uppercase", marginTop: "10px", fontWeight: 700 }}>Items Staged</div>
+            <div
+              className="emp-stat-value"
+              style={{ fontSize: "24px", marginTop: "4px" }}
+            >
+              {dailyTotal}
+            </div>
+            <div
+              style={{
+                fontSize: "9px",
+                color: "var(--emp-text-muted)",
+                textTransform: "uppercase",
+                marginTop: "10px",
+                fontWeight: 700,
+              }}
+            >
+              Items Staged
+            </div>
           </div>
-          
+
           <div className="emp-stat-card" style={{ padding: "16px 20px" }}>
             <span className="emp-stat-label">Efficiency</span>
-            <div className="emp-stat-value" style={{ fontSize: "24px", marginTop: "4px" }}>{efficiency}%</div>
-            <div style={{ fontSize: "9px", color: "var(--emp-text-muted)", textTransform: "uppercase", marginTop: "10px", fontWeight: 700 }}>Accuracy Rate: {employeeInfo.accuracy}</div>
+            <div
+              className="emp-stat-value"
+              style={{ fontSize: "24px", marginTop: "4px" }}
+            >
+              {efficiency}%
+            </div>
+            <div
+              style={{
+                fontSize: "9px",
+                color: "var(--emp-text-muted)",
+                textTransform: "uppercase",
+                marginTop: "10px",
+                fontWeight: 700,
+              }}
+            >
+              Accuracy Rate: {employeeInfo.accuracy}
+            </div>
           </div>
 
           <div className="emp-stat-card" style={{ padding: "16px 20px" }}>
             <span className="emp-stat-label">COD Handled</span>
-            <div className="emp-stat-value" style={{ fontSize: "16px", marginTop: "8px", color: "var(--emp-neon-green)" }}>Rs. {preparedCODTotal.toLocaleString()}</div>
-            <div style={{ fontSize: "9px", color: "var(--emp-text-muted)", textTransform: "uppercase", marginTop: "12px", fontWeight: 700 }}>COD Completed</div>
+            <div
+              className="emp-stat-value"
+              style={{
+                fontSize: "16px",
+                marginTop: "8px",
+                color: "var(--emp-neon-green)",
+              }}
+            >
+              Rs. {preparedCODTotal.toLocaleString()}
+            </div>
+            <div
+              style={{
+                fontSize: "9px",
+                color: "var(--emp-text-muted)",
+                textTransform: "uppercase",
+                marginTop: "12px",
+                fontWeight: 700,
+              }}
+            >
+              COD Completed
+            </div>
           </div>
 
           <div className="emp-stat-card" style={{ padding: "16px 20px" }}>
             <span className="emp-stat-label">Bank Handled</span>
-            <div className="emp-stat-value" style={{ fontSize: "16px", marginTop: "8px", color: "var(--emp-info-blue)" }}>Rs. {preparedBankTotal.toLocaleString()}</div>
-            <div style={{ fontSize: "9px", color: "var(--emp-text-muted)", textTransform: "uppercase", marginTop: "12px", fontWeight: 700 }}>Bank Transfers</div>
+            <div
+              className="emp-stat-value"
+              style={{
+                fontSize: "16px",
+                marginTop: "8px",
+                color: "var(--emp-info-blue)",
+              }}
+            >
+              Rs. {preparedBankTotal.toLocaleString()}
+            </div>
+            <div
+              style={{
+                fontSize: "9px",
+                color: "var(--emp-text-muted)",
+                textTransform: "uppercase",
+                marginTop: "12px",
+                fontWeight: 700,
+              }}
+            >
+              Bank Transfers
+            </div>
           </div>
         </div>
       </div>
@@ -293,7 +628,13 @@ export default function EmployeeProfile() {
 
         <div className="emp-table-container">
           {myWorkOrders.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 0", color: "var(--emp-text-muted)" }}>
+            <div
+              style={{
+                textAlign: "center",
+                padding: "40px 0",
+                color: "var(--emp-text-muted)",
+              }}
+            >
               No orders fulfilled by you in this terminal session.
             </div>
           ) : (
@@ -315,7 +656,11 @@ export default function EmployeeProfile() {
                     <td style={{ fontWeight: 700 }}>{order.customerName}</td>
                     <td>{order.timestamp}</td>
                     <td>
-                      <span className={`emp-badge ${order.paymentMethod === "COD" ? "red" : "gray"}`}>
+                      <span
+                        className={`emp-badge ${
+                          order.paymentMethod === "COD" ? "red" : "gray"
+                        }`}
+                      >
                         {order.paymentMethod}
                       </span>
                     </td>

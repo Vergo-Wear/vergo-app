@@ -33,20 +33,24 @@ body {
   display: flex;
   min-height: 100vh;
   background-color: var(--emp-bg);
+  padding: 16px;
+  box-sizing: border-box;
+  gap: 16px;
 }
 
 /* Sidebar Styling */
 .emp-sidebar {
-  width: 250px;
+  width: 255px;
   background-color: var(--emp-sidebar-bg);
-  border-right: 1px solid var(--emp-border);
+  border: 1px solid var(--emp-border);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 28px 16px;
+  padding: 24px 16px;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: 16px;
+  height: calc(100vh - 32px);
   z-index: 100;
   flex-shrink: 0;
 }
@@ -168,23 +172,24 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* prevent overflow issues in flex children */
+  min-width: 0;
   overflow-y: auto;
 }
 
 /* Header */
 .emp-header {
   height: 64px;
-  background-color: rgba(9, 9, 11, 0.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--emp-border);
+  background-color: var(--emp-card-bg);
+  border: 1px solid var(--emp-border);
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 32px;
-  position: sticky;
-  top: 0;
+  padding: 0 24px;
+  margin-bottom: 24px;
+  position: relative;
   z-index: 90;
+  flex-shrink: 0;
 }
 
 .emp-search-container {
@@ -299,10 +304,10 @@ body {
 /* Page Contents */
 .emp-page-main {
   flex: 1;
-  padding: 32px;
-  max-width: 1400px;
+  padding: 0;
+  max-width: 100%;
   width: 100%;
-  margin: 0 auto;
+  margin: 0;
   box-sizing: border-box;
 }
 
@@ -310,19 +315,19 @@ body {
 .emp-page-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 28px;
+  align-items: flex-start;
+  margin-bottom: 24px;
 }
 
 .emp-page-title-group h1 {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.02em;
   color: #ffffff;
 }
 
 .emp-page-title-group p {
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--emp-text-muted);
   margin-top: 4px;
 }
@@ -331,8 +336,8 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
   color: var(--emp-text-muted);
 }
 
@@ -352,9 +357,9 @@ body {
 /* Stats Cards Grid */
 .emp-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  margin-bottom: 28px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .emp-stats-grid.four-col {
@@ -364,8 +369,8 @@ body {
 .emp-stat-card {
   background-color: var(--emp-card-bg);
   border: 1px solid var(--emp-border);
-  border-radius: 12px;
-  padding: 20px 24px;
+  border-radius: 14px;
+  padding: 20px 22px;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -470,14 +475,14 @@ body {
 .emp-grid-2col {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  gap: 24px;
+  gap: 20px;
 }
 
 .emp-card {
   background-color: var(--emp-card-bg);
   border: 1px solid var(--emp-border);
-  border-radius: 12px;
-  padding: 24px;
+  border-radius: 14px;
+  padding: 20px 22px;
   box-sizing: border-box;
 }
 
@@ -485,7 +490,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .emp-card-title {
@@ -570,6 +575,7 @@ body {
 .emp-table-container {
   overflow-x: auto;
   width: 100%;
+  border-radius: 8px;
 }
 
 .emp-table {
@@ -579,18 +585,19 @@ body {
 }
 
 .emp-table th {
-  padding: 12px 16px;
+  padding: 12px 14px;
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--emp-text-muted);
   letter-spacing: 0.5px;
   border-bottom: 1px solid var(--emp-border);
+  background-color: rgba(255, 255, 255, 0.015);
 }
 
 .emp-table td {
-  padding: 16px;
-  font-size: 13.5px;
+  padding: 14px;
+  font-size: 13px;
   color: var(--emp-text-primary);
   border-bottom: 1px solid var(--emp-border-light);
   vertical-align: middle;

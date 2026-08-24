@@ -97,6 +97,12 @@ export default function OrderHistoryPage() {
             let statusClass = displayStatus.toLowerCase().replaceAll(" ", "-");
             if (statusClass.includes("pending")) {
               statusClass = "pending";
+            } else if (statusClass.includes("ready")) {
+              statusClass = "ready-for-pickup";
+            } else if (statusClass.includes("sent") || statusClass.includes("dispatched") || statusClass.includes("transit")) {
+              statusClass = "in-transit";
+            } else if (statusClass.includes("completed") || statusClass.includes("delivered")) {
+              statusClass = "delivered";
             } else if (statusClass === "cancelled") {
               statusClass = "cancelled";
             }

@@ -314,15 +314,108 @@ export class AuthService {
       );
     }
 
+    // Fetch raw profile flag for must_change_password
+    const [rawProfile] = await this.prisma.$queryRawUnsafe<
+      Array<{ must_change_password: boolean }>
+    >(
+      `SELECT must_change_password FROM public.profiles WHERE id = $1::uuid`,
+      userId,
+    );
+    const mustChangePassword = Boolean(rawProfile?.must_change_password);
+
     // 4. Return formatted login response
     return {
       accessToken: authData.session.access_token,
       refreshToken: authData.session.refresh_token,
       expiresIn: authData.session.expires_in,
+      mustChangePassword,
       user: {
         id: userId,
         email: authData.user.email || email,
         role: allowedRoleName,
+        mustChangePassword,
+      },
+    };
+  }
+
+  /**
+   * Resets an employee's temporary password to a new permanent password.
+   * Clears the `must_change_password` flag upon success.
+   */
+  async resetTempPassword(dto: {
+    email: string;
+    currentPassword?: string;
+    newPassword?: string;
+    tempPassword?: string;
+    confirmPassword?: string;
+  }) {
+    const email = dto.email?.trim().toLowerCase();
+    const currentPassword = dto.currentPassword || dto.tempPassword;
+    const newPassword = dto.newPassword || dto.confirmPassword;
+
+    if (!email || !currentPassword || !newPassword) {
+      throw new BadRequestException(
+        'Email, current/temporary password, and new password are required.',
+      );
+    }
+
+    if (newPassword.length < 6) {
+      throw new BadRequestException('New password must be at least 6 characters long.');
+    }
+
+    // 1. Authenticate employee with their current temporary password
+    const { data: authData, error: authError } =
+      await this.supabaseService.client.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      });
+
+    if (authError || !authData?.user) {
+      throw new UnauthorizedException(
+        'Invalid temporary password. Please check your credentials.',
+      );
+    }
+
+    const userId = authData.user.id;
+
+    // 2. Update user password in Supabase Auth via Admin client
+    const { error: updateError } =
+      await this.supabaseService.adminClient.auth.admin.updateUserById(
+        userId,
+        { password: newPassword },
+      );
+
+    if (updateError) {
+      this.logger.error(`Failed to update employee password: ${updateError.message}`);
+      throw new BadRequestException(
+        'Failed to update password. Please try again.',
+      );
+    }
+
+    // 3. Clear must_change_password flag in database
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE public.profiles SET must_change_password = false WHERE id = $1::uuid`,
+      userId,
+    );
+
+    // 4. Return new session credentials
+    const { data: newAuth } =
+      await this.supabaseService.client.auth.signInWithPassword({
+        email,
+        password: newPassword,
+      });
+
+    return {
+      status: 'success',
+      message: 'Password changed successfully! You can now access your dashboard.',
+      mustChangePassword: false,
+      accessToken: newAuth?.session?.access_token || authData.session?.access_token,
+      refreshToken: newAuth?.session?.refresh_token || authData.session?.refresh_token,
+      user: {
+        id: userId,
+        email,
+        role: 'Employee',
+        mustChangePassword: false,
       },
     };
   }

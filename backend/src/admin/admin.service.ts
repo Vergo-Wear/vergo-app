@@ -101,7 +101,10 @@ export class AdminService {
   async overview() {
     const [inventoryRows, employees, orders] = await Promise.all([
       this.prisma.inventory.findMany({
-        include: { variant: { include: { product: true } } },
+        include: {
+          variant: { include: { product: true, color: true, size: true } },
+          branch: true,
+        },
         orderBy: { lastUpdated: 'desc' },
       }),
       this.prisma.employee.findMany({ include: { profile: true } }),
@@ -117,14 +120,23 @@ export class AdminService {
         },
       }),
     ]);
-    const inventory = inventoryRows.map((row) => ({
-      inventoryId: row.inventoryId,
-      sku: row.variant?.sku || 'UNASSIGNED',
-      name: row.variant?.product?.name || 'Unassigned product',
-      location: row.branchId || 'UNASSIGNED',
-      inStock: row.quantity || 0,
-      reorderLevel: row.reorderLevel || 0,
-    }));
+    const inventory = inventoryRows.map((row) => {
+      const variantLabel = [row.variant?.color?.name, row.variant?.size?.name]
+        .filter(Boolean)
+        .join(' / ');
+      const name = row.variant?.product?.name
+        ? `${row.variant.product.name}${variantLabel ? ` (${variantLabel})` : ''}`
+        : 'Unassigned product';
+
+      return {
+        inventoryId: row.inventoryId,
+        sku: row.variant?.sku || 'UNASSIGNED',
+        name,
+        location: row.branch?.name || row.branchId || 'Main Warehouse',
+        inStock: row.quantity || 0,
+        reorderLevel: row.reorderLevel || 0,
+      };
+    });
     const analyticsOrders = orders.filter(
       (order) =>
         !ACTIVE_ORDER_STATUSES.has(order.orderStatus?.toLowerCase() || ''),
@@ -1187,6 +1199,227 @@ export class AdminService {
         ...(email !== undefined ? { email } : {}),
         ...(dto.address !== undefined ? { address: dto.address.trim() } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
+      },
+    });
+  }
+
+  /**
+   * Parcel tracking metrics for Admin Dashboard graph
+   */
+  async getParcelAnalytics(fromStr?: string, toStr?: string) {
+    const fromDate = fromStr ? new Date(fromStr) : new Date(Date.now() - 30 * 86400000);
+    const toDate = toStr ? new Date(toStr) : new Date();
+
+    const deliveries = await this.prisma.delivery.findMany({
+      where: {
+        updatedAt: {
+          gte: fromDate,
+          lte: toDate,
+        },
+      },
+      include: {
+        order: true,
+        trackingEvents: {
+          orderBy: { eventAt: 'desc' },
+        },
+      },
+    });
+
+    let pickedFmScans = 0;
+    let undeliveredUd = 0;
+    let inTransit = 0;
+    let outForDelivery = 0;
+    let completed = 0;
+    let deliveredDl = 0;
+    let returnedRtm = 0;
+    let toBeReturnedRt = 0;
+
+    const dailyBreakdown = new Map<string, { date: string; DL: number; RTM: number; UD: number; RT: number }>();
+
+    for (const d of deliveries) {
+      const status = (d.courierStatus || d.deliveryStatus || '').toUpperCase();
+      const statusType = (d.courierStatusType || '').toUpperCase();
+      const dateKey = d.updatedAt.toISOString().split('T')[0];
+
+      if (!dailyBreakdown.has(dateKey)) {
+        dailyBreakdown.set(dateKey, { date: dateKey, DL: 0, RTM: 0, UD: 0, RT: 0 });
+      }
+      const dayStats = dailyBreakdown.get(dateKey)!;
+
+      if (status.includes('FIRST MILE') || status.includes('PICKED') || d.trackingEvents.length > 0) {
+        pickedFmScans++;
+      }
+
+      if (statusType === 'DL' || status.includes('DELIVERED')) {
+        completed++;
+        deliveredDl++;
+        dayStats.DL++;
+      } else if (statusType === 'RTM' || status.includes('RETURNED')) {
+        completed++;
+        returnedRtm++;
+        dayStats.RTM++;
+      } else if (statusType === 'RT' || status.includes('TO BE RETURNED')) {
+        toBeReturnedRt++;
+        dayStats.RT++;
+      } else {
+        undeliveredUd++;
+        dayStats.UD++;
+        if (status.includes('OUT FOR DELIVERY')) {
+          outForDelivery++;
+        } else {
+          inTransit++;
+        }
+      }
+    }
+
+    const performanceSeries = Array.from(dailyBreakdown.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      period: { from: fromDate.toISOString(), to: toDate.toISOString() },
+      metrics: {
+        pickedFmScans,
+        undeliveredUd,
+        inTransit,
+        outForDelivery,
+        completed,
+        deliveredDl,
+        returnedRtm,
+        toBeReturnedRt,
+      },
+      shipmentBreakdown: [
+        { name: 'Undelivered(UD)', value: undeliveredUd, color: '#f59e0b' },
+        { name: 'Delivered (DL)', value: deliveredDl, color: '#10b981' },
+        { name: 'Returned (RTM)', value: returnedRtm, color: '#ef4444' },
+        { name: 'To Be Returned (RT)', value: toBeReturnedRt, color: '#dc2626' },
+      ],
+      performanceSeries,
+    };
+  }
+
+  /**
+   * Centralized employee logistics monitoring for Admin
+   */
+  async getCentralizedEmployeeLogistics() {
+    const employees = await this.prisma.employee.findMany({
+      include: {
+        profile: {
+          include: {
+            authUser: true,
+          },
+        },
+        branch: true,
+        assignedOrders: {
+          include: {
+            delivery: true,
+          },
+        },
+      },
+      orderBy: { firstName: 'asc' },
+    });
+
+    return employees.map((emp) => {
+      const claimedCount = emp.assignedOrders.length;
+      const preparedCount = emp.assignedOrders.filter(o => o.orderStatus === 'Ready for Pickup' || o.orderStatus === 'Sent').length;
+      const dispatchedCount = emp.assignedOrders.filter(o => o.orderStatus === 'Sent').length;
+      const deliveredCount = emp.assignedOrders.filter(o => o.delivery?.courierStatusType === 'DL' || o.orderStatus === 'Completed').length;
+
+      return {
+        employeeId: emp.employeeId,
+        name: `${emp.firstName} ${emp.lastName}`,
+        email: emp.profile?.authUser?.email || 'N/A',
+        phone: emp.phone || 'N/A',
+        position: emp.position || 'Fulfillment Staff',
+        branchId: emp.branchId,
+        branchName: emp.branch?.name || 'Main Warehouse',
+        accountStatus: emp.profile?.status || 'Active',
+        availabilityStatus: emp.availabilityStatus || 'OFF_DUTY',
+        commissionPerParcel: emp.commissionPerParcel ? Number(emp.commissionPerParcel) : 0,
+        hireDate: emp.hireDate,
+        address: emp.address || null,
+        metrics: {
+          claimedCount,
+          preparedCount,
+          dispatchedCount,
+          deliveredCount,
+          successRate: claimedCount > 0 ? Number(((deliveredCount / claimedCount) * 100).toFixed(1)) : 0,
+        },
+      };
+    });
+  }
+
+  /**
+   * Gets return address configuration for a specific branch
+   */
+  async getBranchShipperProfile(branchId: string) {
+    const profile = await this.prisma.courierShipperProfile.findFirst({
+      where: { branchId, courierName: 'Citypak' },
+    });
+
+    if (profile) return profile;
+
+    return {
+      profileId: null,
+      courierName: 'Citypak',
+      branchId,
+      shipperName: 'Vergo Wear Main Warehouse',
+      addressLine1: 'No 45, Galle Road',
+      addressLine2: 'Sector A-12',
+      addressLine3: null,
+      addressLine4City: 'Colombo',
+      contactName: 'Vergo Logistics Manager',
+      contactNumber1: '0771234567',
+      contactNumber2: null,
+      isDefault: false,
+    };
+  }
+
+  /**
+   * Upserts custom return address for a branch
+   */
+  async upsertBranchShipperProfile(branchId: string, data: {
+    shipperName: string;
+    addressLine1: string;
+    addressLine2?: string;
+    addressLine3?: string;
+    addressLine4City: string;
+    contactName: string;
+    contactNumber1: string;
+    contactNumber2?: string;
+  }) {
+    const existing = await this.prisma.courierShipperProfile.findFirst({
+      where: { branchId, courierName: 'Citypak' },
+    });
+
+    if (existing) {
+      return this.prisma.courierShipperProfile.update({
+        where: { profileId: existing.profileId },
+        data: {
+          shipperName: data.shipperName,
+          addressLine1: data.addressLine1,
+          addressLine2: data.addressLine2 || null,
+          addressLine3: data.addressLine3 || null,
+          addressLine4City: data.addressLine4City,
+          contactName: data.contactName,
+          contactNumber1: data.contactNumber1,
+          contactNumber2: data.contactNumber2 || null,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    return this.prisma.courierShipperProfile.create({
+      data: {
+        courierName: 'Citypak',
+        branchId,
+        shipperName: data.shipperName,
+        addressLine1: data.addressLine1,
+        addressLine2: data.addressLine2 || null,
+        addressLine3: data.addressLine3 || null,
+        addressLine4City: data.addressLine4City,
+        contactName: data.contactName,
+        contactNumber1: data.contactNumber1,
+        contactNumber2: data.contactNumber2 || null,
+        isDefault: false,
       },
     });
   }

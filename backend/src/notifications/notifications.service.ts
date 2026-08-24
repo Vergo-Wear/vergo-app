@@ -369,4 +369,142 @@ export class NotificationsService {
       );
     }
   }
+
+  private async notifyAdmins(title: string, message: string, orderId: string, type: NotificationType) {
+    try {
+      const adminProfiles = await this.prisma.profiles.findMany({
+        where: { role: { roleName: 'Admin' } },
+        select: { id: true },
+      });
+
+      for (const admin of adminProfiles) {
+        await this.createNotification({
+          recipientProfileId: admin.id,
+          orderId,
+          channel: 'IN_APP',
+          type,
+          title: `[Logistics Alert] ${title}`,
+          message,
+        });
+      }
+    } catch (err) {
+      this.logger.error(`Failed to notify admins for order ${orderId}`, err);
+    }
+  }
+
+  /**
+   * ORDER_DISPATCHED — fired when Citypak scans FIRST MILE RECEIVE SCAN
+   */
+  async notifyOrderDispatched(orderId: string, trackingNumber: string): Promise<void> {
+    try {
+      const customer = await this.orderCustomer(orderId);
+      if (customer) {
+        await this.createNotification({
+          recipientProfileId: customer.profileId,
+          orderId,
+          channel: customer.profileId ? 'IN_APP' : 'EMAIL',
+          type: NotificationType.ORDER_DISPATCHED,
+          title: 'Order Dispatched with Citypak',
+          message: `Your order ${orderNumber(orderId)} has been collected by Citypak and is on the way! Tracking: ${trackingNumber}`,
+          once: true,
+        });
+      }
+
+      await this.notifyAdmins(
+        'Order Dispatched',
+        `Order ${orderNumber(orderId)} was collected by Citypak. Tracking #${trackingNumber}`,
+        orderId,
+        NotificationType.ORDER_DISPATCHED,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to create ORDER_DISPATCHED notification for ${orderId}`, error);
+    }
+  }
+
+  /**
+   * OUT_FOR_DELIVERY — fired when Citypak status is OUT FOR DELIVERY
+   */
+  async notifyOutForDelivery(orderId: string, trackingNumber: string): Promise<void> {
+    try {
+      const customer = await this.orderCustomer(orderId);
+      if (customer) {
+        await this.createNotification({
+          recipientProfileId: customer.profileId,
+          orderId,
+          channel: customer.profileId ? 'IN_APP' : 'EMAIL',
+          type: NotificationType.OUT_FOR_DELIVERY,
+          title: 'Out for Delivery',
+          message: `Your order ${orderNumber(orderId)} is out for delivery with Citypak today! Tracking: ${trackingNumber}`,
+          once: true,
+        });
+      }
+
+      await this.notifyAdmins(
+        'Out for Delivery',
+        `Order ${orderNumber(orderId)} is out for delivery today with Citypak. Tracking #${trackingNumber}`,
+        orderId,
+        NotificationType.OUT_FOR_DELIVERY,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to create OUT_FOR_DELIVERY notification for ${orderId}`, error);
+    }
+  }
+
+  /**
+   * ORDER_DELIVERED — fired when Citypak delivers the parcel (DL)
+   */
+  async notifyOrderDelivered(orderId: string, trackingNumber: string): Promise<void> {
+    try {
+      const customer = await this.orderCustomer(orderId);
+      if (customer) {
+        await this.createNotification({
+          recipientProfileId: customer.profileId,
+          orderId,
+          channel: customer.profileId ? 'IN_APP' : 'EMAIL',
+          type: NotificationType.ORDER_DELIVERED,
+          title: 'Order Delivered',
+          message: `Your order ${orderNumber(orderId)} has been successfully delivered! Thank you for shopping with Vergo Wear.`,
+          once: true,
+        });
+      }
+
+      await this.notifyAdmins(
+        'Order Delivered',
+        `Order ${orderNumber(orderId)} was successfully delivered by Citypak. Tracking #${trackingNumber}`,
+        orderId,
+        NotificationType.ORDER_DELIVERED,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to create ORDER_DELIVERED notification for ${orderId}`, error);
+    }
+  }
+
+  /**
+   * ORDER_RETURNED — fired when courier status is Returned To Merchant (RTM)
+   */
+  async notifyOrderReturned(orderId: string): Promise<void> {
+    try {
+      const customer = await this.orderCustomer(orderId);
+      if (customer) {
+        await this.createNotification({
+          recipientProfileId: customer.profileId,
+          orderId,
+          channel: customer.profileId ? 'IN_APP' : 'EMAIL',
+          type: NotificationType.ORDER_RETURNED,
+          title: 'Order Returned to Merchant',
+          message: `Your order ${orderNumber(orderId)} could not be delivered and has been returned to our warehouse. Please contact support.`,
+          once: true,
+        });
+      }
+
+      await this.notifyAdmins(
+        'Order Returned (RTM)',
+        `Order ${orderNumber(orderId)} could not be delivered and has returned to merchant.`,
+        orderId,
+        NotificationType.ORDER_RETURNED,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to create ORDER_RETURNED notification for ${orderId}`, error);
+    }
+  }
 }

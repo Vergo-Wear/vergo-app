@@ -20,6 +20,10 @@ interface OrderDetails {
   orderStatus: string | null;
   confirmationStatus?: "Pending" | "Approved" | "Rejected";
   confirmedAt?: string | null;
+  parcelReadyAt?: string | null;
+  sentAt?: string | null;
+  deliveredAt?: string | null;
+  updatedAt?: string | null;
   paymentMethod: string;
   paymentProofs?: Array<{
     status: string;
@@ -71,6 +75,8 @@ export default function PackageTrackingPage({
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelSuccess, setCancelSuccess] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
 
   // Fetch tracking data
   const loadOrderData = async () => {
@@ -378,19 +384,22 @@ export default function PackageTrackingPage({
   } else if (statusStr === "cancelled") {
     statusBannerClass = "cancelled";
     statusBannerText = "Cancelled";
-  } else if (statusStr === "sent for delivery") {
-    statusBannerClass = "in-transit";
-    statusBannerText = "In Transit";
-  } else if (statusStr === "ready") {
-    statusBannerClass = "in-transit";
-    statusBannerText = "Ready for Courier";
-  } else if (statusStr === "completed") {
+  } else if (statusStr === "completed" || statusStr === "delivered") {
     statusBannerClass = "delivered";
     statusBannerText = "Delivered";
+  } else if (statusStr.includes("out for delivery")) {
+    statusBannerClass = "in-transit";
+    statusBannerText = "Out for Delivery";
+  } else if (statusStr.includes("sent") || statusStr.includes("dispatched")) {
+    statusBannerClass = "in-transit";
+    statusBannerText = "In Transit";
+  } else if (statusStr.includes("ready")) {
+    statusBannerClass = "in-transit";
+    statusBannerText = "Ready for Pickup";
   } else {
     // preparing, claimed by employee, ready to process
     statusBannerClass = "in-transit";
-    statusBannerText = "Preparing Shipment";
+    statusBannerText = "Preparing Package";
   }
 
   // Vertical timeline state check functions
@@ -420,26 +429,63 @@ export default function PackageTrackingPage({
         "ready for pickup",
         "sent",
         "sent for delivery",
+        "dispatched",
+        "out for delivery",
         "delivered",
         "completed",
-      ].includes(statusStr);
+      ].some((st) => statusStr.includes(st));
 
   // Package is preparing if employee has claimed or details are preparing/ready
   const isPreparingPackage = [
+    "claimed",
     "claimed by employee",
     "preparing",
     "ready",
+    "ready for pickup",
+    "sent",
     "sent for delivery",
+    "dispatched",
+    "out for delivery",
+    "delivered",
     "completed",
-  ].includes(statusStr);
+  ].some((st) => statusStr.includes(st));
 
   // Sent to courier
-  const isSentToCourier = ["sent for delivery", "completed"].includes(
-    statusStr,
-  );
+  const isSentToCourier = [
+    "sent",
+    "sent for delivery",
+    "dispatched",
+    "out for delivery",
+    "delivered",
+    "completed",
+  ].some((st) => statusStr.includes(st));
 
   // Out for delivery / delivered
-  const isOutForDelivery = ["completed"].includes(statusStr);
+  const isOutForDelivery = [
+    "out for delivery",
+    "delivered",
+    "completed",
+  ].some((st) => statusStr.includes(st));
+
+  const handleSyncCitypak = async () => {
+    setIsSyncing(true);
+    const token = sessionStorage.getItem("vergo_access_token");
+    try {
+      if (token) {
+        await fetch(`${API_URL}/integrations/citypak/sync`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+      await loadOrderData();
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastSyncLabel(timeStr);
+    } catch (e) {
+      console.error("Sync error:", e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   return (
     <div className="orders-page-wrapper">
@@ -561,18 +607,59 @@ export default function PackageTrackingPage({
               className="order-detail-card"
               style={{ padding: "30px", marginBottom: "24px" }}
             >
-              <h2
-                className="card-title"
-                style={{
-                  fontSize: "18px",
-                  fontWeight: "900",
-                  letterSpacing: "0.08em",
-                  marginBottom: "24px",
-                  fontFamily: "'Oswald', sans-serif",
-                }}
-              >
-                TRACKING HISTORY
-              </h2>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+                <h2
+                  className="card-title"
+                  style={{
+                    fontSize: "18px",
+                    fontWeight: "900",
+                    letterSpacing: "0.08em",
+                    fontFamily: "'Oswald', sans-serif",
+                    margin: 0,
+                  }}
+                >
+                  TRACKING HISTORY
+                </h2>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  {lastSyncLabel && (
+                    <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>
+                      Last updated: <strong style={{ color: "#00FF9D" }}>{lastSyncLabel}</strong>
+                    </span>
+                  )}
+
+                  <button
+                    onClick={handleSyncCitypak}
+                    disabled={isSyncing}
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.06)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      color: "#ffffff",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      style={{ animation: isSyncing ? "spin 1s linear infinite" : "none" }}
+                    >
+                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                    </svg>
+                    <span>{isSyncing ? "Syncing..." : "Refresh Live Status"}</span>
+                  </button>
+                </div>
+              </div>
 
               {/* Timeline list */}
               <div
@@ -803,7 +890,7 @@ export default function PackageTrackingPage({
                   </div>
                 </div>
 
-                {/* STEP 3: Preparing Package */}
+                {/* STEP 3: Preparing / Package Prepared */}
                 <div style={{ position: "relative", marginBottom: "32px" }}>
                   <div
                     style={{
@@ -814,7 +901,7 @@ export default function PackageTrackingPage({
                       height: "30px",
                       borderRadius: "50%",
                       backgroundColor: isPreparingPackage
-                        ? "rgba(0, 255, 157, 0.05)"
+                        ? "#00FF9D"
                         : "#121212",
                       border: isPreparingPackage
                         ? "2px solid #00FF9D"
@@ -823,7 +910,7 @@ export default function PackageTrackingPage({
                       alignItems: "center",
                       justifyContent: "center",
                       color: isPreparingPackage
-                        ? "#00FF9D"
+                        ? "#121212"
                         : "rgba(255, 255, 255, 0.25)",
                     }}
                   >
@@ -834,14 +921,11 @@ export default function PackageTrackingPage({
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="2.5"
+                        strokeWidth="4"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       >
-                        <polyline points="21 16 12 21 3 16" />
-                        <polyline points="21 8 12 13 3 8" />
-                        <line x1="12" y1="21" x2="12" y2="13" />
-                        <polygon points="12 2 22 7 12 12 2 7" />
+                        <polyline points="20 6 9 17 4 12" />
                       </svg>
                     ) : (
                       <div
@@ -860,12 +944,16 @@ export default function PackageTrackingPage({
                         fontSize: "15px",
                         fontWeight: "800",
                         color: isPreparingPackage
-                          ? "#00FF9D"
+                          ? "#ffffff"
                           : "rgba(255, 255, 255, 0.35)",
                         margin: 0,
                       }}
                     >
-                      Preparing Package
+                      {statusStr.includes("ready")
+                        ? "Package Prepared (Ready for Courier Pickup)"
+                        : isPreparingPackage
+                        ? "Package Prepared"
+                        : "Preparing Package"}
                     </h3>
                     <p
                       style={{
@@ -875,7 +963,11 @@ export default function PackageTrackingPage({
                       }}
                     >
                       {isPreparingPackage
-                        ? `${getEstimatedDelivery(order.orderDate)} · 09:30 AM`
+                        ? order.parcelReadyAt
+                          ? `${getFormattedDate(order.parcelReadyAt)} · ${getFormattedTime(order.parcelReadyAt)}`
+                          : order.updatedAt
+                          ? `${getFormattedDate(order.updatedAt)} · ${getFormattedTime(order.updatedAt)}`
+                          : `${getFormattedDate(order.orderDate)} · ${getFormattedTime(order.orderDate)}`
                         : "Pending"}
                     </p>
                     {isPreparingPackage && !isSentToCourier && (
@@ -887,14 +979,15 @@ export default function PackageTrackingPage({
                           lineHeight: "1.6",
                         }}
                       >
-                        Our warehouse team is currently picking and packing your
-                        items for shipment.
+                        {statusStr.includes("ready")
+                          ? "Your parcel has been picked, packed, and assigned a Citypak waybill. Staged at warehouse waiting for courier pickup."
+                          : "Our warehouse team is currently picking and packing your items for shipment."}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* STEP 4: Sent to Courier */}
+                {/* STEP 4: Handed to Courier */}
                 <div style={{ position: "relative", marginBottom: "32px" }}>
                   <div
                     style={{
@@ -904,7 +997,7 @@ export default function PackageTrackingPage({
                       width: "30px",
                       height: "30px",
                       borderRadius: "50%",
-                      backgroundColor: "#121212",
+                      backgroundColor: isSentToCourier ? "#00FF9D" : "#121212",
                       border: isSentToCourier
                         ? "2px solid #00FF9D"
                         : "2px solid rgba(255, 255, 255, 0.15)",
@@ -912,20 +1005,33 @@ export default function PackageTrackingPage({
                       alignItems: "center",
                       justifyContent: "center",
                       color: isSentToCourier
-                        ? "#00FF9D"
+                        ? "#121212"
                         : "rgba(255, 255, 255, 0.25)",
                     }}
                   >
-                    <div
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        borderRadius: "50%",
-                        backgroundColor: isSentToCourier
-                          ? "#00FF9D"
-                          : "rgba(255,255,255,0.15)",
-                      }}
-                    />
+                    {isSentToCourier ? (
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <div
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: "rgba(255,255,255,0.15)",
+                        }}
+                      />
+                    )}
                   </div>
                   <div>
                     <h3
@@ -938,7 +1044,7 @@ export default function PackageTrackingPage({
                         margin: 0,
                       }}
                     >
-                      Sent to Courier
+                      Handed to Citypak Courier
                     </h3>
                     <p
                       style={{
@@ -947,8 +1053,24 @@ export default function PackageTrackingPage({
                         margin: "4px 0 0 0",
                       }}
                     >
-                      {isSentToCourier ? "Shipped" : "Pending"}
+                      {isSentToCourier
+                        ? order.sentAt
+                          ? `${getFormattedDate(order.sentAt)} · ${getFormattedTime(order.sentAt)}`
+                          : "In Transit"
+                        : "Pending"}
                     </p>
+                    {isSentToCourier && !isOutForDelivery && (
+                      <p
+                        style={{
+                          fontSize: "13px",
+                          color: "rgba(255,255,255,0.7)",
+                          margin: "10px 0 0 0",
+                          lineHeight: "1.6",
+                        }}
+                      >
+                        Package collected by Citypak courier and in transit to delivery destination.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -962,7 +1084,7 @@ export default function PackageTrackingPage({
                       width: "30px",
                       height: "30px",
                       borderRadius: "50%",
-                      backgroundColor: "#121212",
+                      backgroundColor: isOutForDelivery ? "#00FF9D" : "#121212",
                       border: isOutForDelivery
                         ? "2px solid #00FF9D"
                         : "2px solid rgba(255, 255, 255, 0.15)",
@@ -970,20 +1092,33 @@ export default function PackageTrackingPage({
                       alignItems: "center",
                       justifyContent: "center",
                       color: isOutForDelivery
-                        ? "#00FF9D"
+                        ? "#121212"
                         : "rgba(255, 255, 255, 0.25)",
                     }}
                   >
-                    <div
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        borderRadius: "50%",
-                        backgroundColor: isOutForDelivery
-                          ? "#00FF9D"
-                          : "rgba(255,255,255,0.15)",
-                      }}
-                    />
+                    {isOutForDelivery ? (
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <div
+                        style={{
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "50%",
+                          backgroundColor: "rgba(255,255,255,0.15)",
+                        }}
+                      />
+                    )}
                   </div>
                   <div>
                     <h3

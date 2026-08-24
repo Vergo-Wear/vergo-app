@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { EmployeeProvider, useEmployee } from "./context/EmployeeContext";
@@ -15,6 +15,72 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const unreadNotifCount = notifications.length;
+
+  const [empProfile, setEmpProfile] = useState<{
+    name: string;
+    role: string;
+    initials: string;
+  }>({
+    name: "Employee",
+    role: "Staff Member",
+    initials: "EM",
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const rawUser = sessionStorage.getItem("vergo_user");
+    if (rawUser) {
+      try {
+        const parsed = JSON.parse(rawUser);
+        if (parsed.role === "Employee" && parsed.mustChangePassword === true) {
+          window.location.href = `/auth/reset-password?required=true&email=${encodeURIComponent(parsed.email || "")}`;
+          return;
+        }
+
+        const userId = parsed.id || parsed.profileId;
+        const initialName = parsed.name || "Employee";
+        const initialRole = parsed.position || "Staff Member";
+        const initialInitials = initialName
+          .split(" ")
+          .map((n: string) => n[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2);
+
+        setEmpProfile({
+          name: initialName,
+          role: initialRole,
+          initials: initialInitials || "EM",
+        });
+
+        if (userId) {
+          const apiUrl =
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+          fetch(`${apiUrl}/employees/profile/${userId}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data?.firstName && data?.lastName) {
+                const fullName = `${data.firstName} ${data.lastName}`;
+                const initials = fullName
+                  .split(" ")
+                  .map((n: string) => n[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 2);
+                setEmpProfile({
+                  name: fullName,
+                  role: data.position || initialRole,
+                  initials: initials || "EM",
+                });
+              }
+            })
+            .catch((e) => console.warn("Failed to load header employee profile:", e));
+        }
+      } catch (e) {
+        console.error("Error reading employee session:", e);
+      }
+    }
+  }, []);
 
   return (
     <div className="emp-layout-container flex flex-col md:flex-row pb-16 md:pb-0">
@@ -103,21 +169,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                 <span>Stock</span>
               </span>
             </Link>
-
-            <Link
-              href="/employee/notifications"
-              className={`emp-nav-item ${pathname.includes("/notifications") ? "active" : ""}`}
-            >
-              <span className="emp-nav-item-left">
-                <svg className="emp-nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                <span>Notifications</span>
-              </span>
-              {unreadNotifCount > 0 && (
-                <span className="emp-nav-badge">{unreadNotifCount}</span>
-              )}
-            </Link>
           </nav>
         </div>
 
@@ -195,6 +246,22 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
             {/* Right side items */}
             <div className="emp-header-right flex items-center justify-between sm:justify-end w-full sm:w-auto gap-4">
+              {/* Navbar Notification Bell Icon */}
+              <Link
+                href="/employee/notifications"
+                className="emp-header-icon-btn relative flex items-center justify-center p-2 rounded-lg hover:bg-white/5 transition-all text-[#8e8e93] hover:text-white"
+                title="Notifications"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 19, height: 19 }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {unreadNotifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-[#00ff9d] text-[#060608] text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-[#060608]">
+                    {unreadNotifCount}
+                  </span>
+                )}
+              </Link>
+
               {/* Help button (desktop only) */}
               <button className="emp-header-icon-btn hidden sm:block" title="Help Center">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 18, height: 18 }}>
@@ -242,10 +309,10 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
               <div style={{ position: "relative" }}>
                 <button className="emp-profile-trigger" onClick={() => setShowProfileMenu(!showProfileMenu)}>
-                  <div className="emp-profile-avatar">VM</div>
+                  <div className="emp-profile-avatar">{empProfile.initials}</div>
                   <div className="emp-profile-info">
-                    <span className="emp-profile-name">Vergo Mark</span>
-                    <span className="emp-profile-role">Senior Picker</span>
+                    <span className="emp-profile-name">{empProfile.name}</span>
+                    <span className="emp-profile-role">{empProfile.role}</span>
                   </div>
                 </button>
 
@@ -319,7 +386,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content Body */}
-        <main className="flex-1 p-3 sm:p-5 pb-24 sm:pb-5" style={{ minWidth: 0 }}>
+        <main className="flex-1 w-full max-w-[1440px] mx-auto box-border" style={{ minWidth: 0 }}>
           {children}
         </main>
       </div>

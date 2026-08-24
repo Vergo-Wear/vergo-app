@@ -221,33 +221,50 @@
 }
 
 .order-status-badge {
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.1em;
-  padding: 6px 12px;
-  border-radius: 20px;
+  letter-spacing: 0.08em;
+  padding: 6px 14px;
+  border-radius: 9999px;
   text-transform: uppercase;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  box-sizing: border-box;
+  font-family: 'Oswald', sans-serif !important;
 }
 
 .order-status-badge::before {
   content: "";
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
 }
 
+.order-status-badge.ready-for-pickup,
+.order-status-badge.in-transit {
+  background: rgba(255, 179, 0, 0.08);
+  color: #ffb300;
+  border: 1px solid rgba(255, 179, 0, 0.35);
+  box-shadow: 0 0 10px rgba(255, 179, 0, 0.08);
+}
+
+.order-status-badge.ready-for-pickup::before,
+.order-status-badge.in-transit::before {
+  background-color: #ffb300;
+  box-shadow: 0 0 6px #ffb300;
+}
+
 .order-status-badge.delivered {
-  background: rgba(0, 255, 157, 0.06);
+  background: rgba(0, 255, 157, 0.08);
   color: #00ff9d;
-  border: 1px solid rgba(0, 255, 157, 0.2);
+  border: 1px solid rgba(0, 255, 157, 0.3);
 }
 
 .order-status-badge.delivered::before {
   background-color: #00ff9d;
+  box-shadow: 0 0 6px #00ff9d;
 }
 
 .order-status-badge.processing {
@@ -260,20 +277,10 @@
   background-color: #c8c8cd;
 }
 
-.order-status-badge.in-transit {
-  background: rgba(255, 179, 0, 0.06);
-  color: #ffb300;
-  border: 1px solid rgba(255, 179, 0, 0.2);
-}
-
-.order-status-badge.in-transit::before {
-  background-color: #ffb300;
-}
-
 .order-status-badge.cancelled {
-  background: rgba(255, 77, 77, 0.06);
+  background: rgba(255, 77, 77, 0.08);
   color: #ff4d4d;
-  border: 1px solid rgba(255, 77, 77, 0.2);
+  border: 1px solid rgba(255, 77, 77, 0.3);
 }
 
 .order-status-badge.cancelled::before {
@@ -281,13 +288,14 @@
 }
 
 .order-status-badge.pending {
-  background: rgba(255, 193, 7, 0.06);
+  background: rgba(255, 193, 7, 0.08);
   color: #ffc107;
-  border: 1px solid rgba(255, 193, 7, 0.2);
+  border: 1px solid rgba(255, 193, 7, 0.3);
 }
 
 .order-status-badge.pending::before {
   background-color: #ffc107;
+  box-shadow: 0 0 6px #ffc107;
 }
 
 /* Order Item Row */

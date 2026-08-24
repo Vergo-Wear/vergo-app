@@ -1,11 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import Image from "next/image";
 import "./footer.css";
 
 export default function Footer() {
+  const pathname = usePathname();
+  const [hideFooter, setHideFooter] = useState(false);
   const [activeModal, setActiveModal] = useState<"privacy" | "terms" | "contact" | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && pathname === "/auth/reset-password") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isRequired = urlParams.get("required") === "true";
+      const rawUser = sessionStorage.getItem("vergo_user");
+      let storedUser: any = null;
+      if (rawUser) {
+        try {
+          storedUser = JSON.parse(rawUser);
+        } catch (e) {}
+      }
+      if (isRequired || Boolean(storedUser?.mustChangePassword)) {
+        setHideFooter(true);
+        return;
+      }
+    }
+    setHideFooter(false);
+  }, [pathname]);
+
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -42,6 +65,8 @@ export default function Footer() {
     });
     setActiveModal(null);
   };
+
+  if (hideFooter) return null;
 
   return (
     <footer className="footer">

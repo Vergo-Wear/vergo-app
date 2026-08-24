@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../auth/supabase.service';
 import { ProfileStatus } from '../common/enums/profile-status.enum';
+import { EmailService } from '../email/email.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { CreateEmployeeAccountDto } from './dto/create-employee-account.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -21,6 +22,7 @@ export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly supabaseService: SupabaseService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -120,6 +122,11 @@ export class EmployeesService {
           },
         });
 
+        await tx.$executeRawUnsafe(
+          `UPDATE public.profiles SET must_change_password = true WHERE id = $1::uuid`,
+          userId,
+        );
+
         const employee = await tx.employee.create({
           data: {
             profileId: userId,
@@ -143,6 +150,19 @@ export class EmployeesService {
       this.logger.log(
         `Employee account created: auth user "${userId}", employee "${result.employee.employeeId}", branch "${branch.branchId}"`,
       );
+
+      // Send email to newly created employee asynchronously
+      this.emailService
+        .sendEmployeeWelcomeEmail({
+          to: email,
+          employeeName: `${result.employee.firstName} ${result.employee.lastName}`,
+          email,
+          tempPassword: password,
+          branchName: branch.name,
+        })
+        .catch((err) =>
+          this.logger.error(`Failed to send welcome email to ${email}:`, err),
+        );
 
       return {
         message: 'Employee account created successfully.',
@@ -327,6 +347,17 @@ export class EmployeesService {
   async findByProfileId(profileId: string) {
     const employee = await this.prisma.employee.findFirst({
       where: { profileId },
+      include: {
+        branch: { select: { branchId: true, name: true, address: true } },
+        profile: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            authUser: { select: { email: true } },
+          },
+        },
+      },
     });
 
     if (!employee) {
