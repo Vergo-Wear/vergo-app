@@ -36,6 +36,7 @@ import { CreateSizeDto } from './dto/create-size.dto';
 import { UpdateSizeDto } from './dto/update-size.dto';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
+import { DistributeStockDto } from './dto/distribute-stock.dto';
 import { EmployeesService } from '../employees/employees.service';
 import { CreateEmployeeAccountDto } from '../employees/dto/create-employee-account.dto';
 import { UpdateEmployeeDto } from '../employees/dto/update-employee.dto';
@@ -284,5 +285,15 @@ export class AdminController {
     },
   ) {
     return this.adminService.upsertBranchShipperProfile(branchId, dto);
+  }
+
+  @Get('employees/stock-distribution')
+  getStockDistributionOverview() {
+    return this.adminService.getStockDistributionOverview();
+  }
+
+  @Post('employees/distribute-stock')
+  distributeStock(@Body() dto: DistributeStockDto) {
+    return this.adminService.distributeStockToEmployees(dto);
   }
 }
