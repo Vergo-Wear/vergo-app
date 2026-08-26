@@ -148,7 +148,6 @@ model Employee {
 
   submittedDeliveries Delivery[]              @relation("DeliverySubmittedBy")
   requestedPickups    CourierPickupRequest[]  @relation("PickupRequestedBy")
-  inventory           Inventory[]
 
   @@map("employee")
   @@schema("public")
@@ -307,19 +306,15 @@ model Inventory {
   inventoryId  String    @id @default(dbgenerated("gen_random_uuid()")) @map("inventory_id") @db.Uuid
   variantId    String    @map("variant_id") @db.Uuid
   branchId     String?   @map("branch_id") @db.Uuid
-  employeeId   String?   @map("employee_id") @db.Uuid
   quantity     Int       @default(0)
   reorderLevel Int?      @default(10) @map("reorder_level")
   lastUpdated  DateTime? @default(now()) @map("last_updated") @db.Timestamptz(6)
 
   variant           ProductVariant        @relation(fields: [variantId], references: [variantId], onDelete: NoAction, onUpdate: NoAction)
   branch            Branch?               @relation(fields: [branchId], references: [branchId])
-  employee          Employee?             @relation(fields: [employeeId], references: [employeeId], onDelete: Cascade)
   stockReservations StockReservation[]
   commitments       InventoryCommitment[]
 
-  @@index([employeeId])
-  @@index([branchId])
   @@map("inventory")
   @@schema("public")
 }

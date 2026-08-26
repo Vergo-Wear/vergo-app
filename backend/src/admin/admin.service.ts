@@ -18,7 +18,6 @@ import { CreateSizeDto } from './dto/create-size.dto';
 import { UpdateSizeDto } from './dto/update-size.dto';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
-import { DistributeStockDto } from './dto/distribute-stock.dto';
 
 const ACTIVE_ORDER_STATUSES = new Set(['cancelled', 'rejected']);
 
@@ -1309,23 +1308,6 @@ export class AdminService {
           },
         },
         branch: true,
-        inventory: {
-          where: { quantity: { gt: 0 } },
-          include: {
-            variant: {
-              include: {
-                product: {
-                  include: {
-                    category: true,
-                  },
-                },
-                color: true,
-                size: true,
-                images: { orderBy: { createdAt: 'asc' }, take: 1 },
-              },
-            },
-          },
-        },
         assignedOrders: {
           include: {
             delivery: true,
@@ -1337,40 +1319,9 @@ export class AdminService {
 
     return employees.map((emp) => {
       const claimedCount = emp.assignedOrders.length;
-      const preparedCount = emp.assignedOrders.filter(
-        (o) => o.orderStatus === 'Ready for Pickup' || o.orderStatus === 'Sent',
-      ).length;
-      const dispatchedCount = emp.assignedOrders.filter(
-        (o) => o.orderStatus === 'Sent',
-      ).length;
-      const deliveredCount = emp.assignedOrders.filter(
-        (o) =>
-          o.delivery?.courierStatusType === 'DL' ||
-          o.orderStatus === 'Completed',
-      ).length;
-
-      const employeeInventory = emp.inventory || [];
-      const assignedStock = employeeInventory.map((inv) => ({
-        inventoryId: inv.inventoryId,
-        variantId: inv.variantId,
-        productId: inv.variant.productId,
-        productName: inv.variant.product.name,
-        categoryName: inv.variant.product.category?.name || 'Garments',
-        basePrice: Number(inv.variant.product.basePrice || 0),
-        sku: inv.variant.sku,
-        colorId: inv.variant.colorId,
-        colorName: inv.variant.color?.name || 'Standard',
-        colorHex: inv.variant.color?.hexCode || '#555',
-        sizeId: inv.variant.sizeId,
-        sizeName: inv.variant.size?.name || 'Standard',
-        quantity: inv.quantity || 0,
-        imageUrl: inv.variant.images[0]?.imageUrl || null,
-      }));
-
-      const totalStockUnits = assignedStock.reduce(
-        (sum, item) => sum + item.quantity,
-        0,
-      );
+      const preparedCount = emp.assignedOrders.filter(o => o.orderStatus === 'Ready for Pickup' || o.orderStatus === 'Sent').length;
+      const dispatchedCount = emp.assignedOrders.filter(o => o.orderStatus === 'Sent').length;
+      const deliveredCount = emp.assignedOrders.filter(o => o.delivery?.courierStatusType === 'DL' || o.orderStatus === 'Completed').length;
 
       return {
         employeeId: emp.employeeId,
@@ -1382,22 +1333,15 @@ export class AdminService {
         branchName: emp.branch?.name || 'Main Warehouse',
         accountStatus: emp.profile?.status || 'Active',
         availabilityStatus: emp.availabilityStatus || 'OFF_DUTY',
-        commissionPerParcel: emp.commissionPerParcel
-          ? Number(emp.commissionPerParcel)
-          : 0,
+        commissionPerParcel: emp.commissionPerParcel ? Number(emp.commissionPerParcel) : 0,
         hireDate: emp.hireDate,
         address: emp.address || null,
-        assignedStock,
-        totalStockUnits,
         metrics: {
           claimedCount,
           preparedCount,
           dispatchedCount,
           deliveredCount,
-          successRate:
-            claimedCount > 0
-              ? Number(((deliveredCount / claimedCount) * 100).toFixed(1))
-              : 0,
+          successRate: claimedCount > 0 ? Number(((deliveredCount / claimedCount) * 100).toFixed(1)) : 0,
         },
       };
     });
@@ -1432,19 +1376,16 @@ export class AdminService {
   /**
    * Upserts custom return address for a branch
    */
-  async upsertBranchShipperProfile(
-    branchId: string,
-    data: {
-      shipperName: string;
-      addressLine1: string;
-      addressLine2?: string;
-      addressLine3?: string;
-      addressLine4City: string;
-      contactName: string;
-      contactNumber1: string;
-      contactNumber2?: string;
-    },
-  ) {
+  async upsertBranchShipperProfile(branchId: string, data: {
+    shipperName: string;
+    addressLine1: string;
+    addressLine2?: string;
+    addressLine3?: string;
+    addressLine4City: string;
+    contactName: string;
+    contactNumber1: string;
+    contactNumber2?: string;
+  }) {
     const existing = await this.prisma.courierShipperProfile.findFirst({
       where: { branchId, courierName: 'Citypak' },
     });
@@ -1481,320 +1422,5 @@ export class AdminService {
         isDefault: false,
       },
     });
-  }
-
-  async getStockDistributionOverview() {
-    const [branches, employees, products] = await Promise.all([
-      this.prisma.branch.findMany({ orderBy: { name: 'asc' } }),
-      this.prisma.employee.findMany({
-        include: {
-          profile: true,
-          branch: true,
-          inventory: {
-            where: { quantity: { gt: 0 } },
-            include: {
-              variant: {
-                include: {
-                  product: {
-                    include: {
-                      category: true,
-                    },
-                  },
-                  color: true,
-                  size: true,
-                  images: { orderBy: { createdAt: 'asc' }, take: 1 },
-                },
-              },
-            },
-          },
-        },
-        orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
-      }),
-      this.prisma.product.findMany({
-        include: {
-          category: true,
-          variants: {
-            include: {
-              color: true,
-              size: true,
-              images: { orderBy: { createdAt: 'asc' }, take: 1 },
-              inventory: {
-                include: {
-                  branch: true,
-                  stockReservations: {
-                    where: { status: { in: ['Active', 'Pending Verification'] } },
-                    select: { quantity: true },
-                  },
-                },
-              },
-            },
-            orderBy: [{ sku: 'asc' }],
-          },
-        },
-        orderBy: [{ createdAt: 'desc' }, { name: 'asc' }],
-      }),
-    ]);
-
-    const formattedProducts = products.map((product) => {
-      const allImages = product.variants.flatMap((v) =>
-        v.images.map((img) => img.imageUrl),
-      );
-      const mainImage = allImages[0] || null;
-
-      const variants = product.variants.map((variant) => {
-        // Warehouse inventory is inventory with employeeId === null
-        const warehouseInventory = variant.inventory.filter(
-          (inv) => !inv.employeeId,
-        );
-        const totalWarehouseStock = warehouseInventory.reduce(
-          (sum, inv) => sum + (inv.quantity || 0),
-          0,
-        );
-
-        const branchAllocations = warehouseInventory.map((inv) => ({
-          inventoryId: inv.inventoryId,
-          branchId: inv.branchId || null,
-          branchName: inv.branch?.name || 'Main Warehouse',
-          quantity: inv.quantity || 0,
-        }));
-
-        return {
-          variantId: variant.variantId,
-          sku: variant.sku,
-          colorId: variant.colorId,
-          colorName: variant.color?.name || 'Standard',
-          colorHex: variant.color?.hexCode || '#555',
-          sizeId: variant.sizeId,
-          sizeName: variant.size?.name || 'Standard',
-          priceAdjustment: Number(variant.priceAdjustment || 0),
-          totalWarehouseStock,
-          branchAllocations,
-          imageUrl: variant.images[0]?.imageUrl || mainImage,
-        };
-      });
-
-      const totalStock = variants.reduce(
-        (sum, v) => sum + v.totalWarehouseStock,
-        0,
-      );
-
-      return {
-        productId: product.productId,
-        name: product.name,
-        description: product.description,
-        categoryId: product.categoryId,
-        categoryName: product.category?.name || 'Uncategorized',
-        basePrice: Number(product.basePrice),
-        status: product.status,
-        mainImage,
-        totalStock,
-        variants,
-      };
-    });
-
-    const formattedEmployees = employees.map((emp) => {
-      const assignedStock = (emp.inventory || []).map((inv) => ({
-        inventoryId: inv.inventoryId,
-        variantId: inv.variantId,
-        productId: inv.variant.productId,
-        productName: inv.variant.product.name,
-        categoryName: inv.variant.product.category?.name || 'Garments',
-        sku: inv.variant.sku,
-        colorName: inv.variant.color?.name || 'Standard',
-        colorHex: inv.variant.color?.hexCode || '#555',
-        sizeName: inv.variant.size?.name || 'Standard',
-        quantity: inv.quantity || 0,
-        imageUrl: inv.variant.images[0]?.imageUrl || null,
-      }));
-
-      const totalStockUnits = assignedStock.reduce(
-        (sum, item) => sum + item.quantity,
-        0,
-      );
-
-      return {
-        employeeId: emp.employeeId,
-        profileId: emp.profileId,
-        name: `${emp.firstName} ${emp.lastName}`.trim(),
-        email: emp.profile?.username || '',
-        phone: emp.phone || '',
-        position: emp.position || 'Employee',
-        branchId: emp.branchId || null,
-        branchName: emp.branch?.name || 'Unassigned Branch',
-        status: emp.profile?.status || 'active',
-        availabilityStatus: emp.availabilityStatus || 'OFF_DUTY',
-        assignedStock,
-        totalStockUnits,
-      };
-    });
-
-    return {
-      products: formattedProducts,
-      employees: formattedEmployees,
-      branches: branches.map((b) => ({
-        branchId: b.branchId,
-        name: b.name,
-        address: b.address,
-      })),
-    };
-  }
-
-  async distributeStockToEmployees(dto: DistributeStockDto) {
-    const defaultBranch = await this.prisma.branch.findFirst();
-    if (!defaultBranch) {
-      throw new BadRequestException('No warehouse branches configured in system.');
-    }
-
-    let targetEmployees: Array<{ employeeId: string; name: string; branchId: string | null }> = [];
-
-    if (dto.targetMode === 'single') {
-      if (!dto.employeeId) {
-        throw new BadRequestException('Employee ID is required for single distribution mode.');
-      }
-      const employee = await this.prisma.employee.findUnique({
-        where: { employeeId: dto.employeeId },
-        include: { branch: true },
-      });
-      if (!employee) {
-        throw new NotFoundException(`Employee "${dto.employeeId}" not found.`);
-      }
-      targetEmployees = [
-        {
-          employeeId: employee.employeeId,
-          name: `${employee.firstName} ${employee.lastName}`.trim(),
-          branchId: employee.branchId || defaultBranch.branchId,
-        },
-      ];
-    } else {
-      const whereClause: Prisma.EmployeeWhereInput = dto.employeeIds?.length
-        ? { employeeId: { in: dto.employeeIds } }
-        : { profile: { status: 'active' } };
-
-      const employees = await this.prisma.employee.findMany({
-        where: whereClause,
-        include: { branch: true },
-      });
-
-      if (employees.length === 0) {
-        throw new BadRequestException('No active employees found to distribute stock to.');
-      }
-
-      targetEmployees = employees.map((emp) => ({
-        employeeId: emp.employeeId,
-        name: `${emp.firstName} ${emp.lastName}`.trim(),
-        branchId: emp.branchId || defaultBranch.branchId,
-      }));
-    }
-
-    const variantIds = dto.allocations.map((a) => a.variantId);
-    const variants = await this.prisma.productVariant.findMany({
-      where: { variantId: { in: variantIds } },
-      include: {
-        product: true,
-        color: true,
-        size: true,
-        inventory: {
-          where: { employeeId: null },
-        },
-      },
-    });
-
-    const variantMap = new Map(variants.map((v) => [v.variantId, v]));
-
-    for (const alloc of dto.allocations) {
-      if (alloc.quantity <= 0) continue;
-      const variant = variantMap.get(alloc.variantId);
-      if (!variant) {
-        throw new NotFoundException(`Variant with ID "${alloc.variantId}" not found.`);
-      }
-
-      const totalRequestedForVariant = alloc.quantity * targetEmployees.length;
-      const totalWarehouseStock = variant.inventory.reduce(
-        (sum, inv) => sum + (inv.quantity || 0),
-        0,
-      );
-
-      if (totalRequestedForVariant > totalWarehouseStock) {
-        const variantLabel = `${variant.product.name} (${variant.color?.name || ''} - ${variant.size?.name || ''})`;
-        throw new BadRequestException(
-          `Cannot allocate ${totalRequestedForVariant} units of ${variantLabel} across ${targetEmployees.length} employee(s). Only ${totalWarehouseStock} units exist in inventory.`,
-        );
-      }
-    }
-
-    const totalAllocatedUnits = await this.prisma.$transaction(async (tx) => {
-      let totalUnits = 0;
-
-      for (const employee of targetEmployees) {
-        const branchId = employee.branchId || defaultBranch.branchId;
-
-        for (const alloc of dto.allocations) {
-          if (alloc.quantity <= 0) continue;
-
-          // 1. Find or create employee-specific inventory record
-          const existingEmployeeInventory = await tx.inventory.findFirst({
-            where: {
-              variantId: alloc.variantId,
-              employeeId: employee.employeeId,
-            },
-          });
-
-          if (existingEmployeeInventory) {
-            await tx.inventory.update({
-              where: { inventoryId: existingEmployeeInventory.inventoryId },
-              data: {
-                quantity: { increment: alloc.quantity },
-                lastUpdated: new Date(),
-              },
-            });
-          } else {
-            await tx.inventory.create({
-              data: {
-                variantId: alloc.variantId,
-                branchId: branchId,
-                employeeId: employee.employeeId,
-                quantity: alloc.quantity,
-                reorderLevel: 10,
-                lastUpdated: new Date(),
-              },
-            });
-          }
-
-          // 2. Decrement master warehouse inventory record (where employeeId is null)
-          const warehouseRecord = await tx.inventory.findFirst({
-            where: {
-              variantId: alloc.variantId,
-              employeeId: null,
-            },
-          });
-
-          if (warehouseRecord) {
-            await tx.inventory.update({
-              where: { inventoryId: warehouseRecord.inventoryId },
-              data: {
-                quantity: {
-                  decrement: Math.min(warehouseRecord.quantity, alloc.quantity),
-                },
-                lastUpdated: new Date(),
-              },
-            });
-          }
-
-          totalUnits += alloc.quantity;
-        }
-      }
-
-      return totalUnits;
-    });
-
-    return {
-      success: true,
-      message:
-        dto.targetMode === 'single'
-          ? `Successfully allocated ${totalAllocatedUnits} units to ${targetEmployees[0].name}.`
-          : `Successfully distributed ${totalAllocatedUnits} total units across ${targetEmployees.length} active employees.`,
-      targetEmployeesCount: targetEmployees.length,
-      totalUnitsAllocated: totalAllocatedUnits,
-    };
   }
 }

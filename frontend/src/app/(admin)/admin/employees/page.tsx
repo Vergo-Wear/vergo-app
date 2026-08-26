@@ -23,8 +23,6 @@ interface DetailedEmployee {
   commissionPerParcel?: number;
   hireDate?: string;
   address?: string;
-  assignedStock?: AssignedStockItem[];
-  totalStockUnits?: number;
   metrics?: {
     claimedCount: number;
     preparedCount: number;
@@ -32,61 +30,6 @@ interface DetailedEmployee {
     deliveredCount: number;
     successRate: number;
   };
-}
-
-interface AssignedStockItem {
-  inventoryId: string;
-  variantId: string;
-  productId: string;
-  productName: string;
-  categoryName: string;
-  basePrice?: number;
-  sku: string;
-  colorId?: string;
-  colorName: string;
-  colorHex: string;
-  sizeId?: string;
-  sizeName: string;
-  quantity: number;
-  imageUrl?: string | null;
-}
-
-interface VariantDistributionInfo {
-  variantId: string;
-  sku: string;
-  colorId: string;
-  colorName: string;
-  colorHex: string;
-  sizeId: string;
-  sizeName: string;
-  priceAdjustment: number;
-  totalWarehouseStock: number;
-  branchAllocations: Array<{
-    inventoryId: string;
-    branchId: string | null;
-    branchName: string;
-    quantity: number;
-  }>;
-  imageUrl: string | null;
-}
-
-interface ProductDistributionInfo {
-  productId: string;
-  name: string;
-  description: string | null;
-  categoryId: string | null;
-  categoryName: string;
-  basePrice: number;
-  status: string;
-  mainImage: string | null;
-  totalStock: number;
-  variants: VariantDistributionInfo[];
-}
-
-interface StockDistributionData {
-  products: ProductDistributionInfo[];
-  employees: DetailedEmployee[];
-  branches: Branch[];
 }
 
 interface EmployeeForm {
@@ -145,34 +88,24 @@ export default function EmployeesPage() {
   } | null>(null);
   const [removing, setRemoving] = useState(false);
 
-  // Multi-Variant Stock Distributor State
-  const [isDistributorOpen, setIsDistributorOpen] = useState(false);
-  const [distributionOverview, setDistributionOverview] =
-    useState<StockDistributionData | null>(null);
-  const [loadingOverview, setLoadingOverview] = useState(false);
-  const [selectedProduct, setSelectedProduct] =
-    useState<ProductDistributionInfo | null>(null);
-  const [distributorTargetMode, setDistributorTargetMode] = useState<
-    "single" | "all"
-  >("all");
-  const [distributorTargetEmployeeId, setDistributorTargetEmployeeId] =
-    useState<string>("");
-  const [allocationQuantities, setAllocationQuantities] = useState<
-    Record<string, number>
-  >({});
-  const [bulkSetAllValue, setBulkSetAllValue] = useState<string>("5");
-  const [submittingDistribution, setSubmittingDistribution] = useState(false);
-
-  // View Assigned Stock Details Modal State
-  const [viewStockEmployee, setViewStockEmployee] =
-    useState<DetailedEmployee | null>(null);
-
-  // Stock suggestion state for newly created employee
+  // Stock allocation state for new and existing employees
   const [stockSuggestion, setStockSuggestion] = useState<{
     employeeId: string;
     name: string;
     branchName: string;
   } | null>(null);
+
+  const [stockAssignTarget, setStockAssignTarget] = useState<{
+    id: string;
+    name: string;
+    branchName: string;
+  } | null>(null);
+
+  const [stockForm, setStockForm] = useState({
+    sku: "SKU-OVERSIZE-TEE-BLK-M",
+    quantity: "25",
+  });
+  const [assigningStock, setAssigningStock] = useState(false);
 
   // Edit employee modal state
   const [editEmployeeTarget, setEditEmployeeTarget] =
@@ -278,180 +211,6 @@ export default function EmployeesPage() {
     const interval = setInterval(loadEmployeeList, 10000);
     return () => clearInterval(interval);
   }, []);
-
-  // Load Stock Distribution Overview (Products, Variants, Stock counts)
-  const loadDistributionOverview = useCallback(async () => {
-    setLoadingOverview(true);
-    try {
-      const res = await authenticatedFetch("/admin/employees/stock-distribution");
-      if (!res || !res.ok) throw new Error("Failed to load stock distribution overview.");
-      const data: StockDistributionData = await res.json();
-      setDistributionOverview(data);
-      if (data.products.length > 0) {
-        setSelectedProduct((prev) =>
-          prev
-            ? data.products.find((p) => p.productId === prev.productId) || data.products[0]
-            : data.products[0]
-        );
-      }
-    } catch (err) {
-      console.error("Error loading stock distribution:", err);
-      addNotification("Failed to load real-time stock catalog.", "error");
-    } finally {
-      setLoadingOverview(false);
-    }
-  }, [addNotification]);
-
-  const openStockDistributorModal = (employeeId?: string | null) => {
-    if (employeeId) {
-      setDistributorTargetMode("single");
-      setDistributorTargetEmployeeId(employeeId);
-    } else {
-      setDistributorTargetMode("all");
-      setDistributorTargetEmployeeId(employeeList[0]?.employeeId || "");
-    }
-    setAllocationQuantities({});
-    setBulkSetAllValue("5");
-    setIsDistributorOpen(true);
-    loadDistributionOverview();
-  };
-
-  const handleSetVariantQuantity = (variantId: string, val: number) => {
-    setAllocationQuantities((prev) => ({
-      ...prev,
-      [variantId]: Math.max(0, val),
-    }));
-  };
-
-  const handleSetAllSizes = (qty: number) => {
-    if (!selectedProduct) return;
-    const targetCount =
-      distributorTargetMode === "all"
-        ? distributionOverview?.employees.length || employeeList.length || 1
-        : 1;
-
-    const newMap: Record<string, number> = {};
-    selectedProduct.variants.forEach((v) => {
-      const maxAllowed = Math.floor(v.totalWarehouseStock / targetCount);
-      newMap[v.variantId] = Math.min(qty, maxAllowed);
-    });
-    setAllocationQuantities(newMap);
-  };
-
-  const handleFillMaxRemaining = () => {
-    if (!selectedProduct) return;
-    const targetCount =
-      distributorTargetMode === "all"
-        ? distributionOverview?.employees.length || employeeList.length || 1
-        : 1;
-
-    const newMap: Record<string, number> = {};
-    selectedProduct.variants.forEach((v) => {
-      newMap[v.variantId] = Math.floor(v.totalWarehouseStock / targetCount);
-    });
-    setAllocationQuantities(newMap);
-  };
-
-  const handleCopyFirstColorToAll = () => {
-    if (!selectedProduct) return;
-    const colors = Array.from(new Set(selectedProduct.variants.map((v) => v.colorId)));
-    if (colors.length < 2) return;
-
-    const firstColorId = colors[0];
-    const firstColorVariants = selectedProduct.variants.filter(
-      (v) => v.colorId === firstColorId
-    );
-
-    const targetCount =
-      distributorTargetMode === "all"
-        ? distributionOverview?.employees.length || employeeList.length || 1
-        : 1;
-
-    const newMap = { ...allocationQuantities };
-    selectedProduct.variants.forEach((v) => {
-      if (v.colorId !== firstColorId) {
-        const match = firstColorVariants.find((fv) => fv.sizeName === v.sizeName);
-        if (match && allocationQuantities[match.variantId] !== undefined) {
-          const qty = allocationQuantities[match.variantId];
-          const maxAllowed = Math.floor(v.totalWarehouseStock / targetCount);
-          newMap[v.variantId] = Math.min(qty, maxAllowed);
-        }
-      }
-    });
-    setAllocationQuantities(newMap);
-  };
-
-  const handleClearAllocation = () => {
-    setAllocationQuantities({});
-  };
-
-  const handleConfirmDistribution = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (submittingDistribution || !selectedProduct) return;
-
-    const allocations = Object.entries(allocationQuantities)
-      .filter(([_, qty]) => qty > 0)
-      .map(([variantId, quantity]) => ({ variantId, quantity }));
-
-    if (allocations.length === 0) {
-      addNotification("Please enter quantities for at least one garment variant.", "error");
-      return;
-    }
-
-    const activeCount =
-      distributorTargetMode === "all"
-        ? distributionOverview?.employees.length || employeeList.length || 1
-        : 1;
-
-    for (const alloc of allocations) {
-      const variant = selectedProduct.variants.find((v) => v.variantId === alloc.variantId);
-      if (variant && alloc.quantity * activeCount > variant.totalWarehouseStock) {
-        addNotification(
-          `Cannot allocate ${alloc.quantity * activeCount} units of ${variant.sku}. Exceeds warehouse stock of ${variant.totalWarehouseStock}.`,
-          "error"
-        );
-        return;
-      }
-    }
-
-    setSubmittingDistribution(true);
-    try {
-      const payload = {
-        targetMode: distributorTargetMode,
-        employeeId:
-          distributorTargetMode === "single"
-            ? distributorTargetEmployeeId
-            : undefined,
-        allocations,
-      };
-
-      const res = await authenticatedFetch("/admin/employees/distribute-stock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res || !res.ok) {
-        const errJson = res ? await res.json().catch(() => ({})) : {};
-        throw new Error(errJson?.message || "Failed to distribute stock.");
-      }
-
-      const result = await res.json();
-      addNotification(
-        result.message || "Stock successfully distributed.",
-        "success"
-      );
-      setIsDistributorOpen(false);
-      loadEmployeeList();
-    } catch (err) {
-      addNotification(
-        err instanceof Error ? err.message : "Failed to distribute stock.",
-        "error"
-      );
-    } finally {
-      setSubmittingDistribution(false);
-    }
-  };
 
 
 
@@ -726,49 +485,25 @@ export default function EmployeesPage() {
             commission rates, and live availability.
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            type="button"
-            onClick={() => openStockDistributorModal(null)}
-            className="bg-[#10b981] text-black hover:bg-[#059669] active:bg-[#047857] font-bold text-xs tracking-[0.12em] px-4 py-2.5 rounded-md transition-all shadow-md shadow-emerald-500/10 uppercase flex items-center gap-2 cursor-pointer w-fit"
+        <button
+          onClick={() => setAddModalOpen(true)}
+          className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] font-bold text-xs tracking-[0.15em] px-4 py-2.5 rounded-md transition-all shadow-md shadow-white/5 uppercase flex items-center gap-2 cursor-pointer w-fit"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-              />
-            </svg>
-            <span>DISTRIBUTE STOCK (ALL STAFF)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setAddModalOpen(true)}
-            className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] font-bold text-xs tracking-[0.15em] px-4 py-2.5 rounded-md transition-all shadow-md shadow-white/5 uppercase flex items-center gap-2 cursor-pointer w-fit"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            <span>ADD EMPLOYEE</span>
-          </button>
-        </div>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 4v16m8-8H4"
+            />
+          </svg>
+          <span>ADD EMPLOYEE</span>
+        </button>
       </div>
 
       {/* Workforce Summary Metrics */}
@@ -912,16 +647,16 @@ export default function EmployeesPage() {
               return (
                 <div
                   key={emp.employeeId}
-                  className="bg-[#121214] border border-white/5 hover:border-white/15 rounded-2xl p-5 lg:p-6 transition-all shadow-lg hover:shadow-2xl flex flex-col xl:flex-row xl:items-center justify-between gap-6"
+                  className="bg-[#121212] border border-[rgba(255,255,255,0.04)] hover:border-[rgba(255,255,255,0.1)] rounded-lg p-5 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-6"
                 >
-                  {/* Left Column: Avatar + Profile Identity */}
-                  <div className="flex items-start gap-4 min-w-0 xl:w-[32%]">
-                    <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 text-white font-extrabold flex items-center justify-center text-base shadow-inner flex-shrink-0">
+                  {/* Left Column: Avatar + Profile Details */}
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-white/10 text-white font-bold flex items-center justify-center text-sm shadow-md flex-shrink-0">
                       {avatarInitials}
                     </div>
-                    <div className="space-y-1.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-bold text-white text-base tracking-wide truncate" title={emp.name}>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <h4 className="font-bold text-white text-base">
                           {emp.name}
                         </h4>
                         <span className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/20 font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase">
@@ -932,8 +667,6 @@ export default function EmployeesPage() {
                           className={`font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase flex items-center gap-1 ${
                             isDuty
                               ? "bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30"
-                              : isBusy
-                              ? "bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30"
                               : "bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/30"
                           }`}
                         >
@@ -941,12 +674,10 @@ export default function EmployeesPage() {
                             className={`w-1.5 h-1.5 rounded-full ${
                               isDuty
                                 ? "bg-[#10b981] animate-pulse"
-                                : isBusy
-                                ? "bg-[#ef4444]"
                                 : "bg-[#f59e0b]"
                             }`}
                           ></span>
-                          {isDuty ? "ON DUTY" : isBusy ? "BUSY" : "ON BREAK"}
+                          {isDuty ? "ON DUTY" : "ON BREAK"}
                         </span>
                         <span
                           className={`font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase ${
@@ -959,284 +690,213 @@ export default function EmployeesPage() {
                         </span>
                       </div>
 
-                      <div className="space-y-1 text-xs text-[#8e8e93]">
-                        <div className="flex items-center gap-3 flex-wrap font-mono-meta">
-                          <span className="flex items-center gap-1.5 text-white/80">
-                            <svg
-                              className="w-3.5 h-3.5 text-[#8e8e93]"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={2}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                              />
-                            </svg>
-                            {emp.email}
-                          </span>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[#8e8e93] text-xs pt-1">
+                        <span className="flex items-center gap-1 font-mono-meta">
+                          <svg
+                            className="w-3.5 h-3.5 text-[#8e8e93]"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                            />
+                          </svg>
+                          {emp.email}
+                        </span>
 
-                          <span className="flex items-center gap-1.5 text-white/80">
-                            <svg
-                              className="w-3.5 h-3.5 text-[#8e8e93]"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={2}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                              />
-                            </svg>
-                            {emp.phone}
-                          </span>
-                        </div>
+                        <span className="flex items-center gap-1 font-mono-meta">
+                          <svg
+                            className="w-3.5 h-3.5 text-[#8e8e93]"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                            />
+                          </svg>
+                          {emp.phone}
+                        </span>
 
-                        <div className="flex items-center gap-3 flex-wrap text-[11px] text-[#71717a]">
-                          <span className="flex items-center gap-1">
-                            <svg
-                              className="w-3.5 h-3.5 text-[#8e8e93]"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={2}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m3 0h1M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                              />
-                            </svg>
-                            <strong className="text-white font-medium">
-                              {emp.branchName}
-                            </strong>
-                          </span>
-
-                          {emp.address && (
-                            <span
-                              className="flex items-center gap-1 truncate max-w-[240px]"
-                              title={emp.address}
-                            >
-                              <svg
-                                className="w-3 h-3 text-[#71717a]"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                />
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                />
-                              </svg>
-                              {emp.address}
-                            </span>
-                          )}
-                        </div>
+                        <span className="flex items-center gap-1">
+                          <svg
+                            className="w-3.5 h-3.5 text-[#8e8e93]"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m3 0h1M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                            />
+                          </svg>
+                          <strong className="text-white font-semibold">
+                            {emp.branchName}
+                          </strong>
+                        </span>
                       </div>
+
+                      {emp.address && (
+                        <div className="text-[11px] text-[#71717a] pt-1 flex items-center gap-1">
+                          <svg
+                            className="w-3 h-3 text-[#71717a]"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                          </svg>
+                          {emp.address}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Middle Column: Expanded Metrics Grid (Assigned Stock, Commission, Logistics) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 xl:max-w-2xl">
-                    {/* Tile 1: Assigned Stock Tile */}
-                    <div
-                      onClick={() => setViewStockEmployee(emp)}
-                      className="bg-[#18181c] hover:bg-[#1e1e24] p-3.5 rounded-xl border border-white/5 hover:border-[#10b981]/30 transition-all cursor-pointer group flex flex-col justify-between shadow-sm"
-                      title="Click to view assigned garment breakdown"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] text-[#8e8e93] group-hover:text-[#10b981] font-bold tracking-wider uppercase transition-colors">
-                          ASSIGNED STOCK
-                        </span>
-                        <span className="text-[9px] bg-white/5 group-hover:bg-[#10b981]/15 text-[#8e8e93] group-hover:text-[#10b981] px-1.5 py-0.5 rounded font-mono-meta transition-colors">
-                          VIEW ↗
-                        </span>
-                      </div>
-                      <div className="mt-2">
-                        <div className="flex items-baseline gap-1.5">
-                          <span
-                            className={`font-mono-meta font-extrabold text-xl ${
-                              (emp.totalStockUnits || 0) > 0
-                                ? "text-[#10b981]"
-                                : "text-[#71717a]"
-                            }`}
-                          >
-                            {emp.totalStockUnits || 0}
-                          </span>
-                          <span className="text-xs text-[#8e8e93]">units</span>
-                        </div>
-                        <span className="text-[10px] text-[#71717a] block mt-0.5">
-                          {(emp.assignedStock || []).length} active SKUs
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Tile 2: Commission Rate */}
-                    <div className="bg-[#18181c] p-3.5 rounded-xl border border-white/5 flex flex-col justify-between shadow-sm">
+                  {/* Middle Column: Logistics Metrics & Commission */}
+                  <div className="flex flex-wrap items-center gap-6 pt-3 lg:pt-0 border-t lg:border-t-0 border-[rgba(255,255,255,0.04)]">
+                    <div className="text-left">
                       <span className="text-[9px] text-[#8e8e93] font-bold tracking-wider uppercase block">
                         COMMISSION RATE
                       </span>
-                      <div className="mt-2">
-                        <span className="font-mono-meta font-bold text-white text-lg block">
-                          {emp.commissionPerParcel &&
-                          emp.commissionPerParcel > 0
-                            ? `${emp.commissionPerParcel}%`
-                            : "0%"}
-                        </span>
-                        <span className="text-[10px] text-[#71717a] block mt-0.5">
-                          {emp.commissionPerParcel &&
-                          emp.commissionPerParcel > 0
-                            ? "Per parcel commission"
-                            : "No commission"}
-                        </span>
-                      </div>
+                      <span className="font-mono-meta font-bold text-[#10b981] text-xs">
+                        {emp.commissionPerParcel && emp.commissionPerParcel > 0
+                          ? `${emp.commissionPerParcel}% / parcel`
+                          : "No Commission"}
+                      </span>
                     </div>
 
-                    {/* Tile 3: Fulfillment Performance */}
-                    <div className="bg-[#18181c] p-3.5 rounded-xl border border-white/5 flex flex-col justify-between shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] text-[#8e8e93] font-bold tracking-wider uppercase">
-                          FULFILLMENT
-                        </span>
-                        <span className="text-[9px] font-mono-meta font-bold text-[#10b981]">
-                          {emp.metrics?.successRate || 0}% rate
-                        </span>
+                    {emp.metrics && (
+                      <div className="grid grid-cols-4 gap-4 text-center bg-[#18181b] px-4 py-2 rounded-md border border-white/5">
+                        <div>
+                          <span className="text-[8px] text-[#8e8e93] font-bold tracking-wider uppercase block">
+                            PREPARED
+                          </span>
+                          <span className="font-mono-meta font-bold text-white text-xs">
+                            {emp.metrics.preparedCount}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-[#8e8e93] font-bold tracking-wider uppercase block">
+                            DISPATCHED
+                          </span>
+                          <span className="font-mono-meta font-bold text-white text-xs">
+                            {emp.metrics.dispatchedCount}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-[#8e8e93] font-bold tracking-wider uppercase block">
+                            DELIVERED
+                          </span>
+                          <span className="font-mono-meta font-bold text-[#10b981] text-xs">
+                            {emp.metrics.deliveredCount}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-[#8e8e93] font-bold tracking-wider uppercase block">
+                            SUCCESS
+                          </span>
+                          <span className="font-mono-meta font-bold text-white text-xs">
+                            {emp.metrics.successRate}%
+                          </span>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-1 mt-2 text-center font-mono-meta">
-                        <div>
-                          <span className="text-[8px] text-[#71717a] block uppercase">
-                            PREP
-                          </span>
-                          <span className="text-xs font-bold text-white">
-                            {emp.metrics?.preparedCount || 0}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[8px] text-[#71717a] block uppercase">
-                            SENT
-                          </span>
-                          <span className="text-xs font-bold text-white">
-                            {emp.metrics?.dispatchedCount || 0}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[8px] text-[#71717a] block uppercase">
-                            DONE
-                          </span>
-                          <span className="text-xs font-bold text-[#10b981]">
-                            {emp.metrics?.deliveredCount || 0}
-                          </span>
-                        </div>
-                      </div>
+                    )}
+
+                    {/* Right Column: Actions */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditModal(emp)}
+                        title={`Edit ${emp.name}`}
+                        className="bg-white/5 hover:bg-white/10 border border-white/10 text-[#8e8e93] hover:text-white font-bold text-xs px-3 py-2 rounded transition-all cursor-pointer flex items-center gap-1.5 uppercase"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                        <span>EDIT</span>
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          setStockAssignTarget({
+                            id: emp.employeeId,
+                            name: emp.name,
+                            branchName: emp.branchName,
+                          })
+                        }
+                        title={`Assign stock to ${emp.name}`}
+                        className="bg-[#10b981]/10 text-[#10b981] hover:bg-[#10b981] hover:text-black border border-[#10b981]/30 font-bold text-xs px-3 py-2 rounded transition-all cursor-pointer flex items-center gap-1.5 uppercase"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                          />
+                        </svg>
+                        <span>ASSIGN STOCK</span>
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          setRemoveTarget({
+                            id: emp.employeeId,
+                            name: emp.name,
+                          })
+                        }
+                        title={`Remove ${emp.name}`}
+                        className="bg-red-950/30 text-[#ef4444] hover:bg-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] font-bold text-xs px-3 py-2 rounded transition-all cursor-pointer flex items-center gap-1.5 uppercase"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                        <span>REMOVE</span>
+                      </button>
                     </div>
-                  </div>
-
-                  {/* Right Column: Actions Group */}
-                  <div className="flex items-center justify-end gap-2.5 pt-3 xl:pt-0 border-t xl:border-t-0 border-white/5 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setViewStockEmployee(emp)}
-                      title={`View garment stock held by ${emp.name}`}
-                      className="bg-white/5 hover:bg-white/10 hover:border-white/20 border border-white/10 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 uppercase active:scale-95 whitespace-nowrap"
-                    >
-                      <svg
-                        className="w-4 h-4 text-[#10b981]"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        />
-                      </svg>
-                      <span>VIEW STOCK</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openStockDistributorModal(emp.employeeId)}
-                      title={`Distribute & allocate garment stock to ${emp.name}`}
-                      className="bg-[#10b981] hover:bg-[#059669] text-black font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shadow-[#10b981]/20 cursor-pointer flex items-center gap-1.5 uppercase active:scale-95 whitespace-nowrap"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2.2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                        />
-                      </svg>
-                      <span>DISTRIBUTE STOCK</span>
-                    </button>
-
-                    <button
-                      onClick={() => openEditModal(emp)}
-                      title={`Edit ${emp.name}`}
-                      className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 hover:border-white/20 border border-white/10 text-[#8e8e93] hover:text-white flex items-center justify-center transition-all cursor-pointer flex-shrink-0"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                      </svg>
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        setRemoveTarget({
-                          id: emp.employeeId,
-                          name: emp.name,
-                        })
-                      }
-                      title={`Remove ${emp.name}`}
-                      className="w-9 h-9 rounded-xl bg-red-950/20 hover:bg-[#ef4444] text-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] flex items-center justify-center transition-all cursor-pointer flex-shrink-0"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
-                    </button>
                   </div>
                 </div>
               );
@@ -1959,7 +1619,11 @@ export default function EmployeesPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        openStockDistributorModal(stockSuggestion.employeeId);
+                        setStockAssignTarget({
+                          id: stockSuggestion.employeeId,
+                          name: stockSuggestion.name,
+                          branchName: stockSuggestion.branchName,
+                        });
                         setCreatedCredentials(null);
                         setStockSuggestion(null);
                       }}
@@ -1992,625 +1656,18 @@ export default function EmployeesPage() {
         </div>
       )}
 
-      {/* MULTI-VARIANT STOCK DISTRIBUTOR MODAL */}
-      {isDistributorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm select-none p-4 overflow-y-auto">
+      {/* ASSIGN INITIAL STOCK MODAL */}
+      {stockAssignTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm select-none">
           <div
-            className="w-full max-w-4xl bg-[#0c0c0e]/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden p-6 space-y-6 my-8 max-h-[90vh] flex flex-col"
+            className="w-full max-w-md bg-[#0c0c0e]/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden p-6 space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="flex justify-between items-center pb-4 border-b border-white/10 flex-shrink-0">
+            <div className="flex justify-between items-center pb-3 border-b border-white/10">
               <div>
-                <h3 className="text-base font-bold tracking-wider uppercase text-white flex items-center gap-2.5">
-                  <span className="p-2 bg-[#10b981]/10 rounded-lg text-[#10b981]">
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                      />
-                    </svg>
-                  </span>
-                  <span>MULTI-VARIANT STOCK DISTRIBUTOR</span>
-                </h3>
-                <p className="text-[11px] text-[#8e8e93] tracking-wide mt-1">
-                  Allocate and distribute garment stocks (Color × Size) with real-time warehouse remainder calculation.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsDistributorOpen(false)}
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-[#8e8e93] hover:text-white flex items-center justify-center transition-all cursor-pointer text-lg"
-              >
-                &times;
-              </button>
-            </div>
-
-            {loadingOverview ? (
-              <div className="py-20 text-center text-[#8e8e93] uppercase tracking-widest font-semibold flex flex-col items-center justify-center gap-3">
-                <svg
-                  className="animate-spin w-6 h-6 text-[#10b981]"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  ></path>
-                </svg>
-                <span>SYNCING MASTER INVENTORY STOCK...</span>
-              </div>
-            ) : !distributionOverview ||
-              distributionOverview.products.length === 0 ? (
-              <div className="py-16 text-center text-[#8e8e93] space-y-2">
-                <p className="font-bold text-white text-sm">
-                  NO PRODUCTS FOUND IN CATALOG
-                </p>
-                <p className="text-xs">
-                  Create garments in Master Catalog first before distributing stocks.
-                </p>
-              </div>
-            ) : (
-              <form
-                onSubmit={handleConfirmDistribution}
-                className="space-y-6 flex-1 overflow-y-auto pr-1"
-              >
-                {/* STEP 1: GARMENT SELECTOR & DISTRIBUTION TARGET */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[#141417] p-4 rounded-xl border border-white/5">
-                  {/* Select Garment */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase mb-1.5">
-                      1. SELECT GARMENT PRODUCT <span className="text-[#ef4444]">*</span>
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={selectedProduct?.productId || ""}
-                        onChange={(e) => {
-                          const p = distributionOverview.products.find(
-                            (prod) => prod.productId === e.target.value
-                          );
-                          setSelectedProduct(p || null);
-                          setAllocationQuantities({});
-                        }}
-                        className="w-full bg-[#1c1c20] border border-white/10 rounded-lg px-3.5 py-2.5 text-white font-bold text-xs focus:outline-none transition-all cursor-pointer"
-                      >
-                        {distributionOverview.products.map((prod) => (
-                          <option
-                            key={prod.productId}
-                            value={prod.productId}
-                            className="bg-[#141417]"
-                          >
-                            {prod.name} ({prod.categoryName}) — {prod.totalStock} units in whs
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Distribution Target Mode */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase mb-1.5">
-                      2. DISTRIBUTION TARGET <span className="text-[#ef4444]">*</span>
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setDistributorTargetMode("all")}
-                        className={`px-3 py-2 rounded-lg text-[11px] font-bold tracking-wider uppercase border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          distributorTargetMode === "all"
-                            ? "bg-[#10b981]/15 border-[#10b981] text-[#10b981] shadow"
-                            : "bg-[#1c1c20] border-white/5 text-[#8e8e93] hover:text-white"
-                        }`}
-                      >
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                          />
-                        </svg>
-                        <span>ALL STAFF ({distributionOverview.employees.length})</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDistributorTargetMode("single")}
-                        className={`px-3 py-2 rounded-lg text-[11px] font-bold tracking-wider uppercase border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          distributorTargetMode === "single"
-                            ? "bg-white text-black border-white shadow"
-                            : "bg-[#1c1c20] border-white/5 text-[#8e8e93] hover:text-white"
-                        }`}
-                      >
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                          />
-                        </svg>
-                        <span>INDIVIDUAL</span>
-                      </button>
-                    </div>
-
-                    {distributorTargetMode === "single" && (
-                      <div className="mt-2">
-                        <select
-                          value={distributorTargetEmployeeId}
-                          onChange={(e) =>
-                            setDistributorTargetEmployeeId(e.target.value)
-                          }
-                          className="w-full bg-[#1c1c20] border border-white/10 rounded-lg px-3 py-1.5 text-white font-mono-meta text-xs focus:outline-none cursor-pointer"
-                        >
-                          {distributionOverview.employees.map((emp) => (
-                            <option
-                              key={emp.employeeId}
-                              value={emp.employeeId}
-                              className="bg-[#141417]"
-                            >
-                              {emp.name} ({emp.branchName || "Main Branch"})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* STEP 2: SELECTED GARMENT HIGHLIGHT CARD */}
-                {selectedProduct && (
-                  <div className="bg-[#161619] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      {selectedProduct.mainImage ? (
-                        <img
-                          src={selectedProduct.mainImage}
-                          alt={selectedProduct.name}
-                          className="w-14 h-14 object-cover rounded-lg border border-white/10"
-                        />
-                      ) : (
-                        <div className="w-14 h-14 bg-black/40 rounded-lg border border-white/10 flex items-center justify-center text-[#555] font-bold text-[9px]">
-                          NO IMG
-                        </div>
-                      )}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-black/60 text-[#8e8e93] font-bold text-[9px] px-2 py-0.5 rounded border border-white/10 uppercase tracking-wider">
-                            {selectedProduct.categoryName}
-                          </span>
-                          <span className="text-[9px] font-bold text-[#10b981] bg-[#10b981]/10 px-2 py-0.5 rounded border border-[#10b981]/20 uppercase">
-                            BASE: ${selectedProduct.basePrice.toFixed(2)}
-                          </span>
-                        </div>
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wide mt-1">
-                          {selectedProduct.name}
-                        </h4>
-                        <p className="text-[10px] text-[#8e8e93]">
-                          {selectedProduct.variants.length} active variants •{" "}
-                          {selectedProduct.totalStock} total units in inventory
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Quick Bulk Presets Bar */}
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                      <div className="flex items-center bg-[#1c1c20] border border-white/10 rounded-lg overflow-hidden p-0.5">
-                        <span className="text-[9px] text-[#8e8e93] font-bold uppercase px-2">
-                          SET ALL:
-                        </span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="1000"
-                          value={bulkSetAllValue}
-                          onChange={(e) => setBulkSetAllValue(e.target.value)}
-                          className="w-12 bg-black/40 border-x border-white/10 px-1.5 py-1 text-center text-white font-mono-meta text-xs focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleSetAllSizes(parseInt(bulkSetAllValue) || 5)
-                          }
-                          className="bg-white/10 hover:bg-white text-[#8e8e93] hover:text-black font-bold text-[9px] uppercase px-2.5 py-1.5 transition-all cursor-pointer"
-                        >
-                          APPLY
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleFillMaxRemaining}
-                        className="bg-white/5 hover:bg-white/15 border border-white/10 text-white font-bold text-[9px] tracking-wider uppercase px-2.5 py-2 rounded-lg transition-all cursor-pointer"
-                      >
-                        MAX AVAILABLE
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleCopyFirstColorToAll}
-                        className="bg-white/5 hover:bg-white/15 border border-white/10 text-[#8e8e93] hover:text-white font-bold text-[9px] tracking-wider uppercase px-2.5 py-2 rounded-lg transition-all cursor-pointer"
-                      >
-                        COPY 1ST COLOR
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleClearAllocation}
-                        className="bg-red-950/20 hover:bg-red-900/40 border border-red-800/30 text-red-400 font-bold text-[9px] uppercase px-2.5 py-2 rounded-lg transition-all cursor-pointer"
-                      >
-                        CLEAR
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 3: HIGH-DENSITY MULTI-VARIANT STOCK MATRIX */}
-                {selectedProduct && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase">
-                        3. GARMENT VARIANT ALLOCATION MATRIX (COLOR × SIZE)
-                      </label>
-                      <span className="text-[10px] text-[#8e8e93] font-mono-meta">
-                        {distributorTargetMode === "all"
-                          ? `Allocation multiplier: ×${distributionOverview.employees.length} employees`
-                          : "Single employee allocation"}
-                      </span>
-                    </div>
-
-                    <div className="bg-[#121214] border border-white/10 rounded-xl overflow-hidden shadow-inner">
-                      <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-[#18181c] border-b border-white/10 text-[10px] font-bold tracking-wider text-[#8e8e93] uppercase">
-                              <th className="py-3 px-4">COLOR / GARMENT</th>
-                              <th className="py-3 px-4">SIZE</th>
-                              <th className="py-3 px-4 font-mono-meta">SKU</th>
-                              <th className="py-3 px-4 text-center">WHS STOCK</th>
-                              <th className="py-3 px-4 text-center">CURRENTLY HELD</th>
-                              <th className="py-3 px-4 text-center">
-                                ALLOCATION QTY
-                              </th>
-                              <th className="py-3 px-4 text-center">AFTER ALLOCATION</th>
-                              <th className="py-3 px-4 text-center">
-                                REMAINING IN WHS
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                            {selectedProduct.variants.map((v) => {
-                              const targetMultiplier =
-                                distributorTargetMode === "all"
-                                  ? distributionOverview.employees.length || 1
-                                  : 1;
-
-                              const enteredQty =
-                                allocationQuantities[v.variantId] || 0;
-                              const totalDeduction =
-                                enteredQty * targetMultiplier;
-                              const remainder =
-                                v.totalWarehouseStock - totalDeduction;
-                              const isOver = remainder < 0;
-
-                              // Calculate currently held units for this variant
-                              const currentlyHeld =
-                                distributorTargetMode === "single"
-                                  ? distributionOverview.employees
-                                      .find(
-                                        (e) =>
-                                          e.employeeId ===
-                                          distributorTargetEmployeeId
-                                      )
-                                      ?.assignedStock?.find(
-                                        (s) => s.variantId === v.variantId
-                                      )?.quantity || 0
-                                  : distributionOverview.employees.reduce(
-                                      (sum, e) =>
-                                        sum +
-                                        (e.assignedStock?.find(
-                                          (s) => s.variantId === v.variantId
-                                        )?.quantity || 0),
-                                      0
-                                    );
-
-                              const postAllocation =
-                                currentlyHeld +
-                                (distributorTargetMode === "all"
-                                  ? totalDeduction
-                                  : enteredQty);
-
-                              return (
-                                <tr
-                                  key={v.variantId}
-                                  className={`hover:bg-white/[0.02] transition-colors ${
-                                    isOver ? "bg-red-950/20" : ""
-                                  }`}
-                                >
-                                  {/* Color Info */}
-                                  <td className="py-3 px-4">
-                                    <div className="flex items-center gap-2">
-                                      <span
-                                        className="w-3.5 h-3.5 rounded-full border border-white/20 flex-shrink-0 shadow-sm"
-                                        style={{ backgroundColor: v.colorHex }}
-                                      ></span>
-                                      <span className="font-bold text-white uppercase text-xs">
-                                        {v.colorName}
-                                      </span>
-                                    </div>
-                                  </td>
-
-                                  {/* Size Pill */}
-                                  <td className="py-3 px-4">
-                                    <span className="font-mono-meta font-bold text-xs bg-white/5 border border-white/10 px-2 py-0.5 rounded text-white uppercase">
-                                      {v.sizeName}
-                                    </span>
-                                  </td>
-
-                                  {/* SKU */}
-                                  <td className="py-3 px-4 font-mono-meta text-[11px] text-[#8e8e93]">
-                                    {v.sku}
-                                  </td>
-
-                                  {/* Master Warehouse Total */}
-                                  <td className="py-3 px-4 text-center">
-                                    <span className="font-mono-meta font-bold text-xs text-white">
-                                      {v.totalWarehouseStock} units
-                                    </span>
-                                  </td>
-
-                                  {/* Currently Held */}
-                                  <td className="py-3 px-4 text-center">
-                                    <span
-                                      className={`font-mono-meta font-bold text-xs px-2 py-0.5 rounded ${
-                                        currentlyHeld > 0
-                                          ? "text-emerald-400 bg-emerald-950/30 border border-emerald-500/20"
-                                          : "text-[#71717a]"
-                                      }`}
-                                    >
-                                      {currentlyHeld} held
-                                    </span>
-                                  </td>
-
-                                  {/* Allocation Input */}
-                                  <td className="py-3 px-4 text-center">
-                                    <div className="inline-flex items-center gap-1.5">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max={Math.floor(
-                                          v.totalWarehouseStock /
-                                            targetMultiplier
-                                        )}
-                                        value={
-                                          enteredQty === 0 ? "" : enteredQty
-                                        }
-                                        placeholder="0"
-                                        onChange={(e) =>
-                                          handleSetVariantQuantity(
-                                            v.variantId,
-                                            parseInt(e.target.value) || 0
-                                          )
-                                        }
-                                        className={`w-20 bg-[#1a1a1e] border rounded-lg px-2.5 py-1.5 text-center font-mono-meta font-bold text-xs focus:outline-none transition-all ${
-                                          isOver
-                                            ? "border-red-500 text-red-400 bg-red-950/30"
-                                            : enteredQty > 0
-                                            ? "border-[#10b981] text-[#10b981] bg-[#10b981]/5"
-                                            : "border-white/10 text-white"
-                                        }`}
-                                      />
-                                      {distributorTargetMode === "all" &&
-                                        enteredQty > 0 && (
-                                          <span className="text-[9px] text-[#8e8e93] font-mono-meta">
-                                            (={totalDeduction})
-                                          </span>
-                                        )}
-                                    </div>
-                                  </td>
-
-                                  {/* After Allocation Projected Stock */}
-                                  <td className="py-3 px-4 text-center">
-                                    <span
-                                      className={`font-mono-meta font-extrabold text-xs px-2.5 py-1 rounded-md border inline-flex items-center gap-1 ${
-                                        enteredQty > 0
-                                          ? "text-[#10b981] bg-[#10b981]/15 border-[#10b981]/40 shadow-sm"
-                                          : "text-[#71717a] border-white/5"
-                                      }`}
-                                    >
-                                      <span>{postAllocation}</span>
-                                      {enteredQty > 0 && (
-                                        <span className="text-[9px] font-bold opacity-80">
-                                          (+
-                                          {distributorTargetMode === "all"
-                                            ? totalDeduction
-                                            : enteredQty}
-                                          )
-                                        </span>
-                                      )}
-                                    </span>
-                                  </td>
-
-                                  {/* Remaining Stock Badge */}
-                                  <td className="py-3 px-4 text-center">
-                                    <span
-                                      className={`font-mono-meta font-bold text-[11px] px-2.5 py-1 rounded-full border inline-flex items-center gap-1.5 ${
-                                        isOver
-                                          ? "bg-red-950/50 border-red-500/50 text-red-400 font-extrabold animate-pulse"
-                                          : remainder === 0
-                                          ? "bg-amber-950/30 border-amber-500/30 text-amber-300"
-                                          : "bg-emerald-950/30 border-emerald-500/30 text-emerald-400"
-                                      }`}
-                                    >
-                                      <span
-                                        className={`w-1.5 h-1.5 rounded-full ${
-                                          isOver
-                                            ? "bg-red-400"
-                                            : remainder === 0
-                                            ? "bg-amber-400"
-                                            : "bg-emerald-400"
-                                        }`}
-                                      ></span>
-                                      <span>
-                                        {isOver
-                                          ? `DEFICIT: ${Math.abs(remainder)} units`
-                                          : `${remainder} left`}
-                                      </span>
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* DISTRIBUTION SUMMARY & ACTION FOOTER */}
-                {selectedProduct &&
-                  (() => {
-                    const targetCount =
-                      distributorTargetMode === "all"
-                        ? distributionOverview.employees.length || 1
-                        : 1;
-
-                    const totalPerEmployee = Object.values(
-                      allocationQuantities
-                    ).reduce((sum, q) => sum + (q || 0), 0);
-                    const totalDeducted = totalPerEmployee * targetCount;
-
-                    const anyOverAllocated = selectedProduct.variants.some(
-                      (v) => {
-                        const entered = allocationQuantities[v.variantId] || 0;
-                        return entered * targetCount > v.totalWarehouseStock;
-                      }
-                    );
-
-                    return (
-                      <div className="bg-[#141417] border border-white/10 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                          <span className="text-[10px] text-[#8e8e93] font-bold tracking-wider uppercase block">
-                            DISTRIBUTION SUMMARY:
-                          </span>
-                          <div className="flex items-center gap-3 mt-1 flex-wrap font-mono-meta text-xs">
-                            <span className="text-white">
-                              <strong className="text-[#10b981] font-bold text-sm">
-                                {totalPerEmployee}
-                              </strong>{" "}
-                              units / employee
-                            </span>
-                            <span className="text-[#555]">•</span>
-                            <span className="text-white">
-                              <strong className="text-white font-bold text-sm">
-                                {totalDeducted}
-                              </strong>{" "}
-                              total warehouse units
-                            </span>
-                            <span className="text-[#555]">•</span>
-                            <span className="text-[#8e8e93]">
-                              Target:{" "}
-                              {distributorTargetMode === "all"
-                                ? `${targetCount} Active Staff`
-                                : distributionOverview.employees.find(
-                                    (e) =>
-                                      e.employeeId ===
-                                      distributorTargetEmployeeId
-                                  )?.name || "Single Employee"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setIsDistributorOpen(false)}
-                            className="bg-transparent hover:bg-white/5 border border-white/10 text-[#8e8e93] hover:text-white font-bold tracking-widest px-4 py-2.5 rounded-xl transition-all uppercase cursor-pointer"
-                          >
-                            CANCEL
-                          </button>
-
-                          <button
-                            type="submit"
-                            disabled={
-                              submittingDistribution ||
-                              totalPerEmployee === 0 ||
-                              anyOverAllocated
-                            }
-                            className={`font-bold tracking-widest px-5 py-2.5 rounded-xl transition-all uppercase cursor-pointer flex items-center gap-2 shadow-lg ${
-                              anyOverAllocated || totalPerEmployee === 0
-                                ? "bg-white/5 text-[#555] border border-white/5 cursor-not-allowed"
-                                : "bg-[#10b981] hover:bg-[#059669] text-black shadow-[#10b981]/20 active:scale-95"
-                            }`}
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={2.2}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                            <span>
-                              {submittingDistribution
-                                ? "DISTRIBUTING..."
-                                : "CONFIRM & DISTRIBUTE STOCK"}
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* VIEW ASSIGNED STOCK MODAL */}
-      {viewStockEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm select-none p-4 overflow-y-auto">
-          <div
-            className="w-full max-w-3xl bg-[#0c0c0e]/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden p-6 space-y-5 my-8 max-h-[90vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex justify-between items-center pb-3 border-b border-white/10 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#10b981]/15 border border-[#10b981]/30 flex items-center justify-center text-[#10b981] font-bold text-base">
+                <h3 className="text-sm font-bold tracking-wider uppercase text-white flex items-center gap-2">
                   <svg
-                    className="w-5 h-5"
+                    className="w-4 h-4 text-[#10b981]"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -2622,215 +1679,122 @@ export default function EmployeesPage() {
                       d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
                     />
                   </svg>
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold tracking-wider uppercase text-white flex items-center gap-2">
-                    <span>{viewStockEmployee.name}&apos;s ASSIGNED STOCK</span>
-                    <span className="text-[10px] bg-[#10b981]/10 text-[#10b981] font-bold px-2 py-0.5 rounded border border-[#10b981]/20">
-                      {viewStockEmployee.branchName}
-                    </span>
-                  </h3>
-                  <p className="text-[10px] text-[#8e8e93] font-mono-meta mt-0.5">
-                    {viewStockEmployee.email} • {viewStockEmployee.position}
-                  </p>
-                </div>
+                  ASSIGN INITIAL STOCK
+                </h3>
+                <p className="text-[10px] text-[#8e8e93] tracking-wide uppercase font-semibold mt-0.5">
+                  Allocate stock to{" "}
+                  <span className="text-white">{stockAssignTarget.name}</span> (
+                  {stockAssignTarget.branchName})
+                </p>
               </div>
-
               <button
-                type="button"
-                onClick={() => setViewStockEmployee(null)}
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-[#8e8e93] hover:text-white flex items-center justify-center transition-all cursor-pointer text-lg"
+                onClick={() => setStockAssignTarget(null)}
+                className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-[#8e8e93] hover:text-white flex items-center justify-center transition-all cursor-pointer"
               >
                 &times;
               </button>
             </div>
 
-            {/* Inventory Overview Summary */}
-            <div className="grid grid-cols-3 gap-3 flex-shrink-0">
-              <div className="bg-[#141417] p-3.5 rounded-xl border border-white/5">
-                <span className="text-[9px] text-[#8e8e93] font-bold uppercase tracking-wider block">
-                  TOTAL ASSIGNED UNITS
-                </span>
-                <span className="text-xl font-bold font-mono-meta text-[#10b981] mt-1 block">
-                  {viewStockEmployee.totalStockUnits || 0} units
-                </span>
-              </div>
-              <div className="bg-[#141417] p-3.5 rounded-xl border border-white/5">
-                <span className="text-[9px] text-[#8e8e93] font-bold uppercase tracking-wider block">
-                  UNIQUE GARMENTS
-                </span>
-                <span className="text-xl font-bold font-mono-meta text-white mt-1 block">
-                  {
-                    new Set(
-                      (viewStockEmployee.assignedStock || []).map(
-                        (s) => s.productId
-                      )
-                    ).size
-                  }{" "}
-                  styles
-                </span>
-              </div>
-              <div className="bg-[#141417] p-3.5 rounded-xl border border-white/5">
-                <span className="text-[9px] text-[#8e8e93] font-bold uppercase tracking-wider block">
-                  ACTIVE VARIANTS
-                </span>
-                <span className="text-xl font-bold font-mono-meta text-white mt-1 block">
-                  {viewStockEmployee.assignedStock?.length || 0} SKUs
-                </span>
-              </div>
-            </div>
-
-            {/* Garment Stock List */}
-            <div className="flex-1 overflow-y-auto pr-1">
-              {!viewStockEmployee.assignedStock ||
-              viewStockEmployee.assignedStock.length === 0 ? (
-                <div className="py-16 text-center text-[#8e8e93] space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-[#555]">
-                    <svg
-                      className="w-6 h-6"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                      />
-                    </svg>
-                  </div>
-                  <p className="font-bold text-white text-sm uppercase tracking-wide">
-                    NO GARMENTS ASSIGNED YET
-                  </p>
-                  <p className="text-xs text-[#777] max-w-sm mx-auto">
-                    This staff member currently holds 0 units in their branch
-                    inventory pool. Click below to distribute initial garments.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const empId = viewStockEmployee.employeeId;
-                      setViewStockEmployee(null);
-                      openStockDistributorModal(empId);
-                    }}
-                    className="mt-2 bg-[#10b981] hover:bg-[#059669] text-black font-bold text-xs tracking-wider uppercase px-4 py-2 rounded-lg transition-all shadow cursor-pointer"
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                addNotification(
+                  `Successfully allocated ${stockForm.quantity} units of ${stockForm.sku} to ${stockAssignTarget.name} at ${stockAssignTarget.branchName}.`,
+                  "success",
+                );
+                setStockAssignTarget(null);
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div>
+                <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                  SELECT INVENTORY PRODUCT SKU <span className="text-[#ef4444]">*</span>
+                </label>
+                <select
+                  value={stockForm.sku}
+                  onChange={(e) =>
+                    setStockForm((prev) => ({ ...prev, sku: e.target.value }))
+                  }
+                  className="w-full bg-[#141417] border border-white/10 rounded-lg px-3.5 py-2.5 text-white focus:outline-none transition-all cursor-pointer font-mono-meta"
+                >
+                  <option
+                    value="SKU-OVERSIZE-TEE-BLK-M"
+                    className="bg-[#121212]"
                   >
-                    + DISTRIBUTE STOCK NOW
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-[#121214] border border-white/10 rounded-xl overflow-hidden shadow-inner">
-                  <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-[#18181c] border-b border-white/10 text-[10px] font-bold tracking-wider text-[#8e8e93] uppercase">
-                          <th className="py-3 px-4">GARMENT & STYLE</th>
-                          <th className="py-3 px-4">COLOR</th>
-                          <th className="py-3 px-4">SIZE</th>
-                          <th className="py-3 px-4 font-mono-meta">SKU</th>
-                          <th className="py-3 px-4 text-center">
-                            HELD QUANTITY
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {viewStockEmployee.assignedStock.map((item) => (
-                          <tr
-                            key={item.inventoryId}
-                            className="hover:bg-white/[0.02] transition-colors"
-                          >
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-3">
-                                {item.imageUrl ? (
-                                  <img
-                                    src={item.imageUrl}
-                                    alt={item.productName}
-                                    className="w-9 h-9 object-cover rounded-md border border-white/10 flex-shrink-0"
-                                  />
-                                ) : (
-                                  <div className="w-9 h-9 bg-black/40 rounded-md border border-white/10 flex items-center justify-center text-[#555] font-bold text-[8px] flex-shrink-0">
-                                    IMG
-                                  </div>
-                                )}
-                                <div>
-                                  <span className="font-bold text-white uppercase text-xs block">
-                                    {item.productName}
-                                  </span>
-                                  <span className="text-[9px] text-[#8e8e93] font-semibold uppercase">
-                                    {item.categoryName}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-1.5">
-                                <span
-                                  className="w-3 h-3 rounded-full border border-white/20 flex-shrink-0"
-                                  style={{ backgroundColor: item.colorHex }}
-                                ></span>
-                                <span className="text-white font-medium uppercase text-xs">
-                                  {item.colorName}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="font-mono-meta font-bold text-xs bg-white/5 border border-white/10 px-2 py-0.5 rounded text-white uppercase">
-                                {item.sizeName}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 font-mono-meta text-[11px] text-[#8e8e93]">
-                              {item.sku}
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className="font-mono-meta font-extrabold text-xs text-[#10b981] bg-[#10b981]/10 px-2.5 py-1 rounded-full border border-[#10b981]/20 inline-block">
-                                {item.quantity} units
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+                    SKU-OVERSIZE-TEE-BLK-M (Oversized Tee Black - M)
+                  </option>
+                  <option
+                    value="SKU-CARGO-PANTS-KHAKI-L"
+                    className="bg-[#121212]"
+                  >
+                    SKU-CARGO-PANTS-KHAKI-L (Cargo Pants Khaki - L)
+                  </option>
+                  <option value="SKU-HOODIE-SLATE-XL" className="bg-[#121212]">
+                    SKU-HOODIE-SLATE-XL (Slate Heavyweight Hoodie - XL)
+                  </option>
+                  <option value="SKU-TRACKSUIT-WHT-S" className="bg-[#121212]">
+                    SKU-TRACKSUIT-WHT-S (Vergo Pro Tracksuit - S)
+                  </option>
+                </select>
+              </div>
 
-            {/* Modal Actions Footer */}
-            <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/10 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewStockEmployee(null)}
-                className="bg-transparent hover:bg-white/5 border border-white/10 text-[#8e8e93] hover:text-white font-bold tracking-widest px-4 py-2.5 rounded-xl transition-all uppercase cursor-pointer"
-              >
-                CLOSE
-              </button>
+              <div>
+                <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                  INITIAL STOCK QUANTITY (UNITS) <span className="text-[#ef4444]">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={stockForm.quantity}
+                  onChange={(e) =>
+                    setStockForm((prev) => ({
+                      ...prev,
+                      quantity: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. 25"
+                  className="w-full bg-[#141417] border border-white/10 rounded-lg px-3.5 py-2.5 text-white placeholder-[#555] focus:outline-none transition-all font-mono-meta"
+                />
+              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const empId = viewStockEmployee.employeeId;
-                  setViewStockEmployee(null);
-                  openStockDistributorModal(empId);
-                }}
-                className="bg-[#10b981] text-black hover:bg-[#059669] font-bold tracking-widest px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-[#10b981]/20 uppercase cursor-pointer flex items-center gap-2 active:scale-95"
-              >
+              <div className="bg-[#10b981]/5 border border-[#10b981]/20 rounded-xl p-3 text-[11px] text-[#10b981] flex items-center gap-2">
                 <svg
-                  className="w-4 h-4"
+                  className="w-4 h-4 text-[#10b981] flex-shrink-0"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
-                  strokeWidth={2.2}
+                  strokeWidth={2}
                 >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    d="M12 4v16m8-8H4"
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <span>DISTRIBUTE MORE STOCK</span>
-              </button>
-            </div>
+                <span>
+                  Allocating stock to employee inventory pool at{" "}
+                  {stockAssignTarget.branchName}.
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setStockAssignTarget(null)}
+                  className="flex-1 bg-transparent hover:bg-white/5 border border-white/10 text-[#8e8e93] hover:text-white font-bold tracking-widest px-4 py-2.5 rounded-xl transition-all uppercase cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="submit"
+                  disabled={assigningStock}
+                  className="flex-1 bg-[#10b981] text-black hover:bg-[#059669] font-bold tracking-widest px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-[#10b981]/20 uppercase cursor-pointer"
+                >
+                  {assigningStock ? "ALLOCATING..." : "CONFIRM ALLOCATION"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -2861,7 +1825,7 @@ export default function EmployeesPage() {
                   EDIT EMPLOYEE DETAILS
                 </h3>
                 <p className="text-[10px] text-[#8e8e93] tracking-wide uppercase font-semibold mt-0.5">
-                  Update branch and compensation for{" "}
+                  Update branch assignment, commission rate, and address for{" "}
                   <span className="text-white">{editEmployeeTarget.name}</span>
                 </p>
               </div>
