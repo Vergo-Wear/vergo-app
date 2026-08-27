@@ -1,0 +1,507 @@
+[
+  {
+    "tablename": "_prisma_migrations",
+    "indexname": "_prisma_migrations_pkey",
+    "indexdef": "CREATE UNIQUE INDEX _prisma_migrations_pkey ON public._prisma_migrations USING btree (id)"
+  },
+  {
+    "tablename": "attendance",
+    "indexname": "attendance_pkey",
+    "indexdef": "CREATE UNIQUE INDEX attendance_pkey ON public.attendance USING btree (attendance_id)"
+  },
+  {
+    "tablename": "attendance",
+    "indexname": "employee_one_open_attendance",
+    "indexdef": "CREATE UNIQUE INDEX employee_one_open_attendance ON public.attendance USING btree (employee_id) WHERE ((check_in IS NOT NULL) AND (check_out IS NULL))"
+  },
+  {
+    "tablename": "branch",
+    "indexname": "branch_pkey",
+    "indexdef": "CREATE UNIQUE INDEX branch_pkey ON public.branch USING btree (branch_id)"
+  },
+  {
+    "tablename": "cart",
+    "indexname": "cart_customer_id_key",
+    "indexdef": "CREATE UNIQUE INDEX cart_customer_id_key ON public.cart USING btree (customer_id)"
+  },
+  {
+    "tablename": "cart",
+    "indexname": "cart_pkey",
+    "indexdef": "CREATE UNIQUE INDEX cart_pkey ON public.cart USING btree (cart_id)"
+  },
+  {
+    "tablename": "cart_item",
+    "indexname": "cart_item_cart_id_variant_id_key",
+    "indexdef": "CREATE UNIQUE INDEX cart_item_cart_id_variant_id_key ON public.cart_item USING btree (cart_id, variant_id)"
+  },
+  {
+    "tablename": "cart_item",
+    "indexname": "cart_item_pkey",
+    "indexdef": "CREATE UNIQUE INDEX cart_item_pkey ON public.cart_item USING btree (cart_item_id)"
+  },
+  {
+    "tablename": "category",
+    "indexname": "category_name_key",
+    "indexdef": "CREATE UNIQUE INDEX category_name_key ON public.category USING btree (name)"
+  },
+  {
+    "tablename": "category",
+    "indexname": "category_pkey",
+    "indexdef": "CREATE UNIQUE INDEX category_pkey ON public.category USING btree (category_id)"
+  },
+  {
+    "tablename": "color",
+    "indexname": "color_name_ci_key",
+    "indexdef": "CREATE UNIQUE INDEX color_name_ci_key ON public.color USING btree (lower(btrim(name)))"
+  },
+  {
+    "tablename": "color",
+    "indexname": "color_pkey",
+    "indexdef": "CREATE UNIQUE INDEX color_pkey ON public.color USING btree (color_id)"
+  },
+  {
+    "tablename": "color",
+    "indexname": "color_status_display_order_index",
+    "indexdef": "CREATE INDEX color_status_display_order_index ON public.color USING btree (status, display_order)"
+  },
+  {
+    "tablename": "contact_message",
+    "indexname": "contact_message_pkey",
+    "indexdef": "CREATE UNIQUE INDEX contact_message_pkey ON public.contact_message USING btree (message_id)"
+  },
+  {
+    "tablename": "courier_pickup_delivery",
+    "indexname": "courier_pickup_delivery_pkey",
+    "indexdef": "CREATE UNIQUE INDEX courier_pickup_delivery_pkey ON public.courier_pickup_delivery USING btree (pickup_request_id, delivery_id)"
+  },
+  {
+    "tablename": "courier_pickup_request",
+    "indexname": "courier_pickup_request_pkey",
+    "indexdef": "CREATE UNIQUE INDEX courier_pickup_request_pkey ON public.courier_pickup_request USING btree (pickup_request_id)"
+  },
+  {
+    "tablename": "courier_shipper_profile",
+    "indexname": "courier_shipper_profile_pkey",
+    "indexdef": "CREATE UNIQUE INDEX courier_shipper_profile_pkey ON public.courier_shipper_profile USING btree (profile_id)"
+  },
+  {
+    "tablename": "customer",
+    "indexname": "customer_contact_email_key",
+    "indexdef": "CREATE UNIQUE INDEX customer_contact_email_key ON public.customer USING btree (contact_email)"
+  },
+  {
+    "tablename": "customer",
+    "indexname": "customer_pkey",
+    "indexdef": "CREATE UNIQUE INDEX customer_pkey ON public.customer USING btree (customer_id)"
+  },
+  {
+    "tablename": "customer",
+    "indexname": "customer_profile_id_key",
+    "indexdef": "CREATE UNIQUE INDEX customer_profile_id_key ON public.customer USING btree (profile_id)"
+  },
+  {
+    "tablename": "delivery",
+    "indexname": "delivery_order_id_unique",
+    "indexdef": "CREATE UNIQUE INDEX delivery_order_id_unique ON public.delivery USING btree (order_id)"
+  },
+  {
+    "tablename": "delivery",
+    "indexname": "delivery_pkey",
+    "indexdef": "CREATE UNIQUE INDEX delivery_pkey ON public.delivery USING btree (delivery_id)"
+  },
+  {
+    "tablename": "delivery_fee_rules",
+    "indexname": "delivery_fee_rules_district_key",
+    "indexdef": "CREATE UNIQUE INDEX delivery_fee_rules_district_key ON public.delivery_fee_rules USING btree (district)"
+  },
+  {
+    "tablename": "delivery_fee_rules",
+    "indexname": "delivery_fee_rules_pkey",
+    "indexdef": "CREATE UNIQUE INDEX delivery_fee_rules_pkey ON public.delivery_fee_rules USING btree (rule_id)"
+  },
+  {
+    "tablename": "delivery_tracking_event",
+    "indexname": "delivery_tracking_event_delivery_id_idx",
+    "indexdef": "CREATE INDEX delivery_tracking_event_delivery_id_idx ON public.delivery_tracking_event USING btree (delivery_id)"
+  },
+  {
+    "tablename": "delivery_tracking_event",
+    "indexname": "delivery_tracking_event_pkey",
+    "indexdef": "CREATE UNIQUE INDEX delivery_tracking_event_pkey ON public.delivery_tracking_event USING btree (event_id)"
+  },
+  {
+    "tablename": "delivery_tracking_event",
+    "indexname": "delivery_tracking_event_tracking_number_status_event_at_key",
+    "indexdef": "CREATE UNIQUE INDEX delivery_tracking_event_tracking_number_status_event_at_key ON public.delivery_tracking_event USING btree (tracking_number, status, event_at)"
+  },
+  {
+    "tablename": "delivery_waybill",
+    "indexname": "delivery_waybill_delivery_id_idx",
+    "indexdef": "CREATE INDEX delivery_waybill_delivery_id_idx ON public.delivery_waybill USING btree (delivery_id)"
+  },
+  {
+    "tablename": "delivery_waybill",
+    "indexname": "delivery_waybill_pkey",
+    "indexdef": "CREATE UNIQUE INDEX delivery_waybill_pkey ON public.delivery_waybill USING btree (waybill_id)"
+  },
+  {
+    "tablename": "delivery_waybill",
+    "indexname": "delivery_waybill_tracking_number_key",
+    "indexdef": "CREATE UNIQUE INDEX delivery_waybill_tracking_number_key ON public.delivery_waybill USING btree (tracking_number)"
+  },
+  {
+    "tablename": "employee",
+    "indexname": "employee_pkey",
+    "indexdef": "CREATE UNIQUE INDEX employee_pkey ON public.employee USING btree (employee_id)"
+  },
+  {
+    "tablename": "employee",
+    "indexname": "employee_profile_id_key",
+    "indexdef": "CREATE UNIQUE INDEX employee_profile_id_key ON public.employee USING btree (profile_id)"
+  },
+  {
+    "tablename": "employee_commission",
+    "indexname": "employee_commission_order_id_key",
+    "indexdef": "CREATE UNIQUE INDEX employee_commission_order_id_key ON public.employee_commission USING btree (order_id)"
+  },
+  {
+    "tablename": "employee_commission",
+    "indexname": "employee_commission_pkey",
+    "indexdef": "CREATE UNIQUE INDEX employee_commission_pkey ON public.employee_commission USING btree (commission_id)"
+  },
+  {
+    "tablename": "images",
+    "indexname": "images_pkey",
+    "indexdef": "CREATE UNIQUE INDEX images_pkey ON public.images USING btree (id)"
+  },
+  {
+    "tablename": "inventory",
+    "indexname": "inventory_pkey",
+    "indexdef": "CREATE UNIQUE INDEX inventory_pkey ON public.inventory USING btree (inventory_id)"
+  },
+  {
+    "tablename": "inventory",
+    "indexname": "inventory_variant_branch_unique",
+    "indexdef": "CREATE UNIQUE INDEX inventory_variant_branch_unique ON public.inventory USING btree (variant_id, branch_id) WHERE (branch_id IS NOT NULL)"
+  },
+  {
+    "tablename": "inventory",
+    "indexname": "inventory_variant_without_branch_unique",
+    "indexdef": "CREATE UNIQUE INDEX inventory_variant_without_branch_unique ON public.inventory USING btree (variant_id) WHERE (branch_id IS NULL)"
+  },
+  {
+    "tablename": "inventory_commitment",
+    "indexname": "inventory_commitment_inventory_id_idx",
+    "indexdef": "CREATE INDEX inventory_commitment_inventory_id_idx ON public.inventory_commitment USING btree (inventory_id)"
+  },
+  {
+    "tablename": "inventory_commitment",
+    "indexname": "inventory_commitment_order_item_id_idx",
+    "indexdef": "CREATE INDEX inventory_commitment_order_item_id_idx ON public.inventory_commitment USING btree (order_item_id)"
+  },
+  {
+    "tablename": "inventory_commitment",
+    "indexname": "inventory_commitment_order_item_inventory_unique",
+    "indexdef": "CREATE UNIQUE INDEX inventory_commitment_order_item_inventory_unique ON public.inventory_commitment USING btree (order_item_id, inventory_id)"
+  },
+  {
+    "tablename": "inventory_commitment",
+    "indexname": "inventory_commitment_pkey",
+    "indexdef": "CREATE UNIQUE INDEX inventory_commitment_pkey ON public.inventory_commitment USING btree (commitment_id)"
+  },
+  {
+    "tablename": "inventory_commitment",
+    "indexname": "inventory_commitment_status_idx",
+    "indexdef": "CREATE INDEX inventory_commitment_status_idx ON public.inventory_commitment USING btree (status)"
+  },
+  {
+    "tablename": "notification",
+    "indexname": "notification_checkout_id_idx",
+    "indexdef": "CREATE INDEX notification_checkout_id_idx ON public.notification USING btree (checkout_id)"
+  },
+  {
+    "tablename": "notification",
+    "indexname": "notification_one_order_ready_per_order",
+    "indexdef": "CREATE UNIQUE INDEX notification_one_order_ready_per_order ON public.notification USING btree (order_id, type) WHERE (type = 'ORDER_READY'::text)"
+  },
+  {
+    "tablename": "notification",
+    "indexname": "notification_order_id_idx",
+    "indexdef": "CREATE INDEX notification_order_id_idx ON public.notification USING btree (order_id)"
+  },
+  {
+    "tablename": "notification",
+    "indexname": "notification_pkey",
+    "indexdef": "CREATE UNIQUE INDEX notification_pkey ON public.notification USING btree (notification_id)"
+  },
+  {
+    "tablename": "notification",
+    "indexname": "notification_recipient_profile_id_is_read_idx",
+    "indexdef": "CREATE INDEX notification_recipient_profile_id_is_read_idx ON public.notification USING btree (recipient_profile_id, is_read)"
+  },
+  {
+    "tablename": "order_customer_details",
+    "indexname": "order_customer_details_order_id_key",
+    "indexdef": "CREATE UNIQUE INDEX order_customer_details_order_id_key ON public.order_customer_details USING btree (order_id)"
+  },
+  {
+    "tablename": "order_customer_details",
+    "indexname": "order_customer_details_pkey",
+    "indexdef": "CREATE UNIQUE INDEX order_customer_details_pkey ON public.order_customer_details USING btree (detail_id)"
+  },
+  {
+    "tablename": "order_item",
+    "indexname": "order_item_order_id_variant_id_key",
+    "indexdef": "CREATE UNIQUE INDEX order_item_order_id_variant_id_key ON public.order_item USING btree (order_id, variant_id)"
+  },
+  {
+    "tablename": "order_item",
+    "indexname": "order_item_pkey",
+    "indexdef": "CREATE UNIQUE INDEX order_item_pkey ON public.order_item USING btree (order_item_id)"
+  },
+  {
+    "tablename": "order_shipping_details",
+    "indexname": "order_shipping_details_order_id_key",
+    "indexdef": "CREATE UNIQUE INDEX order_shipping_details_order_id_key ON public.order_shipping_details USING btree (order_id)"
+  },
+  {
+    "tablename": "order_shipping_details",
+    "indexname": "order_shipping_details_pkey",
+    "indexdef": "CREATE UNIQUE INDEX order_shipping_details_pkey ON public.order_shipping_details USING btree (shipping_id)"
+  },
+  {
+    "tablename": "orders",
+    "indexname": "orders_checkout_id_key",
+    "indexdef": "CREATE UNIQUE INDEX orders_checkout_id_key ON public.orders USING btree (checkout_id)"
+  },
+  {
+    "tablename": "orders",
+    "indexname": "orders_customer_id_idx",
+    "indexdef": "CREATE INDEX orders_customer_id_idx ON public.orders USING btree (customer_id)"
+  },
+  {
+    "tablename": "orders",
+    "indexname": "orders_pkey",
+    "indexdef": "CREATE UNIQUE INDEX orders_pkey ON public.orders USING btree (order_id)"
+  },
+  {
+    "tablename": "payment_proof",
+    "indexname": "payment_proof_checkout_id_key",
+    "indexdef": "CREATE UNIQUE INDEX payment_proof_checkout_id_key ON public.payment_proof USING btree (checkout_id)"
+  },
+  {
+    "tablename": "payment_proof",
+    "indexname": "payment_proof_pkey",
+    "indexdef": "CREATE UNIQUE INDEX payment_proof_pkey ON public.payment_proof USING btree (payment_proof_id)"
+  },
+  {
+    "tablename": "pending_checkout",
+    "indexname": "pending_checkout_customer_id_status_idx",
+    "indexdef": "CREATE INDEX pending_checkout_customer_id_status_idx ON public.pending_checkout USING btree (customer_id, status)"
+  },
+  {
+    "tablename": "pending_checkout",
+    "indexname": "pending_checkout_one_active_payment_per_customer",
+    "indexdef": "CREATE UNIQUE INDEX pending_checkout_one_active_payment_per_customer ON public.pending_checkout USING btree (customer_id) WHERE ((customer_id IS NOT NULL) AND (status = 'Awaiting Payment'::text))"
+  },
+  {
+    "tablename": "pending_checkout",
+    "indexname": "pending_checkout_pkey",
+    "indexdef": "CREATE UNIQUE INDEX pending_checkout_pkey ON public.pending_checkout USING btree (checkout_id)"
+  },
+  {
+    "tablename": "pending_checkout",
+    "indexname": "pending_checkout_status_created_at_idx",
+    "indexdef": "CREATE INDEX pending_checkout_status_created_at_idx ON public.pending_checkout USING btree (status, created_at)"
+  },
+  {
+    "tablename": "pending_checkout_customer_details",
+    "indexname": "pending_checkout_customer_details_checkout_id_key",
+    "indexdef": "CREATE UNIQUE INDEX pending_checkout_customer_details_checkout_id_key ON public.pending_checkout_customer_details USING btree (checkout_id)"
+  },
+  {
+    "tablename": "pending_checkout_customer_details",
+    "indexname": "pending_checkout_customer_details_pkey",
+    "indexdef": "CREATE UNIQUE INDEX pending_checkout_customer_details_pkey ON public.pending_checkout_customer_details USING btree (detail_id)"
+  },
+  {
+    "tablename": "pending_checkout_item",
+    "indexname": "pending_checkout_item_checkout_id_idx",
+    "indexdef": "CREATE INDEX pending_checkout_item_checkout_id_idx ON public.pending_checkout_item USING btree (checkout_id)"
+  },
+  {
+    "tablename": "pending_checkout_item",
+    "indexname": "pending_checkout_item_checkout_id_variant_id_key",
+    "indexdef": "CREATE UNIQUE INDEX pending_checkout_item_checkout_id_variant_id_key ON public.pending_checkout_item USING btree (checkout_id, variant_id)"
+  },
+  {
+    "tablename": "pending_checkout_item",
+    "indexname": "pending_checkout_item_pkey",
+    "indexdef": "CREATE UNIQUE INDEX pending_checkout_item_pkey ON public.pending_checkout_item USING btree (checkout_item_id)"
+  },
+  {
+    "tablename": "pending_checkout_shipping_details",
+    "indexname": "pending_checkout_shipping_details_checkout_id_key",
+    "indexdef": "CREATE UNIQUE INDEX pending_checkout_shipping_details_checkout_id_key ON public.pending_checkout_shipping_details USING btree (checkout_id)"
+  },
+  {
+    "tablename": "pending_checkout_shipping_details",
+    "indexname": "pending_checkout_shipping_details_pkey",
+    "indexdef": "CREATE UNIQUE INDEX pending_checkout_shipping_details_pkey ON public.pending_checkout_shipping_details USING btree (shipping_id)"
+  },
+  {
+    "tablename": "product",
+    "indexname": "product_created_at_idx",
+    "indexdef": "CREATE INDEX product_created_at_idx ON public.product USING btree (created_at DESC)"
+  },
+  {
+    "tablename": "product",
+    "indexname": "product_pkey",
+    "indexdef": "CREATE UNIQUE INDEX product_pkey ON public.product USING btree (product_id)"
+  },
+  {
+    "tablename": "product_variant",
+    "indexname": "product_variant_pkey",
+    "indexdef": "CREATE UNIQUE INDEX product_variant_pkey ON public.product_variant USING btree (variant_id)"
+  },
+  {
+    "tablename": "product_variant",
+    "indexname": "product_variant_product_id_size_id_color_id_key",
+    "indexdef": "CREATE UNIQUE INDEX product_variant_product_id_size_id_color_id_key ON public.product_variant USING btree (product_id, size_id, color_id)"
+  },
+  {
+    "tablename": "product_variant",
+    "indexname": "product_variant_product_id_status_idx",
+    "indexdef": "CREATE INDEX product_variant_product_id_status_idx ON public.product_variant USING btree (product_id, status)"
+  },
+  {
+    "tablename": "product_variant",
+    "indexname": "product_variant_sku_key",
+    "indexdef": "CREATE UNIQUE INDEX product_variant_sku_key ON public.product_variant USING btree (sku)"
+  },
+  {
+    "tablename": "profiles",
+    "indexname": "profiles_pkey",
+    "indexdef": "CREATE UNIQUE INDEX profiles_pkey ON public.profiles USING btree (id)"
+  },
+  {
+    "tablename": "profiles",
+    "indexname": "profiles_username_key",
+    "indexdef": "CREATE UNIQUE INDEX profiles_username_key ON public.profiles USING btree (username)"
+  },
+  {
+    "tablename": "purchase_order",
+    "indexname": "purchase_order_pkey",
+    "indexdef": "CREATE UNIQUE INDEX purchase_order_pkey ON public.purchase_order USING btree (purchase_order_id)"
+  },
+  {
+    "tablename": "purchase_order_item",
+    "indexname": "purchase_order_item_pkey",
+    "indexdef": "CREATE UNIQUE INDEX purchase_order_item_pkey ON public.purchase_order_item USING btree (po_item_id)"
+  },
+  {
+    "tablename": "purchase_order_item",
+    "indexname": "purchase_order_item_purchase_order_id_variant_id_key",
+    "indexdef": "CREATE UNIQUE INDEX purchase_order_item_purchase_order_id_variant_id_key ON public.purchase_order_item USING btree (purchase_order_id, variant_id)"
+  },
+  {
+    "tablename": "review",
+    "indexname": "review_order_item_id_key",
+    "indexdef": "CREATE UNIQUE INDEX review_order_item_id_key ON public.review USING btree (order_item_id)"
+  },
+  {
+    "tablename": "review",
+    "indexname": "review_pkey",
+    "indexdef": "CREATE UNIQUE INDEX review_pkey ON public.review USING btree (review_id)"
+  },
+  {
+    "tablename": "review",
+    "indexname": "review_product_id_customer_id_key",
+    "indexdef": "CREATE UNIQUE INDEX review_product_id_customer_id_key ON public.review USING btree (product_id, customer_id)"
+  },
+  {
+    "tablename": "review_image",
+    "indexname": "review_image_pkey",
+    "indexdef": "CREATE UNIQUE INDEX review_image_pkey ON public.review_image USING btree (review_image_id)"
+  },
+  {
+    "tablename": "review_image",
+    "indexname": "review_image_review_id_idx",
+    "indexdef": "CREATE INDEX review_image_review_id_idx ON public.review_image USING btree (review_id)"
+  },
+  {
+    "tablename": "role",
+    "indexname": "role_pkey",
+    "indexdef": "CREATE UNIQUE INDEX role_pkey ON public.role USING btree (role_id)"
+  },
+  {
+    "tablename": "role",
+    "indexname": "role_role_name_key",
+    "indexdef": "CREATE UNIQUE INDEX role_role_name_key ON public.role USING btree (role_name)"
+  },
+  {
+    "tablename": "salary_record",
+    "indexname": "salary_employee_month_unique",
+    "indexdef": "CREATE UNIQUE INDEX salary_employee_month_unique ON public.salary_record USING btree (employee_id, month)"
+  },
+  {
+    "tablename": "salary_record",
+    "indexname": "salary_record_pkey",
+    "indexdef": "CREATE UNIQUE INDEX salary_record_pkey ON public.salary_record USING btree (salary_id)"
+  },
+  {
+    "tablename": "size",
+    "indexname": "size_name_ci_key",
+    "indexdef": "CREATE UNIQUE INDEX size_name_ci_key ON public.size USING btree (lower(btrim(name)))"
+  },
+  {
+    "tablename": "size",
+    "indexname": "size_pkey",
+    "indexdef": "CREATE UNIQUE INDEX size_pkey ON public.size USING btree (size_id)"
+  },
+  {
+    "tablename": "size",
+    "indexname": "size_status_display_order_index",
+    "indexdef": "CREATE INDEX size_status_display_order_index ON public.size USING btree (status, display_order)"
+  },
+  {
+    "tablename": "stock_reservation",
+    "indexname": "stock_reservation_checkout_id_idx",
+    "indexdef": "CREATE INDEX stock_reservation_checkout_id_idx ON public.stock_reservation USING btree (checkout_id)"
+  },
+  {
+    "tablename": "stock_reservation",
+    "indexname": "stock_reservation_checkout_id_inventory_id_key",
+    "indexdef": "CREATE UNIQUE INDEX stock_reservation_checkout_id_inventory_id_key ON public.stock_reservation USING btree (checkout_id, inventory_id)"
+  },
+  {
+    "tablename": "stock_reservation",
+    "indexname": "stock_reservation_expiry_index",
+    "indexdef": "CREATE INDEX stock_reservation_expiry_index ON public.stock_reservation USING btree (status, expires_at)"
+  },
+  {
+    "tablename": "stock_reservation",
+    "indexname": "stock_reservation_inventory_id_idx",
+    "indexdef": "CREATE INDEX stock_reservation_inventory_id_idx ON public.stock_reservation USING btree (inventory_id)"
+  },
+  {
+    "tablename": "stock_reservation",
+    "indexname": "stock_reservation_pkey",
+    "indexdef": "CREATE UNIQUE INDEX stock_reservation_pkey ON public.stock_reservation USING btree (reservation_id)"
+  },
+  {
+    "tablename": "supplier",
+    "indexname": "supplier_pkey",
+    "indexdef": "CREATE UNIQUE INDEX supplier_pkey ON public.supplier USING btree (supplier_id)"
+  },
+  {
+    "tablename": "user_addresses",
+    "indexname": "one_primary_address_per_customer",
+    "indexdef": "CREATE UNIQUE INDEX one_primary_address_per_customer ON public.user_addresses USING btree (customer_id) WHERE (is_primary IS TRUE)"
+  },
+  {
+    "tablename": "user_addresses",
+    "indexname": "user_addresses_pkey",
+    "indexdef": "CREATE UNIQUE INDEX user_addresses_pkey ON public.user_addresses USING btree (address_id)"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "schema_name": "public",
+    "function_name": "get_customer_id",
+    "function_definition": "CREATE OR REPLACE FUNCTION public.get_customer_id()\n RETURNS uuid\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  SELECT customer_id FROM public.customer WHERE profile_id = auth.uid();\n$function$\n",
+    "is_security_definer": true,
+    "acl": "=X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "get_employee_id",
+    "function_definition": "CREATE OR REPLACE FUNCTION public.get_employee_id()\n RETURNS uuid\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  SELECT employee_id FROM public.employee WHERE profile_id = auth.uid();\n$function$\n",
+    "is_security_definer": true,
+    "acl": "=X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "get_user_role",
+    "function_definition": "CREATE OR REPLACE FUNCTION public.get_user_role()\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_role_name text;\nBEGIN\n  IF auth.uid() IS NULL THEN\n    RETURN NULL;\n  END IF;\n  \n  SELECT r.role_name INTO v_role_name\n  FROM public.profiles p\n  JOIN public.role r ON p.role_id = r.role_id\n  WHERE p.id = auth.uid();\n  \n  RETURN v_role_name;\nEND;\n$function$\n",
+    "is_security_definer": true,
+    "acl": "=X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "is_admin",
+    "function_definition": "CREATE OR REPLACE FUNCTION public.is_admin()\n RETURNS boolean\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  SELECT COALESCE(public.get_user_role() = 'Admin', false);\n$function$\n",
+    "is_security_definer": true,
+    "acl": "=X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "is_customer",
+    "function_definition": "CREATE OR REPLACE FUNCTION public.is_customer()\n RETURNS boolean\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  SELECT COALESCE(public.get_user_role() = 'Customer', false);\n$function$\n",
+    "is_security_definer": true,
+    "acl": "=X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "is_employee",
+    "function_definition": "CREATE OR REPLACE FUNCTION public.is_employee()\n RETURNS boolean\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  SELECT COALESCE(public.get_user_role() = 'Employee', false);\n$function$\n",
+    "is_security_definer": true,
+    "acl": "=X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres"
+  }
+]

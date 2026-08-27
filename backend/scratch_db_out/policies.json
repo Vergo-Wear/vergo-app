@@ -1,0 +1,1222 @@
+[
+  {
+    "schemaname": "public",
+    "tablename": "_prisma_migrations",
+    "policyname": "deny_delete_prisma_migrations",
+    "permissive": "PERMISSIVE",
+    "roles": "{anon,authenticated}",
+    "cmd": "DELETE",
+    "qual": "false",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "_prisma_migrations",
+    "policyname": "deny_insert_prisma_migrations",
+    "permissive": "PERMISSIVE",
+    "roles": "{anon,authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "false"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "_prisma_migrations",
+    "policyname": "deny_select_prisma_migrations",
+    "permissive": "PERMISSIVE",
+    "roles": "{anon,authenticated}",
+    "cmd": "SELECT",
+    "qual": "false",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "_prisma_migrations",
+    "policyname": "deny_update_prisma_migrations",
+    "permissive": "PERMISSIVE",
+    "roles": "{anon,authenticated}",
+    "cmd": "UPDATE",
+    "qual": "false",
+    "with_check": "false"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "attendance",
+    "policyname": "attendance_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "is_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "attendance",
+    "policyname": "attendance_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((employee_id = get_employee_id()) OR is_admin())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "attendance",
+    "policyname": "attendance_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "((employee_id = get_employee_id()) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "attendance",
+    "policyname": "attendance_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "((employee_id = get_employee_id()) OR is_admin())",
+    "with_check": "((employee_id = get_employee_id()) OR is_admin())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "branch",
+    "policyname": "branch_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "branch",
+    "policyname": "branch_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cart",
+    "policyname": "cart_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cart",
+    "policyname": "cart_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cart",
+    "policyname": "cart_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cart",
+    "policyname": "cart_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())",
+    "with_check": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cart_item",
+    "policyname": "cart_item_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM cart c\n  WHERE ((c.cart_id = c.cart_id) AND ((c.customer_id = get_customer_id()) OR (c.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cart_item",
+    "policyname": "cart_item_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM cart c\n  WHERE ((c.cart_id = c.cart_id) AND ((c.customer_id = get_customer_id()) OR (c.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cart_item",
+    "policyname": "cart_item_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM cart c\n  WHERE ((c.cart_id = c.cart_id) AND ((c.customer_id = get_customer_id()) OR (c.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cart_item",
+    "policyname": "cart_item_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM cart c\n  WHERE ((c.cart_id = c.cart_id) AND ((c.customer_id = get_customer_id()) OR (c.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM cart c\n  WHERE ((c.cart_id = c.cart_id) AND ((c.customer_id = get_customer_id()) OR (c.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "category",
+    "policyname": "category_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "category",
+    "policyname": "category_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "color",
+    "policyname": "color_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "color",
+    "policyname": "color_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "contact_message",
+    "policyname": "contact_message_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "contact_message",
+    "policyname": "contact_message_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "contact_message",
+    "policyname": "contact_message_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "contact_message",
+    "policyname": "contact_message_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "courier_pickup_delivery",
+    "policyname": "courier_pickup_delivery_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "courier_pickup_request",
+    "policyname": "courier_pickup_request_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "courier_shipper_profile",
+    "policyname": "courier_shipper_profile_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customer",
+    "policyname": "customer_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "is_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customer",
+    "policyname": "customer_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((profile_id = auth.uid()) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customer",
+    "policyname": "customer_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "((profile_id = auth.uid()) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customer",
+    "policyname": "customer_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "((profile_id = auth.uid()) OR is_admin() OR is_employee())",
+    "with_check": "((profile_id = auth.uid()) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "delivery",
+    "policyname": "delivery_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "delivery_fee_rules",
+    "policyname": "delivery_fee_rules_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "delivery_fee_rules",
+    "policyname": "delivery_fee_rules_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "delivery_tracking_event",
+    "policyname": "delivery_tracking_event_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "delivery_tracking_event",
+    "policyname": "delivery_tracking_event_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "delivery_waybill",
+    "policyname": "delivery_waybill_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "employee",
+    "policyname": "employee_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "is_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "employee",
+    "policyname": "employee_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "is_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "employee",
+    "policyname": "employee_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "employee",
+    "policyname": "employee_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "((profile_id = auth.uid()) OR is_admin())",
+    "with_check": "((profile_id = auth.uid()) OR is_admin())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "employee_commission",
+    "policyname": "employee_commission_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "((employee_id = get_employee_id()) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "employee_commission",
+    "policyname": "employee_commission_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "is_admin()",
+    "with_check": "is_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "images",
+    "policyname": "images_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "images",
+    "policyname": "images_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "inventory",
+    "policyname": "inventory_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "inventory_commitment",
+    "policyname": "inventory_commitment_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "notification",
+    "policyname": "notification_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "((recipient_profile_id = auth.uid()) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "notification",
+    "policyname": "notification_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((recipient_profile_id = auth.uid()) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "notification",
+    "policyname": "notification_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "((recipient_profile_id = auth.uid()) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "notification",
+    "policyname": "notification_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "((recipient_profile_id = auth.uid()) OR is_admin() OR is_employee())",
+    "with_check": "((recipient_profile_id = auth.uid()) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_customer_details",
+    "policyname": "order_customer_details_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_customer_details",
+    "policyname": "order_customer_details_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM orders o\n  WHERE ((o.order_id = o.order_id) AND ((o.customer_id = get_customer_id()) OR (o.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_customer_details",
+    "policyname": "order_customer_details_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM orders o\n  WHERE ((o.order_id = o.order_id) AND ((o.customer_id = get_customer_id()) OR (o.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_customer_details",
+    "policyname": "order_customer_details_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_item",
+    "policyname": "order_item_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_item",
+    "policyname": "order_item_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM orders o\n  WHERE ((o.order_id = o.order_id) AND ((o.customer_id = get_customer_id()) OR (o.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_item",
+    "policyname": "order_item_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM orders o\n  WHERE ((o.order_id = o.order_id) AND ((o.customer_id = get_customer_id()) OR (o.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_item",
+    "policyname": "order_item_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_shipping_details",
+    "policyname": "order_shipping_details_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_shipping_details",
+    "policyname": "order_shipping_details_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM orders o\n  WHERE ((o.order_id = o.order_id) AND ((o.customer_id = get_customer_id()) OR (o.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_shipping_details",
+    "policyname": "order_shipping_details_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM orders o\n  WHERE ((o.order_id = o.order_id) AND ((o.customer_id = get_customer_id()) OR (o.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_shipping_details",
+    "policyname": "order_shipping_details_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "policyname": "orders_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "policyname": "orders_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "policyname": "orders_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "policyname": "orders_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "payment_proof",
+    "policyname": "payment_proof_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "payment_proof",
+    "policyname": "payment_proof_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "payment_proof",
+    "policyname": "payment_proof_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "payment_proof",
+    "policyname": "payment_proof_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout",
+    "policyname": "pending_checkout_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout",
+    "policyname": "pending_checkout_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout",
+    "policyname": "pending_checkout_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout",
+    "policyname": "pending_checkout_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())",
+    "with_check": "((customer_id = get_customer_id()) OR (customer_id IS NULL) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_customer_details",
+    "policyname": "pending_checkout_cust_details_delete",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_customer_details",
+    "policyname": "pending_checkout_cust_details_insert",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_customer_details",
+    "policyname": "pending_checkout_cust_details_select",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_customer_details",
+    "policyname": "pending_checkout_cust_details_update",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_item",
+    "policyname": "pending_checkout_item_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_item",
+    "policyname": "pending_checkout_item_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_item",
+    "policyname": "pending_checkout_item_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_item",
+    "policyname": "pending_checkout_item_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_shipping_details",
+    "policyname": "pending_checkout_ship_details_delete",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_shipping_details",
+    "policyname": "pending_checkout_ship_details_insert",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_shipping_details",
+    "policyname": "pending_checkout_ship_details_select",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "pending_checkout_shipping_details",
+    "policyname": "pending_checkout_ship_details_update",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "product",
+    "policyname": "product_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "product",
+    "policyname": "product_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "product_variant",
+    "policyname": "product_variant_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "product_variant",
+    "policyname": "product_variant_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "profiles",
+    "policyname": "profiles_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "is_admin()",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "profiles",
+    "policyname": "profiles_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((id = auth.uid()) OR is_admin())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "profiles",
+    "policyname": "profiles_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "((id = auth.uid()) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "profiles",
+    "policyname": "profiles_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "((id = auth.uid()) OR is_admin() OR is_employee())",
+    "with_check": "((id = auth.uid()) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "purchase_order",
+    "policyname": "purchase_order_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "purchase_order_item",
+    "policyname": "purchase_order_item_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "review",
+    "policyname": "review_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "review",
+    "policyname": "review_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "review",
+    "policyname": "review_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "review",
+    "policyname": "review_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())",
+    "with_check": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "review_image",
+    "policyname": "review_image_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM review r\n  WHERE ((r.review_id = r.review_id) AND ((r.customer_id = get_customer_id()) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "review_image",
+    "policyname": "review_image_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM review r\n  WHERE ((r.review_id = r.review_id) AND ((r.customer_id = get_customer_id()) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "review_image",
+    "policyname": "review_image_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "review_image",
+    "policyname": "review_image_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM review r\n  WHERE ((r.review_id = r.review_id) AND ((r.customer_id = get_customer_id()) OR is_admin() OR is_employee()))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM review r\n  WHERE ((r.review_id = r.review_id) AND ((r.customer_id = get_customer_id()) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "role",
+    "policyname": "role_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "role",
+    "policyname": "role_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "is_admin()",
+    "with_check": "is_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "salary_record",
+    "policyname": "salary_record_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "((employee_id = get_employee_id()) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "salary_record",
+    "policyname": "salary_record_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "is_admin()",
+    "with_check": "is_admin()"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "size",
+    "policyname": "size_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "size",
+    "policyname": "size_write_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_reservation",
+    "policyname": "stock_reservation_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_reservation",
+    "policyname": "stock_reservation_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_reservation",
+    "policyname": "stock_reservation_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_reservation",
+    "policyname": "stock_reservation_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM pending_checkout pc\n  WHERE ((pc.checkout_id = pc.checkout_id) AND ((pc.customer_id = get_customer_id()) OR (pc.customer_id IS NULL) OR is_admin() OR is_employee()))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "supplier",
+    "policyname": "supplier_all_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(is_admin() OR is_employee())",
+    "with_check": "(is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_addresses",
+    "policyname": "user_addresses_delete_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_addresses",
+    "policyname": "user_addresses_insert_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_addresses",
+    "policyname": "user_addresses_select_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_addresses",
+    "policyname": "user_addresses_update_policy",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())",
+    "with_check": "((customer_id = get_customer_id()) OR is_admin() OR is_employee())"
+  }
+]

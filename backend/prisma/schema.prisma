@@ -91,6 +91,7 @@ model UserAddress {
 
   customer Customer @relation(fields: [customerId], references: [customerId], onDelete: Cascade)
 
+  @@index([customerId])
   @@map("user_addresses")
   @@schema("public")
 }
@@ -825,6 +826,7 @@ model EmployeeCommission {
   order    Orders        @relation(fields: [orderId], references: [orderId], onDelete: Restrict)
   salary   SalaryRecord? @relation(fields: [salaryId], references: [salaryId], onDelete: SetNull)
 
+  @@index([employeeId])
   @@map("employee_commission")
   @@schema("public")
 }
