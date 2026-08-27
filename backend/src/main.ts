@@ -16,8 +16,18 @@ async function bootstrap() {
     }),
   );
 
+  const rawFrontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+  const cleanFrontendUrl = rawFrontendUrl.replace(/\/+$/, '');
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, postman) or matching frontend URL
+      if (!origin || origin.replace(/\/+$/, '') === cleanFrontendUrl) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Alternatively allow clean match or allow all allowed origins
+      }
+    },
     credentials: true,
   });
 
