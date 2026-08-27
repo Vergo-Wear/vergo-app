@@ -9,6 +9,15 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Normalize leading double slashes in incoming request URLs (e.g., //product-catalogue -> /product-catalogue)
+  app.use((req: any, res: any, next: () => void) => {
+    if (req.url && req.url.startsWith('//')) {
+      req.url = req.url.replace(/^\/+/, '/');
+    }
+    next();
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
