@@ -75,14 +75,15 @@ export default function ProductDetailPage({ params }: PageProps) {
 
   const handleAddToCart = () => {
     if (!product || availableQuantity < 1) return;
+    const addedQty = Math.min(quantity, availableQuantity);
     addToCart(
       product,
       selectedSize,
-      Math.min(quantity, availableQuantity),
+      addedQty,
       product.colors?.[0] || undefined,
     );
     setToast(
-      `Added ${Math.min(quantity, availableQuantity)} × "${product.name}" (Size ${selectedSize}) to your cart!`,
+      `Added to cart: "${product.name}" × ${addedQty}, (Size ${selectedSize})`,
     );
     setTimeout(() => {
       setToast(null);

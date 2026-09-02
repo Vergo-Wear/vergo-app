@@ -97,7 +97,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private readonly checkoutInclude = {
     items: {
       include: {
-        variant: { include: { product: true, images: true } },
+        variant: { include: { product: true, color: true, size: true, images: true } },
       },
       orderBy: { checkoutItemId: 'asc' as const },
     },
@@ -110,7 +110,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private readonly orderInclude = {
     orderItems: {
       include: {
-        variant: { include: { product: true, images: true } },
+        variant: { include: { product: true, color: true, size: true, images: true } },
       },
     },
     customerDetails: true,
@@ -150,7 +150,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         message.includes('connection timeout') ||
         message.includes('connection terminated unexpectedly') ||
         message.includes('timeout expired') ||
-        ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH'].includes(code)
+        message.includes('transaction already closed') ||
+        message.includes('expired transaction') ||
+        ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH', 'P2028'].includes(code)
       ) {
         return true;
       }
@@ -651,6 +653,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       include: this.checkoutInclude,
     });
     if (!created) throw new NotFoundException('Pending checkout not found.');
+    await this.notifications.notifyOrderCreated(checkoutId);
     return this.presentCheckout(created);
   }
 
@@ -1308,7 +1311,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       }
       const orphaned = await this.stockReservations.expireActive(tx, now);
       return { expired: orphaned.count, checkouts };
-    });
+    }, { timeout: 60000, maxWait: 10000 });
     if (result.expired > 0 || result.checkouts > 0) {
       this.logger.log(
         `Expired ${result.checkouts} checkout(s) and deleted ${result.expired} orphaned hold(s).`,

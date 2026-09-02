@@ -89,6 +89,7 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     expireActive: jest.fn(),
   };
   const notifications = {
+    notifyOrderCreated: jest.fn().mockResolvedValue(undefined),
     notifyOrderReady: jest.fn(),
     notifyCheckoutReviewed: jest.fn(),
   };

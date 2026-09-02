@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
@@ -186,6 +186,24 @@ export default function ShippingPage() {
           }
         }
       }
+
+      // Restore previously saved shipping details (e.g. when navigating back from payment step)
+      const storedShipping = localStorage.getItem("vergo_checkout_shipping");
+      if (storedShipping) {
+        try {
+          const shipping = JSON.parse(storedShipping);
+          if (shipping.receiverName) setReceiverName(shipping.receiverName);
+          if (shipping.receiverPhone) setReceiverPhone(shipping.receiverPhone);
+          if (shipping.addressLine1) setAddressLine1(shipping.addressLine1);
+          if (shipping.addressLine2) setAddressLine2(shipping.addressLine2);
+          if (shipping.city) setCity(shipping.city);
+          if (shipping.district) setDistrict(shipping.district);
+          if (shipping.postalCode) setPostalCode(shipping.postalCode);
+          if (shipping.deliveryNote) setDeliveryNote(shipping.deliveryNote);
+        } catch (e) {
+          console.error("Error restoring stored shipping details:", e);
+        }
+      }
     }
   }, []);
 
@@ -195,6 +213,40 @@ export default function ShippingPage() {
   const [totalDeliveryFee, setTotalDeliveryFee] = useState<number | null>(null);
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
+
+  // Auto-save guest shipping details locally on edit so data is retained when navigating back and forth
+  useEffect(() => {
+    if (receiverName || receiverPhone || addressLine1 || city || district || postalCode) {
+      const shippingDetails = {
+        receiverName,
+        receiverPhone,
+        addressLine1,
+        addressLine2,
+        city,
+        district,
+        postalCode: postalCode.trim(),
+        deliveryNote: deliveryNote.trim() || undefined,
+        deliveryFee: totalDeliveryFee || 0,
+        baseShipping: baseShipping || 0,
+        regionalSurcharge: regionalSurcharge || 0,
+        savedAddressId: selectedAddressId || undefined,
+      };
+      localStorage.setItem("vergo_checkout_shipping", JSON.stringify(shippingDetails));
+    }
+  }, [
+    receiverName,
+    receiverPhone,
+    addressLine1,
+    addressLine2,
+    city,
+    district,
+    postalCode,
+    deliveryNote,
+    totalDeliveryFee,
+    baseShipping,
+    regionalSurcharge,
+    selectedAddressId,
+  ]);
 
   const totalQuantity = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -266,6 +318,107 @@ export default function ShippingPage() {
 
   const usingSavedAddress = selectedAddressId !== null;
 
+  const validateShippingField = useCallback((field: string, value: string) => {
+    const trimmed = value.trim();
+    if (field === "receiverName") {
+      if (!trimmed) return "Receiver name is required";
+      if (trimmed.length < 2) return "Receiver name must be at least 2 characters";
+      if (!/^[a-zA-Z\s\-'\.]+$/.test(trimmed)) return "Receiver name contains invalid characters";
+    }
+    if (field === "receiverPhone") {
+      const cleanPhone = trimmed;
+      if (!cleanPhone) return "Receiver phone number is required";
+      if (!/^(?:\+94|0)?[1-9][0-9]{8}$/.test(cleanPhone)) {
+        return "Please enter a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567)";
+      }
+    }
+    if (field === "addressLine1") {
+      if (!trimmed) return "Address Line 1 is required";
+      if (trimmed.length < 5) return "Address must be at least 5 characters";
+    }
+    if (field === "city") {
+      if (!trimmed) return "City is required";
+      if (trimmed.length < 2) return "City must be at least 2 characters";
+    }
+    if (field === "district") {
+      if (!trimmed) return "Please select a district for shipping calculation";
+      if (!DISTRICTS.includes(trimmed)) return "Please select a valid Sri Lankan district";
+    }
+    if (field === "postalCode") {
+      if (!trimmed) return "Postal code is required";
+      if (!/^\d{5}$/.test(trimmed)) return "Enter a valid 5-digit Sri Lankan postal code (e.g. 10100)";
+    }
+    return "";
+  }, []);
+
+  const isFormValid = useMemo(() => {
+    if (usingSavedAddress) return true;
+    return (
+      Boolean(receiverName.trim()) &&
+      !validateShippingField("receiverName", receiverName) &&
+      Boolean(receiverPhone.trim()) &&
+      !validateShippingField("receiverPhone", receiverPhone) &&
+      Boolean(addressLine1.trim()) &&
+      !validateShippingField("addressLine1", addressLine1) &&
+      Boolean(city.trim()) &&
+      !validateShippingField("city", city) &&
+      Boolean(district.trim()) &&
+      !validateShippingField("district", district) &&
+      Boolean(postalCode.trim()) &&
+      !validateShippingField("postalCode", postalCode)
+    );
+  }, [
+    receiverName,
+    receiverPhone,
+    addressLine1,
+    city,
+    district,
+    postalCode,
+    usingSavedAddress,
+    validateShippingField,
+  ]);
+
+  const [hoverErrors, setHoverErrors] = useState<Record<string, string>>({});
+  const getFieldError = (field: string) => errors[field] || hoverErrors[field];
+
+  const checkEmptyRequiredFields = useCallback(() => {
+    if (usingSavedAddress) return;
+    const newErrors: Record<string, string> = {};
+
+    const nameErr = validateShippingField("receiverName", receiverName);
+    if (nameErr) newErrors.receiverName = nameErr;
+
+    const phoneErr = validateShippingField("receiverPhone", receiverPhone);
+    if (phoneErr) newErrors.receiverPhone = phoneErr;
+
+    const addressErr = validateShippingField("addressLine1", addressLine1);
+    if (addressErr) newErrors.addressLine1 = addressErr;
+
+    const cityErr = validateShippingField("city", city);
+    if (cityErr) newErrors.city = cityErr;
+
+    const districtErr = validateShippingField("district", district);
+    if (districtErr) newErrors.district = districtErr;
+
+    const postalErr = validateShippingField("postalCode", postalCode);
+    if (postalErr) newErrors.postalCode = postalErr;
+
+    setHoverErrors(newErrors);
+  }, [
+    usingSavedAddress,
+    validateShippingField,
+    receiverName,
+    receiverPhone,
+    addressLine1,
+    city,
+    district,
+    postalCode,
+  ]);
+
+  const clearHoverErrors = useCallback(() => {
+    setHoverErrors({});
+  }, []);
+
   const handleInputChange = (field: string, value: string) => {
     if (field === "receiverName") setReceiverName(value);
     if (field === "receiverPhone") setReceiverPhone(value);
@@ -276,65 +429,31 @@ export default function ShippingPage() {
     if (field === "postalCode") setPostalCode(value);
     if (field === "deliveryNote") setDeliveryNote(value);
 
-    // Clear specific error on change
-    if (errors[field]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    }
+    // Clear hover errors on user edit
+    setHoverErrors({});
+
+    // Real-time validation update
+    const fieldError = validateShippingField(field, value);
+    setErrors((prev) => ({
+      ...prev,
+      [field]: fieldError,
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validations
-    const newErrors: Record<string, string> = {};
-    const nameRegex = /^[a-zA-Z\s\-'\.]+$/;
+    const newErrors: Record<string, string> = {
+      receiverName: validateShippingField("receiverName", receiverName),
+      receiverPhone: validateShippingField("receiverPhone", receiverPhone),
+      addressLine1: validateShippingField("addressLine1", addressLine1),
+      city: validateShippingField("city", city),
+      district: validateShippingField("district", district),
+      postalCode: validateShippingField("postalCode", postalCode),
+    };
 
-    if (!receiverName.trim()) {
-      newErrors.receiverName = "Receiver name is required";
-    } else if (receiverName.trim().length < 2) {
-      newErrors.receiverName = "Receiver name must be at least 2 characters";
-    } else if (!nameRegex.test(receiverName.trim())) {
-      newErrors.receiverName = "Receiver name contains invalid characters";
-    }
-
-    // Sri Lankan phone format validation: optional +94 or 0, followed by 9 digits
-    const cleanPhone = receiverPhone.trim();
-    const lkPhoneRegex = /^(?:\+94|0)?[1-9][0-9]{8}$/;
-    if (!cleanPhone) {
-      newErrors.receiverPhone = "Receiver phone number is required";
-    } else if (!lkPhoneRegex.test(cleanPhone)) {
-      newErrors.receiverPhone = "Please enter a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567)";
-    }
-
-    if (!addressLine1.trim()) {
-      newErrors.addressLine1 = "Address Line 1 is required";
-    } else if (addressLine1.trim().length < 5) {
-      newErrors.addressLine1 = "Address must be at least 5 characters";
-    }
-
-    if (!city.trim()) {
-      newErrors.city = "City is required";
-    } else if (city.trim().length < 2) {
-      newErrors.city = "City must be at least 2 characters";
-    }
-
-    if (!district) {
-      newErrors.district = "Please select a district for shipping calculation";
-    } else if (!DISTRICTS.includes(district)) {
-      newErrors.district = "Please select a valid Sri Lankan district";
-    }
-
-    if (!postalCode.trim()) {
-      newErrors.postalCode = "Postal code is required";
-    } else if (!/^\d{5}$/.test(postalCode.trim())) {
-      newErrors.postalCode = "Enter a valid 5-digit Sri Lankan postal code";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
+    if (Object.values(newErrors).some(Boolean)) {
       setErrors(newErrors);
       return;
     }
@@ -366,14 +485,7 @@ export default function ShippingPage() {
     localStorage.setItem("vergo_checkout_shipping", JSON.stringify(shippingDetails));
     setShippingComplete(true);
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setShowSuccessToast(true);
-      setTimeout(() => {
-        setShowSuccessToast(false);
-        router.push("/checkout/payment");
-      }, 1500);
-    }, 1000);
+    router.push("/checkout/payment");
   };
 
   const itemsToDisplay = cart;
@@ -518,8 +630,8 @@ export default function ShippingPage() {
                   type="text"
                   placeholder="Full Name"
                   disabled={usingSavedAddress}
-                  className={`form-input ${errors.receiverName ? "input-error" : ""}`}
-                  aria-invalid={Boolean(errors.receiverName)}
+                  className={`form-input ${errors.receiverName || hoverErrors.receiverName ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.receiverName || hoverErrors.receiverName)}
                   value={receiverName}
                   onChange={(e) => handleInputChange("receiverName", e.target.value)}
                 />
@@ -537,8 +649,8 @@ export default function ShippingPage() {
                   type="tel"
                   placeholder="+1 (555) 000-0000"
                   disabled={usingSavedAddress}
-                  className={`form-input ${errors.receiverPhone ? "input-error" : ""}`}
-                  aria-invalid={Boolean(errors.receiverPhone)}
+                  className={`form-input ${errors.receiverPhone || hoverErrors.receiverPhone ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.receiverPhone || hoverErrors.receiverPhone)}
                   value={receiverPhone}
                   onChange={(e) => handleInputChange("receiverPhone", e.target.value)}
                 />
@@ -558,8 +670,8 @@ export default function ShippingPage() {
                 type="text"
                 placeholder="Street address, P.O. box, company name"
                 disabled={usingSavedAddress}
-                className={`form-input ${errors.addressLine1 ? "input-error" : ""}`}
-                aria-invalid={Boolean(errors.addressLine1)}
+                className={`form-input ${errors.addressLine1 || hoverErrors.addressLine1 ? "input-error" : ""}`}
+                aria-invalid={Boolean(errors.addressLine1 || hoverErrors.addressLine1)}
                 value={addressLine1}
                 onChange={(e) => handleInputChange("addressLine1", e.target.value)}
               />
@@ -595,8 +707,8 @@ export default function ShippingPage() {
                   type="text"
                   placeholder="City"
                   disabled={usingSavedAddress}
-                  className={`form-input ${errors.city ? "input-error" : ""}`}
-                  aria-invalid={Boolean(errors.city)}
+                  className={`form-input ${errors.city || hoverErrors.city ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.city || hoverErrors.city)}
                   value={city}
                   onChange={(e) => handleInputChange("city", e.target.value)}
                 />
@@ -610,8 +722,8 @@ export default function ShippingPage() {
                 <select
                   id="district"
                   disabled={usingSavedAddress}
-                  className={`form-input form-select district-select ${errors.district ? "input-error" : ""} ${!district ? "placeholder-color" : ""}`}
-                  aria-invalid={Boolean(errors.district)}
+                  className={`form-input form-select district-select ${errors.district || hoverErrors.district ? "input-error" : ""} ${!district ? "placeholder-color" : ""}`}
+                  aria-invalid={Boolean(errors.district || hoverErrors.district)}
                   value={district}
                   onChange={(e) => handleInputChange("district", e.target.value)}
                 >
@@ -640,8 +752,8 @@ export default function ShippingPage() {
                   type="text"
                   placeholder="e.g. 10100"
                   disabled={usingSavedAddress}
-                  className={`form-input ${errors.postalCode ? "input-error" : ""}`}
-                  aria-invalid={Boolean(errors.postalCode)}
+                  className={`form-input ${errors.postalCode || hoverErrors.postalCode ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.postalCode || hoverErrors.postalCode)}
                   value={postalCode}
                   onChange={(e) => handleInputChange("postalCode", e.target.value)}
                 />
@@ -756,47 +868,63 @@ export default function ShippingPage() {
             </div>
 
             {/* Proceed to Payment Button */}
-            <div className="submit-btn-container checkout-actions" style={{ marginTop: "24px" }}>
+            <div
+              className="submit-btn-container checkout-actions"
+              style={{ marginTop: "24px" }}
+            >
               <button type="button" className="checkout-back-btn" onClick={() => router.push("/checkout")}>
                 Back
               </button>
-              <button
-                type="button"
-                disabled={isSubmitting || !district || deliveryLoading || Boolean(deliveryError) || totalDeliveryFee === null}
-                className="submit-btn shipping-payment-submit"
-                onClick={handleSubmit}
+              <div
+                style={{ width: "100%", display: "inline-block" }}
+                onMouseEnter={checkEmptyRequiredFields}
+                onMouseLeave={clearHoverErrors}
               >
-                <span className="shipping-payment-submit-sizer" aria-hidden="true">
-                  Proceed to Payment
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" width={14} height={14}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                  </svg>
-                </span>
-                <span className="shipping-payment-submit-label">
-                  {isSubmitting ? (
-                    "Optimizing..."
-                  ) : (
-                    <>
-                      Proceed to Payment
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth="2.5"
-                        stroke="currentColor"
-                        width={14}
-                        height={14}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
-                        />
-                      </svg>
-                    </>
-                  )}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  disabled={
+                    isSubmitting ||
+                    !isFormValid ||
+                    deliveryLoading ||
+                    Boolean(deliveryError) ||
+                    totalDeliveryFee === null
+                  }
+                  className="submit-btn shipping-payment-submit"
+                  style={{ width: "100%" }}
+                  onClick={handleSubmit}
+                >
+                  <span className="shipping-payment-submit-sizer" aria-hidden="true">
+                    Proceed to Payment
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" width={14} height={14}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                    </svg>
+                  </span>
+                  <span className="shipping-payment-submit-label">
+                    {isSubmitting ? (
+                      "Optimizing..."
+                    ) : (
+                      <>
+                        Proceed to Payment
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth="2.5"
+                          stroke="currentColor"
+                          width={14}
+                          height={14}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                          />
+                        </svg>
+                      </>
+                    )}
+                  </span>
+                </button>
+              </div>
             </div>
 
           </div>

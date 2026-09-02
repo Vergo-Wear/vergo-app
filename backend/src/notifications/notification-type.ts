@@ -1,5 +1,6 @@
 /** Supported customer notification event types. */
 export const NotificationType = {
+  ORDER_CREATED: 'ORDER_CREATED',
   COD_CONFIRMED: 'COD_CONFIRMED',
   COD_REJECTED: 'COD_REJECTED',
   PAYMENT_APPROVED: 'PAYMENT_APPROVED',

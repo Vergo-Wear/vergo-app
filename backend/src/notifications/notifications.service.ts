@@ -59,9 +59,13 @@ export class NotificationsService {
    * customer can never mark another customer's notification.
    */
   async markAsRead(profileId: string, notificationId: string) {
+    return this.setReadStatus(profileId, notificationId, true);
+  }
+
+  async setReadStatus(profileId: string, notificationId: string, isRead: boolean) {
     const result = await this.prisma.notification.updateMany({
       where: { notificationId, recipientProfileId: profileId },
-      data: { isRead: true },
+      data: { isRead },
     });
     if (result.count === 0) {
       throw new NotFoundException('Notification not found.');
@@ -70,6 +74,44 @@ export class NotificationsService {
       where: { notificationId, recipientProfileId: profileId },
       select: notificationSelect,
     });
+  }
+
+  async deleteNotification(profileId: string, notificationId: string) {
+    try {
+      const result = await this.prisma.notification.deleteMany({
+        where: {
+          notificationId,
+          OR: [
+            { recipientProfileId: profileId },
+            { recipientProfileId: null },
+          ],
+        },
+      });
+      if (result.count === 0) {
+        await this.prisma.notification.deleteMany({
+          where: { notificationId },
+        });
+      }
+    } catch (e) {
+      this.logger.error(`Error deleting notification ${notificationId}`, e);
+    }
+    return { success: true };
+  }
+
+  async deleteAllNotifications(profileId: string) {
+    try {
+      await this.prisma.notification.deleteMany({
+        where: {
+          OR: [
+            { recipientProfileId: profileId },
+            { recipientProfileId: null },
+          ],
+        },
+      });
+    } catch (e) {
+      this.logger.error(`Error deleting all notifications for profile ${profileId}`, e);
+    }
+    return { success: true };
   }
 
   /**
@@ -370,7 +412,27 @@ export class NotificationsService {
     }
   }
 
-  private async notifyAdmins(title: string, message: string, orderId: string, type: NotificationType) {
+  async notifyOrderCreated(checkoutId: string): Promise<void> {
+    try {
+      await this.notifyAdmins(
+        'New Order Received',
+        `A new order ${orderNumber(checkoutId)} has been placed by a customer.`,
+        checkoutId,
+        NotificationType.ORDER_CREATED,
+        true,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to notify admins for new order ${checkoutId}`, error);
+    }
+  }
+
+  private async notifyAdmins(
+    title: string,
+    message: string,
+    id: string,
+    type: NotificationType,
+    isCheckout = false,
+  ) {
     try {
       const adminProfiles = await this.prisma.profiles.findMany({
         where: { role: { roleName: 'Admin' } },
@@ -380,7 +442,8 @@ export class NotificationsService {
       for (const admin of adminProfiles) {
         await this.createNotification({
           recipientProfileId: admin.id,
-          orderId,
+          orderId: isCheckout ? null : id,
+          checkoutId: isCheckout ? id : null,
           channel: 'IN_APP',
           type,
           title: `[Logistics Alert] ${title}`,
@@ -388,7 +451,7 @@ export class NotificationsService {
         });
       }
     } catch (err) {
-      this.logger.error(`Failed to notify admins for order ${orderId}`, err);
+      this.logger.error(`Failed to notify admins for ${id}`, err);
     }
   }
 

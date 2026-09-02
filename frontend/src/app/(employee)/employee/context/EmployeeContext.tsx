@@ -295,14 +295,31 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       claimedBy: order.employeeId ? "Employee" : null,
       stockAvailable: order.stockAvailable ?? false,
       stockShortages: order.stockShortages ?? [],
-      itemsList: order.orderItems.map((item) => ({
-        description: item.variant?.product?.name || "Product",
-        size: item.variant?.size || "Not specified",
-        color: item.variant?.color || "Not specified",
-        qty: item.quantity,
-        unitPrice: Number(item.unitPrice),
-        sku: item.variant?.sku || "",
-      })),
+      itemsList: order.orderItems.map((item) => {
+        const variant = item.variant as any;
+        const sizeVal =
+          typeof variant?.size === "object" && variant?.size !== null
+            ? variant.size.name
+            : typeof variant?.size === "string"
+              ? variant.size
+              : "Standard";
+
+        const colorVal =
+          typeof variant?.color === "object" && variant?.color !== null
+            ? variant.color.name
+            : typeof variant?.color === "string"
+              ? variant.color
+              : "Standard";
+
+        return {
+          description: variant?.product?.name || "Product",
+          size: sizeVal || "Standard",
+          color: colorVal || "Standard",
+          qty: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          sku: variant?.sku || "",
+        };
+      }),
     };
   };
 

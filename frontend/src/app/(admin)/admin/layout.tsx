@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AdminProvider, useAdmin } from "./AdminContext";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import "@/styles/admin.css";
 
 // Separate the layout contents to use the AdminContext hooks safely
@@ -17,6 +18,38 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     setSearchQuery,
     adminAlerts,
   } = useAdmin();
+
+  // Real-time unread notification count directly from public.notification table
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const fetchUnreadCount = useCallback(() => {
+    const token = sessionStorage.getItem("vergo_access_token");
+    if (!token) return;
+
+    authenticatedFetch("/notifications/unread-count", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res?.ok) return null;
+        return res.json() as Promise<{ count: number }>;
+      })
+      .then((data) => {
+        if (data && typeof data.count === "number") {
+          setUnreadCount(data.count);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    fetchUnreadCount();
+    window.addEventListener("vergo_notifications_updated", fetchUnreadCount);
+    const interval = setInterval(fetchUnreadCount, 3000);
+    return () => {
+      window.removeEventListener("vergo_notifications_updated", fetchUnreadCount);
+      clearInterval(interval);
+    };
+  }, [fetchUnreadCount]);
+
+  const unreadTotal = unreadCount;
 
   // Sri Lanka Local Clock State
   const [localTime, setLocalTime] = useState("");
@@ -480,9 +513,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                   d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
                 />
               </svg>
-              {adminAlerts.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center border border-[#050505] shadow-lg animate-pulse">
-                  {adminAlerts.length}
+              {unreadTotal > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-[#ef4444] text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center border border-[#050505] shadow-lg animate-pulse">
+                  {unreadTotal > 99 ? "99+" : unreadTotal}
                 </span>
               )}
             </Link>

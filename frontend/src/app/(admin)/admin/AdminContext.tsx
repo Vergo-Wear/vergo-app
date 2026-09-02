@@ -211,7 +211,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           title: "Low Stock Alert",
           message: `${item.name} (${item.sku}) is running low at ${item.location}. Current quantity: ${item.inStock}.`,
           timestamp: "Live",
-          link: "/admin/inventory",
+          link: "/admin/employees",
         });
       }
     });
