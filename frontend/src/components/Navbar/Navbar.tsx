@@ -47,7 +47,19 @@ export default function Navbar({
   const [hideNavbar, setHideNavbar] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && pathname === "/auth/reset-password") {
+    if (typeof window === "undefined") return;
+
+    // Auto redirect password recovery email links containing hash fragments to /auth/reset-password
+    const hash = window.location.hash || "";
+    if (
+      (hash.includes("type=recovery") || hash.includes("access_token=")) &&
+      !pathname.startsWith("/auth/reset-password")
+    ) {
+      router.push(`/auth/reset-password${hash}`);
+      return;
+    }
+
+    if (pathname === "/auth/reset-password") {
       const urlParams = new URLSearchParams(window.location.search);
       const isRequired = urlParams.get("required") === "true";
       const rawUser = sessionStorage.getItem("vergo_user");
@@ -63,7 +75,7 @@ export default function Navbar({
       }
     }
     setHideNavbar(false);
-  }, [pathname]);
+  }, [pathname, router]);
 
   useEffect(() => {
     const loadAuthState = () => {

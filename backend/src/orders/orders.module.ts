@@ -5,9 +5,16 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StockReservationModule } from '../stock-reservation/stock-reservation.module';
+import { DeliveryFeesModule } from '../delivery-fees/delivery-fees.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, NotificationsModule, StockReservationModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    NotificationsModule,
+    StockReservationModule,
+    DeliveryFeesModule,
+  ],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

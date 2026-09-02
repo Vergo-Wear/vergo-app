@@ -52,22 +52,40 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    const { data: authListener } = client.auth.onAuthStateChange(
+      (event, newSession) => {
+        if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          if (newSession) {
+            setSession(newSession);
+            setIsVerifying(false);
+          }
+        }
+      }
+    );
+
     const checkSession = async () => {
       try {
         const sess = await getSupabaseRedirectSession(client);
-        setSession(sess);
+        if (sess) {
+          setSession(sess);
+        } else {
+          const { data } = await client.auth.getSession();
+          if (data?.session) {
+            setSession(data.session);
+          }
+        }
       } catch (err: any) {
         console.error("Failed to parse reset password session:", err);
-        setMessage({
-          text: err.message || "Failed to authenticate password reset link. It may be expired or already used.",
-          type: "error",
-        });
       } finally {
         setIsVerifying(false);
       }
     };
 
     checkSession();
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

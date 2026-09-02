@@ -96,6 +96,17 @@
   background: #141417;
 }
 
+/* Prevent browser autocomplete/autofill from overriding dark background */
+.custom-input:-webkit-autofill,
+.custom-input:-webkit-autofill:hover,
+.custom-input:-webkit-autofill:focus,
+.custom-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0f0f11 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  transition: background-color 5000000s ease-in-out 0s !important;
+}
+
 /* Password input with inline show/hide button */
 .password-input-wrapper {
   position: relative;

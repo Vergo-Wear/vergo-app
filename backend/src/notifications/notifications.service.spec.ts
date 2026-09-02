@@ -14,11 +14,14 @@ describe('NotificationsService', () => {
     updateMany: jest.fn(),
   };
 
+  const profilesDelegate = { findMany: jest.fn().mockResolvedValue([]) };
+
   const prisma = {
     customer: customerDelegate,
     orders: ordersDelegate,
     pendingCheckout: pendingCheckoutDelegate,
     notification: notificationDelegate,
+    profiles: profilesDelegate,
   };
 
   const email = {

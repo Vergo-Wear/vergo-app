@@ -18,45 +18,10 @@ export default function CartPage() {
     formatLkr,
   } = useCart();
 
-  const handleCheckout = async () => {
-    if (isCheckingCheckout) return;
-    setIsCheckingCheckout(true);
-
-    const token = sessionStorage.getItem("vergo_access_token");
-    const isCustomer =
-      sessionStorage.getItem("vergo_is_logged_in") === "true" && Boolean(token);
-    if (isCustomer && token) {
-      try {
-        const apiUrl =
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-        const response = await fetch(
-          `${apiUrl}/orders/bank-transfer/reservations/current`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        const body = await response.text();
-        const current = body.trim()
-          ? (JSON.parse(body) as {
-              reservationId?: string | null;
-              expiresAt?: string | null;
-            })
-          : null;
-        if (
-          response.ok &&
-          current?.reservationId &&
-          current.expiresAt &&
-          new Date(current.expiresAt).getTime() > Date.now()
-        ) {
-          router.push("/checkout/payment");
-          return;
-        }
-      } catch (error) {
-        console.warn(
-          "Unable to check the active Bank Transfer checkout.",
-          error,
-        );
-      }
+  const handleCheckout = () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("vergo_checkout_timestamp", Date.now().toString());
     }
-
     router.push("/checkout");
   };
 
@@ -241,10 +206,6 @@ export default function CartPage() {
                   </span>
                 </div>
 
-                <div className="summary-row">
-                  <span className="summary-label">TAXES</span>
-                  <span className="summary-value">LKR 0.00</span>
-                </div>
 
                 <hr className="summary-divider" />
 
@@ -257,11 +218,8 @@ export default function CartPage() {
                   type="button"
                   onClick={handleCheckout}
                   className="checkout-btn"
-                  disabled={isCheckingCheckout}
                 >
-                  {isCheckingCheckout
-                    ? "CHECKING CHECKOUT..."
-                    : "PROCEED TO CHECKOUT"}
+                  PROCEED TO CHECKOUT
                 </button>
 
               </div>

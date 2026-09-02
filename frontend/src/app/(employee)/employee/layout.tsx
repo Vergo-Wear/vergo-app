@@ -122,7 +122,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
             <Link
               href="/employee/product-prep"
-              className={`emp-nav-item ${pathname.includes("/product-prep") ? "active" : ""}`}
+              className={`emp-nav-item ${pathname.includes("/product-prep") || pathname.includes("/delivery-prep") ? "active" : ""}`}
             >
               <span className="emp-nav-item-left">
                 <svg className="emp-nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -130,19 +130,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 <span>Product Prep</span>
-              </span>
-            </Link>
-
-            <Link
-              href="/employee/delivery-prep"
-              className={`emp-nav-item ${pathname.includes("/delivery-prep") ? "active" : ""}`}
-            >
-              <span className="emp-nav-item-left">
-                <svg className="emp-nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1-1v10M13 16h6m-6 0H6m13 0h3v-4a2 2 0 00-2-2h-4v6z" />
-                </svg>
-                <span>Delivery Prep</span>
               </span>
             </Link>
 
@@ -262,12 +249,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                 )}
               </Link>
 
-              {/* Help button (desktop only) */}
-              <button className="emp-header-icon-btn hidden sm:block" title="Help Center">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 18, height: 18 }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </button>
+
 
               {/* Desktop Availability Toggle */}
               <div className="hidden sm:flex items-center gap-2">

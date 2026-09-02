@@ -68,7 +68,7 @@ export class OrdersController {
 
   @Get('manage')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('Admin', 'Employee')
+  @Roles('Admin', 'Employee', 'Branch Manager')
   getAllOrders(@CurrentIdentity() user: RequestUser) {
     return this.ordersService.findManagedOrders(user.id, user.role);
   }
@@ -93,7 +93,7 @@ export class OrdersController {
 
   @Get('manage/:id')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('Admin', 'Employee')
+  @Roles('Admin', 'Employee', 'Branch Manager')
   getManagedOrder(
     @CurrentIdentity() user: RequestUser,
     @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
@@ -103,7 +103,7 @@ export class OrdersController {
 
   @Patch('manage/:id/status')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('Admin', 'Employee')
+  @Roles('Admin', 'Employee', 'Branch Manager')
   updateManagedStatus(
     @CurrentIdentity() user: RequestUser,
     @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
@@ -120,7 +120,7 @@ export class OrdersController {
 
   @Patch('manage/:id/claim')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
-  @Roles('Employee')
+  @Roles('Admin', 'Employee', 'Branch Manager')
   claimManagedOrder(
     @CurrentIdentity() user: RequestUser,
     @Param('id', new ParseUUIDPipe({ version: '4' })) orderId: string,
