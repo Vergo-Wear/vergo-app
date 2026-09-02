@@ -24,6 +24,8 @@ export default function EmployeeDashboard() {
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
+  const [dbLeaderboard, setDbLeaderboard] = useState<any[]>([]);
+
   useEffect(() => {
     const localUserRaw = typeof window !== "undefined" ? sessionStorage.getItem("vergo_user") : null;
     const localUser = localUserRaw ? JSON.parse(localUserRaw) : null;
@@ -41,6 +43,13 @@ export default function EmployeeDashboard() {
     } else {
       setLoadingProfile(false);
     }
+
+    fetch(`${apiUrl}/employees/leaderboard`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) setDbLeaderboard(data);
+      })
+      .catch((err) => console.warn("Failed to fetch employee leaderboard:", err));
   }, []);
 
   const localUserRaw = typeof window !== "undefined" ? sessionStorage.getItem("vergo_user") : null;
@@ -76,7 +85,7 @@ export default function EmployeeDashboard() {
   // Filter tasks that are pending
   const pendingTasks = pickingQueue.filter(t => t.status === "pending").slice(0, 5);
 
-  // Dynamic Leaderboard data
+  // Dynamic Leaderboard data from DB
   const userInitials = employeeName
     .split(" ")
     .map((n: string) => n[0])
@@ -84,16 +93,20 @@ export default function EmployeeDashboard() {
     .toUpperCase()
     .slice(0, 2);
 
-  const leaderboard = [
-    { rank: 1, name: "Elena S.", role: "Night Shift Lead", items: 1492, isMe: false, initials: "ES" },
-    { rank: 2, name: `${employeeName} (You)`, role: employeeRole, items: dailyTotal, isMe: true, initials: userInitials },
-    { rank: 3, name: "James K.", role: "Warehouse Assoc.", items: 1156, isMe: false, initials: "JK" },
-  ].sort((a, b) => b.items - a.items);
+  const leaderboardToDisplay = dbLeaderboard.length > 0
+    ? dbLeaderboard.map((item) => ({
+        rank: item.rank,
+        name: item.profileId === profileData?.profileId ? `${item.name} (You)` : item.name,
+        role: item.position || "Fulfillment Specialist",
+        items: item.items || 0,
+        isMe: item.profileId === profileData?.profileId,
+        initials: item.initials || "EM",
+      }))
+    : [
+        { rank: 1, name: `${employeeName} (You)`, role: employeeRole, items: dailyTotal, isMe: true, initials: userInitials },
+      ];
 
-  // Assign ranks dynamically based on sorted items
-  leaderboard.forEach((item, index) => {
-    item.rank = index + 1;
-  });
+  const lowStockAlerts = stockLevels.filter((s) => s.qty <= (s.lowStockLimit || 10));
 
   // Employee Metadata for PDF Report
   const employeeInfo = {
@@ -526,12 +539,12 @@ export default function EmployeeDashboard() {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 18, height: 18, color: "var(--emp-neon-green)" }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
-                <span>Volume Leaderboard</span>
+                <span>Leaderboard</span>
               </h2>
             </div>
 
             <div className="emp-leaderboard-list">
-              {leaderboard.map((user) => (
+              {leaderboardToDisplay.map((user) => (
                 <div key={user.name} className={`emp-leaderboard-item ${user.isMe ? "me" : ""}`}>
                   <div className="emp-leaderboard-left">
                     <div className={`emp-user-avatar-circle ${user.rank === 1 ? "rank-1" : ""}`}>
@@ -565,15 +578,15 @@ export default function EmployeeDashboard() {
             </div>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
-              {stockLevels.filter(s => s.qty < 10).length === 0 ? (
+              {lowStockAlerts.length === 0 ? (
                 <div style={{ color: "var(--emp-neon-green)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", padding: "10px 0" }}>
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ width: 16, height: 16 }}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>All stock levels are optimal.</span>
+                  <span>All database stock levels are optimal.</span>
                 </div>
               ) : (
-                stockLevels.filter(s => s.qty < 10).map(stock => (
+                lowStockAlerts.slice(0, 5).map(stock => (
                   <div
                     key={stock.id}
                     style={{
@@ -587,13 +600,15 @@ export default function EmployeeDashboard() {
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: "13px", fontWeight: 700 }}>{stock.name}</div>
+                      <div style={{ fontSize: "13px", fontWeight: 700 }}>
+                        {stock.name} {[stock.color, stock.size].filter(Boolean).length > 0 ? `(${[stock.color, stock.size].filter(Boolean).join(" / ")})` : ""}
+                      </div>
                       <div style={{ fontSize: "11px", color: "var(--emp-text-muted)" }}>SKU: {stock.sku}</div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <span style={{ fontSize: "12px", fontWeight: 800 }}>{stock.qty} units</span>
                       {stock.qty < 5 ? (
-                        <span className="emp-badge red" style={{ fontSize: "8.5px", padding: "1px 5px" }}>Low Stock</span>
+                        <span className="emp-badge red" style={{ fontSize: "8.5px", padding: "1px 5px" }}>Critical Low</span>
                       ) : (
                         <span className="emp-badge" style={{ fontSize: "8.5px", padding: "1px 5px", backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>Low Stock</span>
                       )}

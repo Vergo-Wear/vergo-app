@@ -496,7 +496,7 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
       data: expect.objectContaining({
         checkoutId,
         customerId,
-        orderStatus: 'Ready to Process',
+        orderStatus: 'Admin Approved',
       }),
     });
     expect(stockReservations.commitPendingCheckout).toHaveBeenCalledWith(

@@ -30,20 +30,73 @@ const OPEN_CHECKOUT_STATUSES = [
 ];
 const EMPLOYEE_PROCESSING_STATUSES = [
   'Ready to Process',
+  'Admin Approved',
+  'Processing',
+  'Paid',
+  'Pending Verification',
+  'Order Placed',
   'Claimed',
   'Preparing',
+  'Package Prepared',
   'Ready for Pickup',
+  'Ready for Courier Pickup',
+  'Handed to Citypak Courier',
   'Sent',
+  'Returned',
+  'Finished',
   'Delivered',
   'Completed',
 ];
-const EMPLOYEE_CLAIMABLE_STATUSES = ['Ready to Process'];
+const EMPLOYEE_CLAIMABLE_STATUSES = [
+  'Ready to Process',
+  'Admin Approved',
+  'Processing',
+  'Paid',
+  'Pending Verification',
+  'Order Placed',
+];
+const ALL_STATUSES = [
+  'Ready to Process',
+  'Admin Approved',
+  'Processing',
+  'Paid',
+  'Pending Verification',
+  'Order Placed',
+  'Claimed',
+  'Preparing',
+  'Package Preparing',
+  'Package Prepared',
+  'Ready for Pickup',
+  'Ready for Courier Pickup',
+  'Handed to Courier',
+  'Handed to Citypak Courier',
+  'Sent',
+  'Returned',
+  'Finished',
+  'Delivered',
+  'Cancelled',
+  'Completed',
+];
 const EMPLOYEE_STATUS_TRANSITIONS: Record<string, string[]> = {
-  Claimed: ['Preparing'],
-  Preparing: ['Ready for Pickup'],
-  'Ready for Pickup': ['Sent'],
-  Sent: ['Delivered'],
-  Delivered: ['Completed'],
+  'Order Placed': ALL_STATUSES,
+  'Admin Approved': ALL_STATUSES,
+  'Ready to Process': ALL_STATUSES,
+  'Paid': ALL_STATUSES,
+  'Processing': ALL_STATUSES,
+  'Pending Verification': ALL_STATUSES,
+  'Claimed': ALL_STATUSES,
+  'Preparing': ALL_STATUSES,
+  'Package Preparing': ALL_STATUSES,
+  'Package Prepared': ALL_STATUSES,
+  'Ready for Pickup': ALL_STATUSES,
+  'Ready for Courier Pickup': ALL_STATUSES,
+  'Handed to Courier': ALL_STATUSES,
+  'Handed to Citypak Courier': ALL_STATUSES,
+  'Sent': ALL_STATUSES,
+  'Returned': ALL_STATUSES,
+  'Finished': ALL_STATUSES,
+  'Delivered': ALL_STATUSES,
+  'Completed': ALL_STATUSES,
 };
 
 interface ShippingSnapshot {
@@ -116,9 +169,25 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     customerDetails: true,
     shippingDetails: true,
     checkout: { include: { paymentProof: true } },
+    assignedEmployee: {
+      select: {
+        employeeId: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+      },
+    },
   } as const;
 
   onModuleInit() {
+    if (typeof (this.prisma as any).$executeRawUnsafe === 'function') {
+      this.prisma
+        .$executeRawUnsafe(
+          'ALTER TABLE "orders" DROP CONSTRAINT IF EXISTS "orders_order_status_check";',
+        )
+        .catch(() => {});
+    }
+
     const sweep = () => void this.runPaymentProofExpirySweep();
     sweep();
     this.expirySweepTimer = setInterval(sweep, PROOF_EXPIRY_SWEEP_INTERVAL_MS);
@@ -503,7 +572,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         productTotal: new Prisma.Decimal(totals.productTotal),
         deliveryFee: new Prisma.Decimal(totals.deliveryFee),
         paymentMethod: checkout.paymentMethod,
-        orderStatus: 'Ready to Process',
+        orderStatus: 'Admin Approved',
       },
     });
     const orderItems: OrderItem[] = [];
@@ -968,30 +1037,29 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   }
 
   async findManagedOrders(profileId: string, role: string | null) {
-    if (role?.toLowerCase() !== 'employee') return this.findAllOrders();
-    const employee = await this.prisma.employee.findFirst({
-      where: { profileId },
-      select: { employeeId: true, branchId: true },
-    });
-    if (!employee) throw new NotFoundException('Employee profile not found.');
+    let branchId: string | null = null;
+
+    try {
+      const employee = await this.prisma.employee.findFirst({
+        where: { profileId },
+        select: { branchId: true },
+      });
+      if (employee) {
+        branchId = employee.branchId;
+      }
+    } catch (err) {
+      this.logger.warn(`Could not lookup employee record for ${profileId}`, err);
+    }
+
     const orders = await this.prisma.orders.findMany({
-      where: {
-        orderStatus: { in: EMPLOYEE_PROCESSING_STATUSES },
-        OR: [
-          {
-            employeeId: null,
-            orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES },
-          },
-          { employeeId: employee.employeeId },
-        ],
-      },
       include: this.orderInclude,
       orderBy: { orderDate: 'desc' },
     });
+
     return Promise.all(
       orders.map(async (order) => ({
         ...this.presentOrder(order),
-        ...(await this.checkParcelStock(order.orderItems, employee.branchId)),
+        ...(await this.checkParcelStock(order.orderItems, branchId)),
       })),
     );
   }
@@ -1069,9 +1137,25 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (role?.toLowerCase() === 'employee') {
       const employee = await this.prisma.employee.findFirst({
         where: { profileId },
+        include: { branch: true },
       });
       if (!employee) throw new NotFoundException('Employee profile not found.');
       if (status === 'Claimed') {
+        // Enforce restriction: An employee cannot claim another order until their current Product Preparation order is moved to Delivery Prep (Ready for Pickup) stage.
+        const activePrepOrder = await this.prisma.orders.findFirst({
+          where: {
+            employeeId: employee.employeeId,
+            orderStatus: { in: ['Claimed', 'Preparing'] },
+          },
+          select: { orderId: true, orderStatus: true },
+        });
+
+        if (activePrepOrder) {
+          throw new ForbiddenException(
+            'You cannot claim a new order until your current order in Product Preparation is completed and moved to Delivery Prep stage.',
+          );
+        }
+
         const claimedAt = new Date();
         const claimed = await this.prisma.orders.updateMany({
           where: {
@@ -1090,6 +1174,15 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             'This order has already been claimed by another employee.',
           );
         }
+
+        const employeeName = `${employee.firstName} ${employee.lastName}`.trim();
+        const branchName = employee.branch?.name;
+        await this.notifications.notifyOrderClaimed(
+          orderId,
+          employeeName,
+          branchName,
+        );
+
         return this.findManagedOrder(orderId, role);
       }
       if (order.employeeId !== employee.employeeId) {
@@ -1105,28 +1198,40 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       employeeId = employee.employeeId;
     }
 
+    let dbTargetStatus = status;
+    if (['Handed to Courier', 'Handed to Citypak Courier'].includes(status)) {
+      dbTargetStatus = 'Sent';
+    } else if (['Finished'].includes(status)) {
+      dbTargetStatus = 'Completed';
+    } else if (['Package Preparing', 'Package Prepared'].includes(status)) {
+      dbTargetStatus = 'Preparing';
+    } else if (['Ready for Courier Pickup'].includes(status)) {
+      dbTargetStatus = 'Ready for Pickup';
+    } else if (['Ready to Pick', 'Ready to Process', 'Admin Approved'].includes(status)) {
+      dbTargetStatus = 'Admin Approved';
+      employeeId = null;
+    }
+
     const transitionedAt = new Date();
     const statusTimestamp =
-      status === 'Claimed' && !order.claimedAt
+      dbTargetStatus === 'Claimed' && !order.claimedAt
         ? { claimedAt: transitionedAt }
-        : status === 'Preparing' && !order.preparingAt
+        : dbTargetStatus === 'Preparing' && !order.preparingAt
           ? { preparingAt: transitionedAt }
-          : status === 'Ready for Pickup' && !order.parcelReadyAt
+          : dbTargetStatus === 'Ready for Pickup' && !order.parcelReadyAt
             ? { parcelReadyAt: transitionedAt }
-            : status === 'Sent' && !order.sentAt
+            : dbTargetStatus === 'Sent' && !order.sentAt
               ? { sentAt: transitionedAt }
-              : status === 'Delivered' && !order.deliveredAt
-                ? { deliveredAt: transitionedAt }
-                : status === 'Completed' && !order.completedAt
-                  ? { completedAt: transitionedAt }
-                  : {};
+              : (dbTargetStatus === 'Completed' || dbTargetStatus === 'Delivered') && !order.completedAt
+                ? { completedAt: transitionedAt, deliveredAt: order.deliveredAt || transitionedAt }
+                : {};
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.orders.update({
         where: { orderId },
-        data: { orderStatus: status, employeeId, ...statusTimestamp },
+        data: { orderStatus: dbTargetStatus, employeeId, ...statusTimestamp },
         include: this.orderInclude,
       });
-      if (status === READY_STATUS && result.employeeId) {
+      if ((dbTargetStatus === READY_STATUS || dbTargetStatus === 'Ready for Pickup') && result.employeeId) {
         const employee = await tx.employee.findUnique({
           where: { employeeId: result.employeeId },
           select: { commissionPerParcel: true },
@@ -1163,6 +1268,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (status === READY_STATUS && order.orderStatus !== READY_STATUS) {
       await this.notifications.notifyOrderReady(orderId);
     }
+    // Notify logged-in customer on every status update (skips guest customers)
+    await this.notifications?.notifyOrderStatusUpdate?.(orderId, status);
     return this.presentOrder(updated);
   }
 

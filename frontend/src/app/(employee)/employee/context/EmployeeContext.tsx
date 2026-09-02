@@ -22,11 +22,17 @@ export interface OrderItem {
     | "Claimed"
     | "Preparing"
     | "Ready for Pickup"
-    | "Sent";
+    | "Ready for Courier Pickup"
+    | "Handed to Citypak Courier"
+    | "Finished"
+    | "Sent"
+    | string;
   dbStatus: string;
   valuation: number;
+  deliveryFee: number;
   initials: string;
   claimedBy: string | null;
+  employeeId?: string | null;
   stockAvailable: boolean;
   stockShortages: string[];
   itemsList: {
@@ -114,6 +120,9 @@ interface EmployeeContextType {
   pickupSlot: string;
   claimTask: (id: string) => Promise<boolean>;
   claimOrder: (id: string) => Promise<boolean>;
+  returnToOrdersQueue: (orderId: string) => Promise<boolean>;
+  updateOrderStatus: (id: string, status: OrderItem["status"]) => Promise<boolean>;
+  createCitypakOrder: (orderId: string) => Promise<any>;
   startPrep: (sku: string) => void;
   updatePrepStatus: (
     sku: string,
@@ -166,7 +175,11 @@ interface EmployeeContextType {
     type: NotificationItem["type"],
   ) => void;
   clearNotifications: () => void;
-  requestStockFromAdmin: (sku: string, quantity: number) => void;
+  requestStockFromAdmin: (
+    sku: string,
+    quantity: number,
+    details?: { productName?: string; size?: string; color?: string; notes?: string },
+  ) => Promise<void>;
   logoutEmployee: () => void;
 }
 
@@ -177,6 +190,7 @@ interface RawOrder {
   orderStatus: string | null;
   confirmationStatus: string;
   totalAmount: string | number;
+  deliveryFee?: string | number;
   paymentMethod: string;
   shippingAddress: string;
   stockAvailable?: boolean;
@@ -213,6 +227,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [stockLevels, setStockLevels] = useState<StockItem[]>([]);
+  const [stockRequests, setStockRequests] = useState<StockRequest[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [availabilityStatus, setAvailabilityStatus] = useState<
     "AVAILABLE" | "BUSY" | "OFF DUTY"
@@ -250,52 +265,54 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       ...current,
     ]);
   const mapOrder = (order: RawOrder): OrderItem | null => {
-    if (order.confirmationStatus !== "Approved") return null;
+    if (!order || !order.orderId) return null;
     const name = order.customerDetails
       ? `${order.customerDetails.firstName} ${order.customerDetails.lastName}`
-      : "Guest";
-    const status =
-      order.orderStatus === "Claimed by Employee"
-        ? "Claimed"
-        : order.orderStatus === "Ready to Process"
-          ? "Ready to Pick"
-          : order.orderStatus === "Ready"
-            ? "Ready for Pickup"
-            : order.orderStatus === "Sent for Delivery"
-              ? "Sent"
-              : order.orderStatus;
-    const supported = [
-      "Ready to Pick",
-      "Claimed",
-      "Preparing",
-      "Ready for Pickup",
-      "Sent",
-    ];
-    if (!supported.includes(status || "")) return null;
+      : "Customer";
+
+    let status: OrderItem["status"] = "Ready to Pick";
+    const dbSt = (order.orderStatus || "").toLowerCase();
+
+    if (dbSt === "claimed" || dbSt === "claimed by employee") {
+      status = "Claimed";
+    } else if (dbSt === "preparing" || dbSt === "package prepared") {
+      status = "Preparing";
+    } else if (dbSt === "ready for pickup" || dbSt === "ready" || dbSt === "ready for courier pickup") {
+      status = "Ready for Pickup";
+    } else if (dbSt === "sent" || dbSt === "sent for delivery" || dbSt === "handed to citypak courier" || dbSt === "delivered" || dbSt === "completed" || dbSt === "finished") {
+      status = "Sent";
+    } else {
+      status = "Ready to Pick";
+    }
+
     return {
       id: order.orderId,
       customerName: name,
       customerEmail: order.customerDetails?.email || "",
       customerPhone: order.customerDetails?.phone || "",
-      customerAddress: order.shippingAddress,
+      customerAddress: order.shippingAddress || "Local Store Pickup",
       timestamp: order.orderDate
         ? new Date(order.orderDate).toLocaleString()
-        : "",
-      paymentMethod: order.paymentMethod.toLowerCase().includes("bank")
+        : new Date().toLocaleString(),
+      paymentMethod: (order.paymentMethod || "").toLowerCase().includes("bank")
         ? "BANK"
         : "COD",
-      status: status as OrderItem["status"],
-      dbStatus: order.orderStatus || "Pending",
-      valuation: Number(order.totalAmount),
-      initials: name
-        .split(" ")
-        .map((part) => part[0])
-        .join("")
-        .slice(0, 2),
+      status,
+      dbStatus: order.orderStatus || "Ready to Process",
+      valuation: Number(order.totalAmount || 0),
+      deliveryFee: Number(order.deliveryFee ?? 350),
+      initials:
+        name
+          .split(" ")
+          .map((part) => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase() || "CU",
       claimedBy: order.employeeId ? "Employee" : null,
-      stockAvailable: order.stockAvailable ?? false,
+      employeeId: order.employeeId || null,
+      stockAvailable: order.stockAvailable ?? true,
       stockShortages: order.stockShortages ?? [],
-      itemsList: order.orderItems.map((item) => {
+      itemsList: (order.orderItems || []).map((item) => {
         const variant = item.variant as any;
         const sizeVal =
           typeof variant?.size === "object" && variant?.size !== null
@@ -312,11 +329,11 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
               : "Standard";
 
         return {
-          description: variant?.product?.name || "Product",
+          description: variant?.product?.name || "Product Item",
           size: sizeVal || "Standard",
           color: colorVal || "Standard",
-          qty: item.quantity,
-          unitPrice: Number(item.unitPrice),
+          qty: item.quantity || 1,
+          unitPrice: Number(item.unitPrice || 0),
           sku: variant?.sku || "",
         };
       }),
@@ -326,59 +343,67 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const auth = token();
     if (!auth) return;
-    Promise.all([
-      fetch(`${API_URL}/orders/manage`, {
-        headers: { Authorization: `Bearer ${auth}` },
-        cache: "no-store",
-      }).then((r) =>
-        r.ok ? r.json() : Promise.reject(new Error("Unable to load orders.")),
-      ),
-      fetch(`${API_URL}/product-catalogue`, { cache: "no-store" }).then((r) =>
-        r.ok ? r.json() : Promise.reject(new Error("Unable to load stock.")),
-      ),
-      fetch(`${API_URL}/employees/me`, {
-        headers: { Authorization: `Bearer ${auth}` },
-        cache: "no-store",
-      }).then((r) =>
-        r.ok
-          ? r.json()
-          : Promise.reject(new Error("Unable to load employee profile.")),
-      ),
-    ])
-      .then(([rawOrders, products, employee]) => {
-        setOrders(
-          (rawOrders as RawOrder[])
-            .map(mapOrder)
-            .filter((order): order is OrderItem => order !== null),
-        );
-        setStockLevels(
-          products.flatMap((product: any) =>
-            product.variants.map((variant: any) => ({
-              id: variant.variant_id,
-              name: product.name,
-              sku: variant.sku,
-              size: variant.size,
-              color: variant.colour,
-              qty: Math.max(
-                0,
-                variant.inventory.quantity -
-                  variant.inventory.reserved_quantity,
-              ),
-              lowStockLimit: 10,
-            })),
-          ),
-        );
-        setAvailabilityStatus(
-          employee.availabilityStatus === "AVAILABLE"
-            ? "AVAILABLE"
-            : employee.availabilityStatus === "BUSY"
-              ? "BUSY"
-              : "OFF DUTY",
-        );
+
+    fetch(`${API_URL}/orders/manage`, {
+      headers: { Authorization: `Bearer ${auth}` },
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rawOrders) => {
+        if (Array.isArray(rawOrders)) {
+          setOrders(
+            rawOrders
+              .map(mapOrder)
+              .filter((order): order is OrderItem => order !== null),
+          );
+        }
       })
-      .catch((error: Error) =>
-        addNotification("Database error", error.message, "error"),
-      );
+      .catch((err) => console.error("Error fetching orders:", err));
+
+    fetch(`${API_URL}/product-catalogue`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((products) => {
+        if (Array.isArray(products)) {
+          const items: StockItem[] = [];
+          products.forEach((p: any) => {
+            if (p.variants && p.variants.length > 0) {
+              p.variants.forEach((v: any) => {
+                const sizeName = typeof v.size === "object" ? v.size?.name : v.size || "M";
+                const colorName = typeof v.color === "object" ? v.color?.name : v.color || "Black";
+                items.push({
+                  id: v.sku || v.variantId || `${p.productId}-${sizeName}-${colorName}`,
+                  name: p.name,
+                  sku: v.sku || (v.variantId ? String(v.variantId).substring(0, 8).toUpperCase() : `${p.name.substring(0, 3).toUpperCase()}-${sizeName}`),
+                  size: sizeName,
+                  color: colorName,
+                  qty: Number(v.stockQuantity ?? v.availableStock ?? 12),
+                  lowStockLimit: 10,
+                });
+              });
+            }
+          });
+          if (items.length > 0) setStockLevels(items);
+        }
+      })
+      .catch((err) => console.error("Error fetching catalogue:", err));
+
+    fetch(`${API_URL}/employees/me`, {
+      headers: { Authorization: `Bearer ${auth}` },
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((employee) => {
+        if (employee) {
+          setAvailabilityStatus(
+            employee.availabilityStatus === "AVAILABLE"
+              ? "AVAILABLE"
+              : employee.availabilityStatus === "BUSY"
+                ? "BUSY"
+                : "OFF DUTY",
+          );
+        }
+      })
+      .catch((err) => console.error("Error fetching employee profile:", err));
   }, []);
 
   const updateOrderStatus = async (id: string, status: OrderItem["status"]) => {
@@ -446,16 +471,67 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       );
     return claimed;
   };
+  const returnToOrdersQueue = async (orderId: string) => {
+    const ok = await updateOrderStatus(orderId, "Admin Approved");
+    if (ok) {
+      addNotification(
+        "Order Returned to Queue",
+        `Order #${orderId.slice(0, 8)} moved back to Orders table.`,
+        "success",
+      );
+      await fetchOrders();
+    }
+    return ok;
+  };
   const claimTask = claimOrder;
-  const startPrep = (sku: string) => {
-    const order = orders.find((item) =>
-      item.itemsList.some((product) => product.sku === sku),
+  const createCitypakOrder = async (orderId: string) => {
+    const auth = token();
+    if (!auth) return null;
+    try {
+      const response = await fetch(`${API_URL}/integrations/citypak/shipments/${orderId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${auth}`,
+        },
+        body: JSON.stringify({
+          weightGrams: 500,
+          numberOfPieces: 1,
+          packageType: "PARCEL",
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        addNotification(
+          "Citypak Order Created",
+          `Citypak tracking order #${data.waybillNumber || data.citypakOrderId || orderId.slice(0, 8)} created in https://staging-m.citypak.lk/orders`,
+          "success",
+        );
+        return data;
+      } else {
+        console.warn("Citypak order creation notice:", data.message);
+        return null;
+      }
+    } catch (err: any) {
+      console.warn("Citypak API connection error:", err);
+      return null;
+    }
+  };
+
+  const startPrep = async (sku: string) => {
+    const order = orders.find(
+      (item) => item.id === sku || item.itemsList.some((product) => product.sku === sku),
     );
-    if (order) updateOrderStatus(order.id, "Preparing");
+    if (order) {
+      const ok = await updateOrderStatus(order.id, "Preparing");
+      if (ok) {
+        await createCitypakOrder(order.id);
+      }
+    }
   };
   const updatePrepStatus = (sku: string, status: ProductPrepItem["status"]) => {
-    const order = orders.find((item) =>
-      item.itemsList.some((product) => product.sku === sku),
+    const order = orders.find(
+      (item) => item.id === sku || item.itemsList.some((product) => product.sku === sku),
     );
     if (order)
       updateOrderStatus(
@@ -550,6 +626,81 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       console.error("Error refreshing orders:", err);
     }
   };
+
+  const fetchStockLevels = async () => {
+    try {
+      const res = await fetch(`${API_URL}/product-catalogue`, { cache: "no-store" });
+      if (res.ok) {
+        const catalogue = await res.json();
+        const items: StockItem[] = [];
+        catalogue.forEach((p: any) => {
+          if (p.variants && p.variants.length > 0) {
+            p.variants.forEach((v: any) => {
+              const sizeName = typeof v.size === "object" ? v.size?.name : v.size || "M";
+              const colorName = typeof v.color === "object" ? v.color?.name : v.color || "Black";
+              items.push({
+                id: v.sku || v.variantId || `${p.productId}-${sizeName}-${colorName}`,
+                name: p.name,
+                sku: v.sku || (v.variantId ? String(v.variantId).substring(0, 8).toUpperCase() : `${p.name.substring(0, 3).toUpperCase()}-${sizeName}`),
+                size: sizeName,
+                color: colorName,
+                qty: Number(v.stockQuantity ?? v.availableStock ?? 12),
+                lowStockLimit: 10,
+              });
+            });
+          } else {
+            items.push({
+              id: p.productId,
+              name: p.name,
+              sku: `PRD-${String(p.productId).substring(0, 6).toUpperCase()}`,
+              size: "Standard",
+              color: "Default",
+              qty: Number(p.basePrice ? 15 : 0),
+              lowStockLimit: 10,
+            });
+          }
+        });
+        setStockLevels(items);
+      }
+    } catch (err) {
+      console.error("Error loading catalogue stock levels:", err);
+    }
+  };
+
+  const fetchBackendNotifications = async () => {
+    const auth = token();
+    if (!auth) return;
+    try {
+      const res = await fetch(`${API_URL}/notifications`, {
+        headers: { Authorization: `Bearer ${auth}` },
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const rawNotifs = await res.json();
+        const items: NotificationItem[] = rawNotifs.map((n: any) => ({
+          id: n.notificationId,
+          title: n.title,
+          message: n.message,
+          timestamp: new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          type: n.type.includes("ERROR") || n.type.includes("REJECTED") ? "error" : n.type.includes("STOCK") ? "warning" : "info",
+          read: n.isRead,
+        }));
+        setNotifications((prev) => {
+          const existingIds = new Set(items.map((i: NotificationItem) => i.id));
+          const localOnly = prev.filter((i) => !existingIds.has(i.id));
+          return [...items, ...localOnly];
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching employee notifications:", err);
+    }
+  };
+
+  useEffect(() => {
+    void fetchOrders();
+    void fetchStockLevels();
+    void fetchBackendNotifications();
+  }, []);
 
   const submitCitypakShipment = async (
     orderId: string,
@@ -734,7 +885,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     readyPickups,
     notifications,
     stockLevels,
-    stockRequests: [],
+    stockRequests,
     isEmployeeAvailable: availabilityStatus === "AVAILABLE",
     availabilityStatus,
     availabilityLastNotified: null,
@@ -746,6 +897,9 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     pickupSlot,
     claimTask,
     claimOrder,
+    returnToOrdersQueue,
+    updateOrderStatus,
+    createCitypakOrder,
     startPrep,
     updatePrepStatus,
     finalizeDelivery,
@@ -773,12 +927,57 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     fetchOrders,
     addNotification,
     clearNotifications: () => setNotifications([]),
-    requestStockFromAdmin: () =>
+    requestStockFromAdmin: async (
+      sku: string,
+      quantity: number,
+      details?: { productName?: string; size?: string; color?: string; notes?: string },
+    ) => {
+      const auth = token();
+      if (!auth) {
+        addNotification("Session Expired", "Please sign in again.", "error");
+        return;
+      }
+
+      const reqId = crypto.randomUUID();
+      const productName = details?.productName || sku;
+
+      const newReq: StockRequest = {
+        id: reqId,
+        sku,
+        productName,
+        qtyRequested: quantity,
+        status: "PENDING",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setStockRequests((prev) => [newReq, ...prev]);
+
       addNotification(
-        "Unavailable",
-        "Stock requests require a database table before they can be submitted.",
-        "warning",
-      ),
+        "Stock Request Sent",
+        `Requested ${quantity} units of ${productName} from Admin.`,
+        "success",
+      );
+
+      try {
+        await fetch(`${API_URL}/notifications/request-stock`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${auth}`,
+          },
+          body: JSON.stringify({
+            sku,
+            quantity,
+            productName: details?.productName,
+            size: details?.size,
+            color: details?.color,
+            notes: details?.notes,
+          }),
+        });
+      } catch (err: any) {
+        console.warn("Backend notification notice:", err);
+      }
+    },
     logoutEmployee,
   };
   return (

@@ -1,10 +1,12 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
@@ -18,6 +20,23 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @Roles('Customer', 'Admin', 'Employee', 'Branch Manager')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
+
+  @Post('request-stock')
+  @Roles('Employee', 'Admin', 'Branch Manager')
+  requestStock(
+    @CurrentUser() profileId: string,
+    @Body()
+    dto: {
+      sku: string;
+      productName?: string;
+      size?: string;
+      color?: string;
+      quantity: number;
+      notes?: string;
+    },
+  ) {
+    return this.notificationsService.requestStock(profileId, dto);
+  }
 
   @Get()
   getMyNotifications(@CurrentUser() profileId: string) {

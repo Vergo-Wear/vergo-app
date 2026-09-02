@@ -24,15 +24,40 @@ export default function OrdersManagement() {
 
   // Filter orders
   const filteredOrders = orders.filter(order => {
-    // If archive tab is selected, show claimed/sent orders. If active tab, show Ready to Pick
+    // If archive tab is selected, show completed/sent/returned orders. If active tab, show active orders
     if (activeTab === "active") {
-      if (order.status === "Sent") return false;
+      if (["Completed", "Finished", "Returned"].includes(order.status)) return false;
     } else {
-      // archive contains claimed and sent
-      if (order.status === "Ready to Pick") return false;
+      // Archive contains completed, finished, returned orders
+      if (!["Completed", "Finished", "Returned", "Sent", "Handed to Courier", "Handed to Citypak Courier"].includes(order.status)) return false;
     }
 
-    if (statusFilter !== "all" && order.status !== statusFilter) return false;
+    if (statusFilter !== "all") {
+      const sf = statusFilter.toLowerCase();
+      const st = (order.status || "").toLowerCase();
+      const dbSt = (order.dbStatus || "").toLowerCase();
+
+      if (sf.includes("ready to pick")) {
+        if (!st.includes("ready to pick") && !st.includes("process") && !dbSt.includes("process")) return false;
+      } else if (sf.includes("approved")) {
+        if (!st.includes("approved") && !dbSt.includes("approved")) return false;
+      } else if (sf.includes("claimed")) {
+        if (!st.includes("claimed") && !dbSt.includes("claimed")) return false;
+      } else if (sf.includes("preparing")) {
+        if (!st.includes("preparing") && !dbSt.includes("preparing")) return false;
+      } else if (sf.includes("ready for") || sf.includes("pickup")) {
+        if (!st.includes("pickup") && !st.includes("ready") && !dbSt.includes("pickup")) return false;
+      } else if (sf.includes("handed") || sf.includes("courier")) {
+        if (!st.includes("handed") && !st.includes("sent") && !dbSt.includes("handed")) return false;
+      } else if (sf.includes("returned")) {
+        if (!st.includes("returned") && !dbSt.includes("returned")) return false;
+      } else if (sf.includes("completed") || sf.includes("finished")) {
+        if (!st.includes("completed") && !st.includes("finished") && !dbSt.includes("completed")) return false;
+      } else {
+        if (order.status !== statusFilter && order.dbStatus !== statusFilter) return false;
+      }
+    }
+
     if (paymentFilter !== "all" && order.paymentMethod !== paymentFilter) return false;
 
     if (searchQuery.trim()) {
@@ -47,6 +72,10 @@ export default function OrdersManagement() {
 
     return true;
   });
+
+  const hasActivePrepOrder = orders.some((o) =>
+    ["Claimed", "Preparing"].includes(o.status)
+  );
 
   return (
     <div>
@@ -79,6 +108,42 @@ export default function OrdersManagement() {
         </div>
       </div>
 
+      {hasActivePrepOrder && (
+        <div
+          style={{
+            marginBottom: "16px",
+            padding: "12px 16px",
+            borderRadius: "8px",
+            border: "1px solid rgba(255, 120, 0, 0.3)",
+            background: "rgba(255, 120, 0, 0.08)",
+            color: "#ff7800",
+            fontSize: "12px",
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            style={{ width: 18, height: 18, flexShrink: 0 }}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+          <span>
+            Notice: You have an active order in Product Preparation. Complete and move your current order to Delivery Prep before claiming a new order.
+          </span>
+        </div>
+      )}
+
       {/* Table Section */}
       <div className="emp-card">
         {/* Table Filters header */}
@@ -96,9 +161,13 @@ export default function OrdersManagement() {
               >
                 <option value="all">All Statuses</option>
                 <option value="Ready to Pick">Ready to Pick</option>
+                <option value="Admin Approved">Admin Approved</option>
                 <option value="Claimed">Claimed</option>
-                <option value="Preparing">Preparing</option>
-                <option value="Ready for Pickup">Ready for Pickup</option>
+                <option value="Package Preparing">Package Preparing</option>
+                <option value="Ready for Courier Pickup">Ready for Courier Pickup</option>
+                <option value="Handed to Courier">Handed to Courier</option>
+                <option value="Returned">Returned</option>
+                <option value="Completed">Completed</option>
               </select>
             </div>
 
@@ -118,13 +187,6 @@ export default function OrdersManagement() {
               </select>
             </div>
           </div>
-
-          <button className="emp-filter-btn-advanced">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 16, height: 16 }}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-            </svg>
-            <span>Advanced Filters</span>
-          </button>
         </div>
 
         {/* Orders Table */}
@@ -229,12 +291,21 @@ export default function OrdersManagement() {
                     </td>
                     <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Rs. {order.valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td style={{ textAlign: "right" }}>
-                      {order.status === "Ready to Pick" && order.stockAvailable ? (
+                      {order.status === "Ready to Pick" && order.stockAvailable && !hasActivePrepOrder ? (
                         <button
                           className="emp-btn-claim"
                           onClick={() => void handleClaimOrder(order.id)}
                         >
                           Claim Order
+                        </button>
+                      ) : order.status === "Ready to Pick" && hasActivePrepOrder ? (
+                        <button
+                          className="emp-btn-claim disabled"
+                          disabled
+                          title="Finish current Product Preparation order first"
+                          style={{ backgroundColor: "rgba(255, 120, 0, 0.15)", color: "#ff7800", borderColor: "rgba(255, 120, 0, 0.3)" }}
+                        >
+                          Finish Active Prep First
                         </button>
                       ) : order.status === "Ready to Pick" ? (
                         <button className="emp-btn-claim disabled" disabled title={order.stockShortages.join("\n")}>

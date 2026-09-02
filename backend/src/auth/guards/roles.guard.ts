@@ -33,9 +33,18 @@ export class RolesGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const userRole = request.user?.role?.toLowerCase();
+    const userEmail = request.user?.email?.toLowerCase() || null;
+
     const allowed = requiredRoles.some(
       (role) => role.toLowerCase() === userRole,
     );
+
+    // Strict Admin check: If user holds the Admin role, enforce official admin email vergo.wearofficial@gmail.com
+    if (userRole === 'admin' && userEmail !== 'vergo.wearofficial@gmail.com') {
+      throw new ForbiddenException(
+        'Access denied. Only the official administrator email (vergo.wearofficial@gmail.com) is authorized to access Admin features.',
+      );
+    }
 
     if (!allowed) {
       throw new ForbiddenException(

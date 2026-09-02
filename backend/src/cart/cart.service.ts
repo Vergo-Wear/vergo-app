@@ -10,13 +10,12 @@ import { SaveCartDto } from './dto/save-cart.dto';
 export class CartService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async getCustomerId(profileId: string): Promise<string> {
+  private async getCustomerId(profileId: string): Promise<string | null> {
     const customer = await this.prisma.customer.findFirst({
       where: { profileId },
       select: { customerId: true },
     });
-    if (!customer) throw new NotFoundException('Customer profile not found.');
-    return customer.customerId;
+    return customer?.customerId || null;
   }
 
   private readonly itemInclude = {
@@ -103,13 +102,32 @@ export class CartService {
 
   async get(profileId: string) {
     const customerId = await this.getCustomerId(profileId);
+    if (!customerId) return { items: [] };
     const cart = await this.prisma.cart.findFirst({ where: { customerId } });
     if (!cart) return { items: [] };
     return { items: this.mapItems(await this.loadItems(cart.cartId)) };
   }
 
   async save(profileId: string, dto: SaveCartDto) {
-    const customerId = await this.getCustomerId(profileId);
+    let customerId = await this.getCustomerId(profileId);
+    if (!customerId) {
+      const profile = await this.prisma.profiles.findUnique({
+        where: { id: profileId },
+        select: { username: true },
+      });
+
+      const newCustomer = await this.prisma.customer.create({
+        data: {
+          profileId,
+          firstName: 'Vergo',
+          lastName: 'User',
+          email: profile?.username?.includes('@')
+            ? profile.username
+            : `${profileId}@vergowear.com`,
+        },
+      });
+      customerId = newCustomer.customerId;
+    }
     const variants = await Promise.all(
       dto.items.map(async (item) => {
         const product = item.product as {
@@ -203,6 +221,7 @@ export class CartService {
 
   async clear(profileId: string) {
     const customerId = await this.getCustomerId(profileId);
+    if (!customerId) return { items: [] };
     const cart = await this.prisma.cart.findFirst({ where: { customerId } });
     if (cart)
       await this.prisma.cartItem.deleteMany({ where: { cartId: cart.cartId } });

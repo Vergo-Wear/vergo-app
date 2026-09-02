@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AdminProvider, useAdmin } from "./AdminContext";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { createSupabaseClient } from "@/lib/supabase";
 import "@/styles/admin.css";
 
 // Separate the layout contents to use the AdminContext hooks safely
@@ -88,17 +89,36 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   } | null>(null);
   const [accessChecked, setAccessChecked] = useState(false);
 
-  // Route protection: only authenticated Admin users may view the dashboard
+  // Strict Route protection: ONLY vergo.wearofficial@gmail.com with Admin role may view the admin dashboard
   useEffect(() => {
-    const token = sessionStorage.getItem("vergo_access_token");
-    const stored = sessionStorage.getItem("vergo_user");
+    const token =
+      sessionStorage.getItem("vergo_access_token") ||
+      localStorage.getItem("vergo_access_token");
+    const stored =
+      sessionStorage.getItem("vergo_user") ||
+      localStorage.getItem("vergo_user");
     let role: string | null = null;
+    let email: string | null = null;
     try {
-      role = stored ? (JSON.parse(stored).role as string) : null;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        role = parsed.role;
+        email = parsed.email || parsed.username || null;
+      }
     } catch {
       role = null;
+      email = null;
     }
-    if (!token || role !== "Admin") {
+
+    const isOfficialAdmin =
+      Boolean(token) &&
+      (role === "Admin" || role === "admin") &&
+      (!email || email.toLowerCase() === "vergo.wearofficial@gmail.com");
+
+    if (!isOfficialAdmin) {
+      sessionStorage.removeItem("vergo_is_logged_in");
+      sessionStorage.removeItem("vergo_access_token");
+      sessionStorage.removeItem("vergo_user");
       window.location.replace("/auth/login");
       return;
     }
@@ -120,10 +140,17 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("vergo_access_token");
-    sessionStorage.removeItem("vergo_user");
-    sessionStorage.removeItem("vergo_refresh_token");
+  const handleLogout = async () => {
+    try {
+      const client = createSupabaseClient();
+      if (client) {
+        await client.auth.signOut().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+    sessionStorage.clear();
+    window.dispatchEvent(new Event("vergo-auth-change"));
     window.location.href = "/auth/login";
   };
 

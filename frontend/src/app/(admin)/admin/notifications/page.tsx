@@ -151,7 +151,7 @@ export default function AdminNotificationsPage() {
 
       if (isStockType) {
         category = "inventory";
-        link = "/admin/employees";
+        link = "/admin/inventory";
       } else if (isLogisticsType) {
         category = "logistics";
         link = "/admin/delivery";

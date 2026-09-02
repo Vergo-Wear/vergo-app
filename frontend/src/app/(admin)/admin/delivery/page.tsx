@@ -55,6 +55,27 @@ export default function AdminDeliveryPage() {
     type: "success" | "error";
   } | null>(null);
 
+  const [shipperProfile, setShipperProfile] = useState<{
+    shipperName: string;
+    addressLine1: string;
+    addressLine2: string;
+    addressLine3: string;
+    addressLine4City: string;
+    contactNumber1: string;
+    contactNumber2: string;
+  }>({
+    shipperName: "Vergo",
+    addressLine1: "No 20, Delkanda",
+    addressLine2: "",
+    addressLine3: "",
+    addressLine4City: "Delkanda",
+    contactNumber1: "0714685499",
+    contactNumber2: "",
+  });
+
+  const [shipperModalOpen, setShipperModalOpen] = useState(false);
+  const [shipperSaving, setShipperSaving] = useState(false);
+
   const loadRules = useCallback(async () => {
     setLoading(true);
     const response = await authenticatedFetch("/admin/delivery-fees");
@@ -75,9 +96,52 @@ export default function AdminDeliveryPage() {
     setLoading(false);
   }, []);
 
+  const loadShipperProfile = useCallback(async () => {
+    const response = await authenticatedFetch("/integrations/citypak/shipper-profile");
+    if (response && response.ok) {
+      const data = await response.json();
+      if (data) {
+        setShipperProfile({
+          shipperName: data.shipperName || "Vergo",
+          addressLine1: data.addressLine1 || "No 20, Delkanda",
+          addressLine2: data.addressLine2 || "",
+          addressLine3: data.addressLine3 || "",
+          addressLine4City: data.addressLine4City || "Delkanda",
+          contactNumber1: data.contactNumber1 || "0714685499",
+          contactNumber2: data.contactNumber2 || "",
+        });
+      }
+    }
+  }, []);
+
+  const handleSaveShipperProfile = async (e: FormEvent) => {
+    e.preventDefault();
+    setShipperSaving(true);
+    const response = await authenticatedFetch("/integrations/citypak/shipper-profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(shipperProfile),
+    });
+
+    if (response && response.ok) {
+      setFeedback({
+        message: "Shipper / Return Address updated successfully!",
+        type: "success",
+      });
+      setShipperModalOpen(false);
+    } else {
+      setFeedback({
+        message: "Failed to update Shipper Return Address.",
+        type: "error",
+      });
+    }
+    setShipperSaving(false);
+  };
+
   useEffect(() => {
     void loadRules();
-  }, [loadRules]);
+    void loadShipperProfile();
+  }, [loadRules, loadShipperProfile]);
 
   const filteredRules = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -343,6 +407,62 @@ export default function AdminDeliveryPage() {
           {feedback.message}
         </div>
       )}
+
+      {/* Fixed Shipper / Return Address Configuration Card */}
+      <div
+        style={{
+          backgroundColor: "#0d0d0e",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          borderRadius: "8px",
+          padding: "20px",
+          marginBottom: "24px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <div>
+            <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#00FF9D", margin: 0 }}>
+              Fixed Shipper & Return Address
+            </h2>
+            <p style={{ fontSize: "12px", color: "rgba(255, 255, 255, 0.6)", marginTop: "4px", margin: 0 }}>
+              Default return details auto-populated on Citypak courier dispatch forms. Admin can modify this fixed return address at any time.
+            </p>
+          </div>
+          <button
+            onClick={() => setShipperModalOpen(true)}
+            style={{
+              backgroundColor: "#00FF9D",
+              color: "#000000",
+              border: "none",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              fontWeight: "bold",
+              fontSize: "12px",
+              cursor: "pointer",
+            }}
+          >
+            Edit Return Address
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+          <div style={{ backgroundColor: "#141416", padding: "12px 16px", borderRadius: "6px" }}>
+            <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", display: "block" }}>Shipper Name</span>
+            <span style={{ fontSize: "15px", fontWeight: "bold" }}>{shipperProfile.shipperName}</span>
+          </div>
+          <div style={{ backgroundColor: "#141416", padding: "12px 16px", borderRadius: "6px" }}>
+            <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", display: "block" }}>Address Line 1</span>
+            <span style={{ fontSize: "14px", fontWeight: "600" }}>{shipperProfile.addressLine1}</span>
+          </div>
+          <div style={{ backgroundColor: "#141416", padding: "12px 16px", borderRadius: "6px" }}>
+            <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", display: "block" }}>City</span>
+            <span style={{ fontSize: "14px", fontWeight: "600" }}>{shipperProfile.addressLine4City}</span>
+          </div>
+          <div style={{ backgroundColor: "#141416", padding: "12px 16px", borderRadius: "6px" }}>
+            <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.5)", display: "block" }}>Contact No 1</span>
+            <span style={{ fontSize: "14px", fontWeight: "600", color: "#00FF9D" }}>{shipperProfile.contactNumber1}</span>
+          </div>
+        </div>
+      </div>
 
       <div
         style={{
@@ -1113,6 +1233,101 @@ export default function AdminDeliveryPage() {
                   }}
                 >
                   {saving ? "Applying..." : "Apply Bulk Update"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Shipper Profile Edit Modal */}
+      {shipperModalOpen && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "16px" }}>
+          <div style={{ backgroundColor: "#141416", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", width: "100%", maxWidth: "500px", padding: "24px" }}>
+            <h3 style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "16px", color: "#00FF9D" }}>
+              Edit Shipper Return Address
+            </h3>
+
+            <form onSubmit={handleSaveShipperProfile} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div>
+                <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Shipper Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={shipperProfile.shipperName}
+                  onChange={(e) => setShipperProfile({ ...shipperProfile, shipperName: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", backgroundColor: "#000", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", color: "#fff" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Address Line 1 *</label>
+                <input
+                  type="text"
+                  required
+                  value={shipperProfile.addressLine1}
+                  onChange={(e) => setShipperProfile({ ...shipperProfile, addressLine1: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", backgroundColor: "#000", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", color: "#fff" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Address Line 2</label>
+                  <input
+                    type="text"
+                    value={shipperProfile.addressLine2}
+                    onChange={(e) => setShipperProfile({ ...shipperProfile, addressLine2: e.target.value })}
+                    style={{ width: "100%", padding: "8px 12px", backgroundColor: "#000", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", color: "#fff" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Address Line 3</label>
+                  <input
+                    type="text"
+                    value={shipperProfile.addressLine3}
+                    onChange={(e) => setShipperProfile({ ...shipperProfile, addressLine3: e.target.value })}
+                    style={{ width: "100%", padding: "8px 12px", backgroundColor: "#000", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", color: "#fff" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Address City *</label>
+                <input
+                  type="text"
+                  required
+                  value={shipperProfile.addressLine4City}
+                  onChange={(e) => setShipperProfile({ ...shipperProfile, addressLine4City: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", backgroundColor: "#000", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", color: "#fff" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", display: "block", marginBottom: "4px" }}>Contact No 1 *</label>
+                <input
+                  type="text"
+                  required
+                  value={shipperProfile.contactNumber1}
+                  onChange={(e) => setShipperProfile({ ...shipperProfile, contactNumber1: e.target.value })}
+                  style={{ width: "100%", padding: "8px 12px", backgroundColor: "#000", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", color: "#fff" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "16px" }}>
+                <button
+                  type="button"
+                  onClick={() => setShipperModalOpen(false)}
+                  style={{ padding: "8px 16px", backgroundColor: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", borderRadius: "6px", cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={shipperSaving}
+                  style={{ padding: "8px 16px", backgroundColor: "#00FF9D", color: "#000", border: "none", fontWeight: "bold", borderRadius: "6px", cursor: "pointer" }}
+                >
+                  {shipperSaving ? "Saving..." : "Save Return Address"}
                 </button>
               </div>
             </form>
