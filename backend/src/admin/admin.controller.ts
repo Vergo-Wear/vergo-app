@@ -57,6 +57,16 @@ export class AdminController {
     return this.adminService.overview();
   }
 
+  @Get('earnings')
+  getEarningsOverview() {
+    return this.adminService.getEarningsOverview();
+  }
+
+  @Get('customer-distribution')
+  getCustomerDistribution() {
+    return this.adminService.getCustomerDistribution();
+  }
+
   @Get('inventory/catalog')
   inventoryCatalog() {
     return this.adminService.inventoryCatalog();
