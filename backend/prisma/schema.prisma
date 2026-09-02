@@ -587,9 +587,16 @@ model PurchaseOrderItem {
 }
 
 model DeliveryFeeRule {
-  ruleId    String  @id @default(dbgenerated("gen_random_uuid()")) @map("rule_id") @db.Uuid
-  district  String  @unique
-  feeAmount Decimal @map("fee_amount") @db.Decimal
+  ruleId                  String   @id @default(dbgenerated("gen_random_uuid()")) @map("rule_id") @db.Uuid
+  district                String   @unique
+  baseDeliveryFee         Decimal  @default(400) @map("base_delivery_fee") @db.Decimal
+  baseItemLimit           Int      @default(5) @map("base_item_limit")
+  additionalItemBlockSize Int      @default(5) @map("additional_item_block_size")
+  additionalBlockFee      Decimal  @default(140) @map("additional_block_fee") @db.Decimal
+  fuelSurchargePercentage Decimal  @default(15) @map("fuel_surcharge_percentage") @db.Decimal
+  isActive                Boolean  @default(true) @map("is_active")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("delivery_fee_rules")
   @@schema("public")

@@ -1229,10 +1229,6 @@ export default function OrderDetailsPage({
                   <span className="val">{formatLkr(order.deliveryFee)}</span>
                 </div>
 
-                <div className="invoice-calc-row">
-                  <span>Taxes (VAT 0%)</span>
-                  <span className="val">{formatLkr(0)}</span>
-                </div>
 
                 <div className="invoice-calc-row total-row">
                   <span>Total Amount</span>

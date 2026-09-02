@@ -295,8 +295,8 @@ export default function DashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-[rgba(255,255,255,0.02)]">
                   {paginatedInventory.length > 0 ? (
-                    paginatedInventory.map((item) => (
-                      <tr key={`${item.sku}-${item.location}`} className="hover:bg-white/[0.01] transition-all">
+                    paginatedInventory.map((item, idx) => (
+                      <tr key={`${item.sku}-${item.location}-${idx}`} className="hover:bg-white/[0.01] transition-all">
                         <td className="py-4 pr-3">
                           <div className="font-bold text-white font-mono-meta">{item.sku}</div>
                           <div className="text-[10px] text-[#8e8e93] font-medium mt-0.5">{item.name}</div>

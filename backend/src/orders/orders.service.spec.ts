@@ -167,15 +167,21 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     ...overrides,
   });
 
-  let service: OrdersService;
-
   beforeEach(() => {
     jest.clearAllMocks();
+    const deliveryFeesService = {
+      calculateDeliveryFee: jest.fn().mockResolvedValue({
+        totalDeliveryFee: 460,
+        baseDeliveryCharge: 400,
+        fuelSurchargeAmount: 60,
+      }),
+    };
     service = new OrdersService(
       prisma,
       { get: jest.fn() } as never,
       notifications as never,
       stockReservations as never,
+      deliveryFeesService as never,
     );
     customer.findUnique.mockResolvedValue({ customerId });
     productVariant.findUnique.mockResolvedValue({

@@ -241,10 +241,6 @@ export default function CartPage() {
                   </span>
                 </div>
 
-                <div className="summary-row">
-                  <span className="summary-label">TAXES</span>
-                  <span className="summary-value">LKR 0.00</span>
-                </div>
 
                 <hr className="summary-divider" />
 

@@ -17,6 +17,7 @@ import { StockReservationService } from '../stock-reservation/stock-reservation.
 import { CreateOrderDto, SRI_LANKAN_DISTRICTS } from './dto/create-order.dto';
 import { ReviewPaymentProofDto } from './dto/review-payment-proof.dto';
 import { READY_STATUS } from './dto/update-order-status.dto';
+import { DeliveryFeesService } from '../delivery-fees/delivery-fees.service';
 
 const BANK_TRANSFER_HOLD_MINUTES = 15;
 const PROOF_EXPIRY_SWEEP_INTERVAL_MS = 60 * 1000;
@@ -88,6 +89,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly notifications: NotificationsService,
     private readonly stockReservations: StockReservationService,
+    private readonly deliveryFeesService: DeliveryFeesService,
   ) {
     void this.configService;
   }
@@ -432,7 +434,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         isPrimary: dto.setAsPrimary ?? false,
       });
     }
-    const deliveryFee = Number(dto.deliveryFee);
+    const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+    const deliveryCalc = await this.deliveryFeesService.calculateDeliveryFee(
+      shipping.district,
+      totalQuantity,
+    );
+    const deliveryFee = deliveryCalc.totalDeliveryFee;
     return {
       items,
       shipping,

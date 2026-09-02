@@ -892,11 +892,7 @@ export default function PaymentPage() {
               </span>
             </div>
 
-            {/* Taxes */}
-            <div className="summary-calc-row">
-              <span className="summary-calc-label">Taxes</span>
-              <span className="summary-calc-value">{formatLkr(0)}</span>
-            </div>
+
 
             <hr className="summary-card-divider" />
 
@@ -2055,7 +2051,7 @@ function BankTransferFlow({
                   lineHeight: "1.4",
                 }}
               >
-                Total amount includes standard delivery fee and tax.
+                Total amount includes standard delivery fee.
               </div>
             </div>
           </div>

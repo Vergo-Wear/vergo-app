@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
@@ -96,11 +96,6 @@ export default function ShippingPage() {
     setShippingComplete(hasCompletedShipping());
   }, [router]);
 
-  // Delivery calculation state
-  const [baseShipping, setBaseShipping] = useState<number | null>(null);
-  const [regionalSurcharge, setRegionalSurcharge] = useState<number | null>(null);
-  const [totalDeliveryFee, setTotalDeliveryFee] = useState<number | null>(null);
-
   // Fill the form from a saved address and lock the fields to it
   const applySavedAddress = (address: SavedAddress) => {
     setSelectedAddressId(address.addressId);
@@ -128,7 +123,6 @@ export default function ShippingPage() {
             const parsedUser = JSON.parse(storedUser);
             setUserProfile(parsedUser);
 
-            // By default, pre-fill receiver name with logged-in user name
             if (parsedUser.name) {
               setReceiverName(parsedUser.name);
             }
@@ -140,8 +134,6 @@ export default function ShippingPage() {
           }
         }
 
-        // Refresh account contact details from the database. Some login paths
-        // do not include the customer's phone number in vergo_user.
         const token = sessionStorage.getItem("vergo_access_token");
         if (token) {
           void authenticatedFetch("/customers/me", { cache: "no-store" })
@@ -162,7 +154,6 @@ export default function ShippingPage() {
             .catch(() => undefined);
         }
 
-        // Load the customer's saved address book and auto-select the primary
         const loadSavedAddresses = async () => {
           if (!token) return;
           try {
@@ -180,7 +171,6 @@ export default function ShippingPage() {
         };
         void loadSavedAddresses();
       } else {
-        // For guest, we can pre-fill name/phone from the checkout step 1 details if they exist
         const contactStr = localStorage.getItem("vergo_checkout_contact");
         if (contactStr) {
           try {
@@ -199,34 +189,67 @@ export default function ShippingPage() {
     }
   }, []);
 
-  // Recalculate delivery fee when district changes
+  // Delivery calculation state
+  const [baseShipping, setBaseShipping] = useState<number | null>(null);
+  const [regionalSurcharge, setRegionalSurcharge] = useState<number | null>(null);
+  const [totalDeliveryFee, setTotalDeliveryFee] = useState<number | null>(null);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+
+  const totalQuantity = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity, 0);
+  }, [cart]);
+
+  // Recalculate delivery fee when district or cart total quantity changes
   useEffect(() => {
     if (!district) {
       setBaseShipping(null);
       setRegionalSurcharge(null);
       setTotalDeliveryFee(null);
+      setDeliveryError(null);
       return;
     }
 
-    // Base shipping is 350 LKR
-    const base = 350;
-    let surcharge = 250; // default for other districts
+    const calcQuantity = totalQuantity > 0 ? totalQuantity : 1;
+    let isMounted = true;
+    setDeliveryLoading(true);
+    setDeliveryError(null);
 
-    const lowerDistrict = district.toLowerCase();
-    if (lowerDistrict === "colombo" || lowerDistrict === "tech district") {
-      surcharge = 0;
-    } else if (lowerDistrict === "gampaha" || lowerDistrict === "kalutara") {
-      surcharge = 100;
-    } else if (
-      ["kandy", "galle", "matara", "kegalle", "ratnapura", "kurunegala"].includes(lowerDistrict)
-    ) {
-      surcharge = 150;
-    }
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+    fetch(`${apiUrl}/delivery-fees/calculate?district=${encodeURIComponent(district)}&totalQuantity=${calcQuantity}`)
+      .then(async (res) => {
+        if (!isMounted) return;
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          const msg = body?.message || "Delivery is currently unavailable for the selected district.";
+          setDeliveryError(Array.isArray(msg) ? msg.join(" ") : msg);
+          setBaseShipping(null);
+          setRegionalSurcharge(null);
+          setTotalDeliveryFee(null);
+          setDeliveryLoading(false);
+          return;
+        }
+        const data = await res.json();
+        if (!isMounted) return;
+        setBaseShipping(data.baseDeliveryCharge);
+        setRegionalSurcharge(data.fuelSurchargeAmount);
+        setTotalDeliveryFee(data.totalDeliveryFee);
+        setDeliveryError(null);
+        setDeliveryLoading(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setDeliveryError("Unable to calculate delivery fee for the selected district.");
+        setBaseShipping(null);
+        setRegionalSurcharge(null);
+        setTotalDeliveryFee(null);
+        setDeliveryLoading(false);
+      });
 
-    setBaseShipping(base);
-    setRegionalSurcharge(surcharge);
-    setTotalDeliveryFee(base + surcharge);
-  }, [district]);
+    return () => {
+      isMounted = false;
+    };
+  }, [district, totalQuantity]);
 
   // Switch back to entering a completely new address
   const handleUseNewAddress = () => {
@@ -602,6 +625,7 @@ export default function ShippingPage() {
                   ))}
                 </select>
                 {errors.district && <span className="error-message">{errors.district}</span>}
+                {!errors.district && deliveryError && <span className="error-message">{deliveryError}</span>}
               </div>
             </div>
 
@@ -709,20 +733,18 @@ export default function ShippingPage() {
             {/* Delivery Calculation */}
             <div className="summary-calc-row">
               <span className="summary-calc-label">Delivery</span>
-              {totalDeliveryFee !== null ? (
+              {deliveryLoading ? (
+                <span className="summary-calc-value italic-muted">Calculating...</span>
+              ) : totalDeliveryFee !== null ? (
                 <span className="summary-calc-value">
                   <span className="delivery-badge">CITYPAK</span>
                   <span style={{ marginLeft: "8px" }}>{formatLkr(totalDeliveryFee)}</span>
                 </span>
               ) : (
-                <span className="summary-calc-value italic-muted">Select district</span>
+                <span className="summary-calc-value italic-muted" style={{ color: deliveryError ? "#FF4D4D" : undefined }}>
+                  {deliveryError || "Select district"}
+                </span>
               )}
-            </div>
-
-            {/* Taxes */}
-            <div className="summary-calc-row">
-              <span className="summary-calc-label">Taxes</span>
-              <span className="summary-calc-value">{formatLkr(0)}</span>
             </div>
 
             <hr className="summary-card-divider" />
@@ -740,7 +762,7 @@ export default function ShippingPage() {
               </button>
               <button
                 type="button"
-                disabled={isSubmitting || !district}
+                disabled={isSubmitting || !district || deliveryLoading || Boolean(deliveryError) || totalDeliveryFee === null}
                 className="submit-btn shipping-payment-submit"
                 onClick={handleSubmit}
               >

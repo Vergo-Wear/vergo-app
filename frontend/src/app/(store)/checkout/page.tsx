@@ -450,10 +450,6 @@ export default function CheckoutPage() {
             <span className="summary-calc-value italic-muted">Calculated next</span>
           </div>
 
-          <div className="summary-calc-row">
-            <span className="summary-calc-label">Taxes</span>
-            <span className="summary-calc-value">LKR 0.00</span>
-          </div>
 
           <hr className="summary-card-divider" />
 
