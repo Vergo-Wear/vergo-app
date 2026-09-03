@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { authenticatedFetch } from "../../../../lib/authenticated-fetch";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -116,7 +116,7 @@ export default function SriLankaCustomerMap() {
       scrollWheelZoom: false,
     });
 
-    const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    const cartoKey = typeof process !== "undefined" ? process.env?.NEXT_PUBLIC_CARTO_API_KEY : undefined;
     const tileUrl = cartoKey
       ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`
       : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
