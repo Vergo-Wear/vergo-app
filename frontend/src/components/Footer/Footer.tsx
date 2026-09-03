@@ -36,6 +36,7 @@ export default function Footer() {
     message: "",
   });
   const [contactError, setContactError] = useState<string | null>(null);
+  const [contactSuccess, setContactSuccess] = useState<string | null>(null);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -47,25 +48,41 @@ export default function Footer() {
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setContactError(null);
+    setContactSuccess(null);
 
-    const targetUrl = new URL(
-      "https://docs.google.com/forms/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/viewform"
-    );
-    targetUrl.searchParams.set("usp", "pp_url");
-    targetUrl.searchParams.set("entry.50538087", formData.fullName.trim());
-    targetUrl.searchParams.set("entry.1769001761", formData.email.trim());
-    targetUrl.searchParams.set("entry.735047467", formData.subject.trim());
-    targetUrl.searchParams.set("entry.865540735", formData.message.trim());
+    try {
+      const targetUrl = new URL(
+        "https://docs.google.com/forms/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/viewform"
+      );
+      targetUrl.searchParams.set("usp", "pp_url");
+      targetUrl.searchParams.set("entry.50538087", formData.fullName.trim());
+      targetUrl.searchParams.set("entry.1769001761", formData.email.trim());
+      targetUrl.searchParams.set("entry.735047467", formData.subject.trim());
+      targetUrl.searchParams.set("entry.865540735", formData.message.trim());
 
-    window.open(targetUrl.toString(), "_blank", "noopener,noreferrer");
+      const win = window.open(targetUrl.toString(), "_blank", "noopener,noreferrer");
 
-    setFormData({
-      fullName: "",
-      email: "",
-      subject: "General Inquiry",
-      message: "",
-    });
-    setActiveModal(null);
+      if (win) {
+        setContactSuccess("Your message form has been successfully prepared and opened!");
+        alert("Your message form has been successfully prepared and opened!");
+        setFormData({
+          fullName: "",
+          email: "",
+          subject: "General Inquiry",
+          message: "",
+        });
+        setTimeout(() => {
+          setActiveModal(null);
+          setContactSuccess(null);
+        }, 2000);
+      } else {
+        setContactError("Unable to open the message form window. Please check popup blockers.");
+        alert("Unable to open the message form window. Please allow popups and try again.");
+      }
+    } catch (err) {
+      setContactError("Failed to send message details. Please try again.");
+      alert("Failed to send message details. Please try again.");
+    }
   };
 
   if (hideFooter) return null;
@@ -174,6 +191,7 @@ export default function Footer() {
                   Whether you're looking for order updates, exclusive collaborations, or private styling, our concierge team is on standby.
                 </p>
                 <form onSubmit={handleContactSubmit} className="contact-form">
+                  {contactSuccess && <p className="success-message">{contactSuccess}</p>}
                   {contactError && <p className="error-message">{contactError}</p>}
                   <div className="form-group">
                     <label htmlFor="fullName">FULL NAME</label>
