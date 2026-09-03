@@ -38,6 +38,13 @@ export default function Footer() {
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactSuccess, setContactSuccess] = useState<string | null>(null);
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid = emailRegex.test(formData.email.trim());
+  const isNameValid = formData.fullName.trim().length >= 2;
+  const isSubjectValid = formData.subject.trim().length > 0;
+  const isMessageValid = formData.message.trim().length >= 5;
+  const isFormValid = isEmailValid && isNameValid && isSubjectValid && isMessageValid;
+
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -47,6 +54,8 @@ export default function Footer() {
 
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFormValid) return;
+
     setContactError(null);
     setContactSuccess(null);
 
@@ -204,6 +213,9 @@ export default function Footer() {
                       placeholder="Kavindya Senanayaka"
                       required
                     />
+                    {formData.fullName.length > 0 && !isNameValid && (
+                      <p className="text-red-400 text-[11px] mt-1">Full Name must be at least 2 characters.</p>
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="email">EMAIL ADDRESS</label>
@@ -216,6 +228,9 @@ export default function Footer() {
                       placeholder="kavindya@gmail.com"
                       required
                     />
+                    {formData.email.length > 0 && !isEmailValid && (
+                      <p className="text-red-400 text-[11px] mt-1">Please enter a valid email address.</p>
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="subject">SUBJECT</label>
@@ -246,8 +261,17 @@ export default function Footer() {
                       placeholder="Tell us how we can assist..."
                       required
                     />
+                    {formData.message.length > 0 && !isMessageValid && (
+                      <p className="text-red-400 text-[11px] mt-1">Message must be at least 5 characters.</p>
+                    )}
                   </div>
-                  <button type="submit" className="contact-submit-btn">
+                  <button
+                    type="submit"
+                    disabled={!isFormValid}
+                    className={`contact-submit-btn transition-all ${
+                      !isFormValid ? "opacity-40 cursor-not-allowed pointer-events-none" : "hover:opacity-90"
+                    }`}
+                  >
                     SEND MESSAGE
                   </button>
                 </form>
