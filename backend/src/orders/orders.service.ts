@@ -1029,14 +1029,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   }
 
   async findManagedOrders(profileId: string, role: string | null) {
+    let employeeId: string | null = null;
     let branchId: string | null = null;
 
     try {
       const employee = await this.prisma.employee.findFirst({
         where: { profileId },
-        select: { branchId: true },
+        select: { employeeId: true, branchId: true },
       });
       if (employee) {
+        employeeId = employee.employeeId;
         branchId = employee.branchId;
       }
     } catch (err) {
@@ -1044,9 +1046,25 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
 
     const isDbAdmin = role?.toLowerCase() === 'admin';
-    const whereClause: Prisma.OrdersWhereInput = isDbAdmin
-      ? {}
-      : { orderStatus: { in: EMPLOYEE_PROCESSING_STATUSES } };
+    let whereClause: Prisma.OrdersWhereInput;
+    if (isDbAdmin) {
+      whereClause = {};
+    } else if (employeeId) {
+      whereClause = {
+        orderStatus: { in: EMPLOYEE_PROCESSING_STATUSES },
+        OR: [
+          { employeeId },
+          {
+            employeeId: null,
+            orderStatus: { in: EMPLOYEE_CLAIMABLE_STATUSES },
+          },
+        ],
+      };
+    } else {
+      whereClause = {
+        orderStatus: { in: EMPLOYEE_PROCESSING_STATUSES },
+      };
+    }
 
     const orders = await this.prisma.orders.findMany({
       where: whereClause,

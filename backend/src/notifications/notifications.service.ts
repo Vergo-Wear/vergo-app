@@ -80,10 +80,7 @@ export class NotificationsService {
     const result = await this.prisma.notification.deleteMany({
       where: {
         notificationId,
-        OR: [
-          { recipientProfileId: profileId },
-          { recipientProfileId: null },
-        ],
+        recipientProfileId: profileId,
       },
     });
     if (result.count === 0) {
@@ -96,10 +93,7 @@ export class NotificationsService {
     try {
       await this.prisma.notification.deleteMany({
         where: {
-          OR: [
-            { recipientProfileId: profileId },
-            { recipientProfileId: null },
-          ],
+          recipientProfileId: profileId,
         },
       });
     } catch (e) {
