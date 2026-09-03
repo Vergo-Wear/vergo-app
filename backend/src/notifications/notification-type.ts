@@ -1,6 +1,5 @@
 /** Supported customer notification event types. */
 export const NotificationType = {
-  ORDER_CREATED: 'ORDER_CREATED',
   COD_CONFIRMED: 'COD_CONFIRMED',
   COD_REJECTED: 'COD_REJECTED',
   PAYMENT_APPROVED: 'PAYMENT_APPROVED',
@@ -11,7 +10,6 @@ export const NotificationType = {
   OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
   ORDER_DELIVERED: 'ORDER_DELIVERED',
   ORDER_RETURNED: 'ORDER_RETURNED',
-  STOCK_REQUEST: 'STOCK_REQUEST',
 } as const;
 
 export type NotificationType =

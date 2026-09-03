@@ -19,7 +19,6 @@ if (typeof global !== 'undefined' && !(global as any).WebSocket) {
 /** Authenticated identity attached to the request by SupabaseAuthGuard */
 export interface RequestUser {
   id: string;
-  email: string | null;
   role: string | null;
   status: string | null;
 }
@@ -73,55 +72,10 @@ export class SupabaseAuthGuard implements CanActivate {
         throw new UnauthorizedException('Invalid or expired token');
       }
 
-      const userEmail = user.email?.toLowerCase() || null;
-      const isOfficialAdmin = userEmail === 'vergo.wearofficial@gmail.com';
-
-      let profile = await this.prisma.profiles.findUnique({
+      const profile = await this.prisma.profiles.findUnique({
         where: { id: user.id },
         include: { role: true },
       });
-
-      // Strict Admin role assignment: ONLY vergo.wearofficial@gmail.com can hold Admin role
-      if (isOfficialAdmin) {
-        const adminRole = await this.prisma.role.findFirst({
-          where: { roleName: { equals: 'Admin', mode: 'insensitive' } },
-        });
-
-        if (adminRole) {
-          if (!profile) {
-            profile = await this.prisma.profiles.create({
-              data: {
-                id: user.id,
-                roleId: adminRole.roleId,
-                status: 'active',
-                username: 'admin_vergo',
-              },
-              include: { role: true },
-            });
-          } else if (profile.role?.roleName !== 'Admin') {
-            profile = await this.prisma.profiles.update({
-              where: { id: user.id },
-              data: {
-                roleId: adminRole.roleId,
-                status: 'active',
-              },
-              include: { role: true },
-            });
-          }
-        }
-      } else if (profile && profile.role?.roleName === 'Admin') {
-        // Revoke Admin role from any unauthorized email address
-        const customerRole = await this.prisma.role.findFirst({
-          where: { roleName: { equals: 'Customer', mode: 'insensitive' } },
-        });
-        if (customerRole) {
-          profile = await this.prisma.profiles.update({
-            where: { id: user.id },
-            data: { roleId: customerRole.roleId },
-            include: { role: true },
-          });
-        }
-      }
 
       if (profile && profile.status !== 'active') {
         throw new ForbiddenException(
@@ -132,7 +86,6 @@ export class SupabaseAuthGuard implements CanActivate {
       // Attach user identity, role and status to request for downstream use
       request.user = {
         id: user.id,
-        email: userEmail,
         role: profile?.role?.roleName ?? null,
         status: profile?.status ?? null,
       };

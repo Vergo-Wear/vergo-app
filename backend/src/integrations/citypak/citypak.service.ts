@@ -11,7 +11,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { CreateCitypakShipmentDto } from './dto/create-citypak-shipment.dto';
 import { CreateCitypakPickupDto } from './dto/create-citypak-pickup.dto';
-import { UpdateShipperProfileDto } from './dto/update-shipper-profile.dto';
 import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import axios from 'axios';
@@ -81,56 +80,16 @@ export class CitypakService {
       profileId: 'admin-main-warehouse',
       courierName: 'Citypak',
       branchId: null,
-      shipperName: 'Vergo',
-      addressLine1: 'No 20, Delkanda',
-      addressLine2: null,
+      shipperName: 'Vergo Wear Main Warehouse',
+      addressLine1: 'No 45, Galle Road',
+      addressLine2: 'Sector A-12',
       addressLine3: null,
-      addressLine4City: 'Delkanda',
-      contactName: 'Vergo',
-      contactNumber1: '0714685499',
+      addressLine4City: 'Colombo',
+      contactName: 'Vergo Logistics Manager',
+      contactNumber1: '0771234567',
       contactNumber2: null,
       isDefault: true,
     };
-  }
-
-  /**
-   * Updates or creates default Shipper Return Address profile
-   */
-  async updateShipperProfile(dto: UpdateShipperProfileDto) {
-    const existing = await this.prisma.courierShipperProfile.findFirst({
-      where: { isDefault: true, courierName: 'Citypak' },
-    });
-
-    if (existing) {
-      return this.prisma.courierShipperProfile.update({
-        where: { profileId: existing.profileId },
-        data: {
-          shipperName: dto.shipperName,
-          addressLine1: dto.addressLine1,
-          addressLine2: dto.addressLine2 || null,
-          addressLine3: dto.addressLine3 || null,
-          addressLine4City: dto.addressLine4City,
-          contactName: dto.shipperName,
-          contactNumber1: dto.contactNumber1,
-          contactNumber2: dto.contactNumber2 || null,
-        },
-      });
-    }
-
-    return this.prisma.courierShipperProfile.create({
-      data: {
-        courierName: 'Citypak',
-        shipperName: dto.shipperName,
-        addressLine1: dto.addressLine1,
-        addressLine2: dto.addressLine2 || null,
-        addressLine3: dto.addressLine3 || null,
-        addressLine4City: dto.addressLine4City,
-        contactName: dto.shipperName,
-        contactNumber1: dto.contactNumber1,
-        contactNumber2: dto.contactNumber2 || null,
-        isDefault: true,
-      },
-    });
   }
 
   /**
@@ -189,31 +148,21 @@ export class CitypakService {
     }
 
     // Verify order status eligibility
-    if (!['Claimed', 'Preparing', 'Ready for Pickup'].includes(order.orderStatus)) {
+    if (order.orderStatus !== 'Ready for Pickup') {
       throw new BadRequestException(
-        `Order #${order.orderId} must be in "Preparing" or "Ready for Pickup" status before creating a Citypak shipment. Current status: ${order.orderStatus}`,
+        `Order #${order.orderId} must be in "Ready for Pickup" status before creating a Citypak shipment. Current status: ${order.orderStatus}`,
       );
     }
 
-    // Duplicate check: If a shipment was already submitted for this order, reuse it gracefully
+    // Duplicate check
     if (
       order.delivery &&
       order.delivery.submissionStatus === 'Submitted' &&
       order.delivery.waybills.length > 0
     ) {
-      this.logger.log(
-        `Reusing existing Citypak shipment for order #${order.orderId}. Tracking number: ${order.delivery.waybillNumber}`,
+      throw new ConflictException(
+        `A Citypak shipment already exists for order #${order.orderId}. Tracking number: ${order.delivery.waybillNumber}`,
       );
-      return {
-        success: true,
-        message: 'Citypak shipment already exists.',
-        deliveryId: order.delivery.deliveryId,
-        orderId,
-        citypakOrderId: order.delivery.externalOrderId || order.delivery.courierReference,
-        primaryTrackingNumber: order.delivery.waybillNumber,
-        waybills: order.delivery.waybills.map((w) => w.trackingNumber),
-        codAmount: Number(order.delivery.codAmount || 0),
-      };
     }
 
     const shipping = order.shippingDetails;
@@ -538,179 +487,122 @@ export class CitypakService {
    * Refreshes live tracking history from Citypak API
    */
   async trackShipmentByTrackingNumber(trackingNumber: string) {
-    let waybill = await this.prisma.deliveryWaybill.findUnique({
+    const waybill = await this.prisma.deliveryWaybill.findUnique({
       where: { trackingNumber },
       include: { delivery: { include: { order: true } } },
     });
 
-    let delivery =
+    const delivery =
       waybill?.delivery ||
       (await this.prisma.delivery.findFirst({
-        where: { OR: [{ waybillNumber: trackingNumber }, { orderId: trackingNumber }] },
+        where: { waybillNumber: trackingNumber },
         include: { order: true },
       }));
 
-    let order: any = delivery?.order;
-    if (!order) {
-      order = await this.prisma.orders.findUnique({
-        where: { orderId: trackingNumber },
-        include: { customerDetails: true, shippingDetails: true },
-      });
-    }
-
-    if (!delivery && !order) {
+    if (!delivery) {
       throw new NotFoundException(
-        `No delivery or order record found for tracking identifier "${trackingNumber}".`,
+        `No delivery record found for tracking number "${trackingNumber}".`,
       );
     }
-
-    const actualTrackingNum = waybill?.trackingNumber || delivery?.waybillNumber || trackingNumber;
 
     const token = this.getApiToken();
     const baseUrl = this.getBaseUrl();
 
     try {
       const url = `${baseUrl}/customer_api/v1/track?tracking_number=${encodeURIComponent(
-        actualTrackingNum,
+        trackingNumber,
       )}`;
       const response = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        timeout: 10000,
+        timeout: 15000,
       });
 
       const resData = response.data;
-      if (resData && resData.is_success !== false && resData.data) {
-        const data = resData.data;
-        const history = data?.tracking_history || [];
-
-        if (delivery) {
-          for (const item of history) {
-            if (item.date && item.status_type) {
-              const [d, m, y] = item.date.split('-');
-              const timeStr = item.time || '00:00:00';
-              const isoDateStr = `${y}-${m}-${d}T${timeStr}Z`;
-              const eventAt = new Date(isoDateStr);
-
-              await this.prisma.deliveryTrackingEvent.upsert({
-                where: {
-                  trackingNumber_status_eventAt: {
-                    trackingNumber: actualTrackingNum,
-                    status: item.status_type,
-                    eventAt,
-                  },
-                },
-                update: {
-                  statusCode: item.status_code || null,
-                  description: item.description || null,
-                  location: item.location || null,
-                },
-                create: {
-                  deliveryId: delivery.deliveryId,
-                  waybillId: waybill?.waybillId || null,
-                  trackingNumber: actualTrackingNum,
-                  status: item.status_type,
-                  statusType: item.status_type,
-                  statusCode: item.status_code || null,
-                  description: item.description || null,
-                  location: item.location || null,
-                  eventAt,
-                  source: 'TRACKING_API',
-                },
-              });
-            }
-          }
-        }
-
-        const updatedEvents = delivery
-          ? await this.prisma.deliveryTrackingEvent.findMany({
-              where: { deliveryId: delivery.deliveryId },
-              orderBy: { eventAt: 'asc' },
-            })
-          : [];
-
-        return {
-          success: true,
-          trackingNumber: actualTrackingNum,
-          isDelivered: Boolean(data.is_delivered),
-          courierStatus: data.status || delivery?.courierStatus || 'In Transit',
-          receiverName: data.receiver_name,
-          podImageUrl: data.pod_image_url,
-          history: updatedEvents.length > 0 ? updatedEvents : history,
-        };
+      if (!resData || resData.is_success === false) {
+        throw new BadRequestException(
+          resData?.message || 'Failed to fetch tracking history from Citypak.',
+        );
       }
+
+      const data = resData.data;
+      const history = data?.tracking_history || [];
+
+      // Save tracking events idempotently
+      for (const item of history) {
+        if (item.date && item.status_type) {
+          // Parse date DD-MM-YYYY HH:mm:ss
+          const [d, m, y] = item.date.split('-');
+          const timeStr = item.time || '00:00:00';
+          const isoDateStr = `${y}-${m}-${d}T${timeStr}Z`;
+          const eventAt = new Date(isoDateStr);
+
+          await this.prisma.deliveryTrackingEvent.upsert({
+            where: {
+              trackingNumber_status_eventAt: {
+                trackingNumber,
+                status: item.status_type,
+                eventAt,
+              },
+            },
+            update: {
+              statusCode: item.status_code || null,
+              description: item.description || null,
+              location: item.location || null,
+            },
+            create: {
+              deliveryId: delivery.deliveryId,
+              waybillId: waybill?.waybillId || null,
+              trackingNumber,
+              status: item.status_type,
+              statusType: item.status_type,
+              statusCode: item.status_code || null,
+              description: item.description || null,
+              location: item.location || null,
+              eventAt,
+              source: 'TRACKING_API',
+            },
+          });
+        }
+      }
+
+      // Update delivery current status
+      const latestHistory = history[history.length - 1];
+      const courierStatus = latestHistory?.status_type || delivery.courierStatus;
+
+      await this.prisma.delivery.update({
+        where: { deliveryId: delivery.deliveryId },
+        data: {
+          courierStatus,
+          courierStatusType: latestHistory?.status_type || null,
+          lastTrackingSyncAt: new Date(),
+          podImageUrl: data.pod_image_url || delivery.podImageUrl,
+          receiverName: data.receiver_name || delivery.receiverName,
+          receiverNic: data.receiver_nic || delivery.receiverNic,
+        },
+      });
+
+      const updatedEvents = await this.prisma.deliveryTrackingEvent.findMany({
+        where: { deliveryId: delivery.deliveryId },
+        orderBy: { eventAt: 'asc' },
+      });
+
+      return {
+        success: true,
+        trackingNumber,
+        isDelivered: Boolean(data.is_delivered),
+        courierStatus,
+        receiverName: data.receiver_name,
+        podImageUrl: data.pod_image_url,
+        history: updatedEvents,
+      };
     } catch (err: any) {
-      this.logger.warn(`Citypak remote tracking notice for ${trackingNumber}: ${err.message}`);
+      const safeMessage =
+        err.response?.data?.message || err.message || 'Error tracking shipment';
+      this.logger.error(`Citypak tracking failed for ${trackingNumber}: ${safeMessage}`);
+      throw new BadRequestException(`Tracking failed: ${safeMessage}`);
     }
-
-    // Fallback: Synthesize timeline history from DB Order timestamps
-    const dbStatus = order?.orderStatus || delivery?.deliveryStatus || 'Ready to Process';
-    const isFinished = ['Finished', 'Delivered', 'Completed'].includes(dbStatus);
-    const isHandedToCourier = isFinished || ['Handed to Citypak Courier', 'Sent'].includes(dbStatus);
-    const isReadyForPickup = isHandedToCourier || ['Ready for Courier Pickup', 'Ready for Pickup', 'Ready'].includes(dbStatus);
-    const isPrepared = isReadyForPickup || ['Package Prepared', 'Preparing'].includes(dbStatus);
-
-    const history: any[] = [];
-    const baseTime = order?.orderDate ? new Date(order.orderDate) : new Date();
-
-    history.push({
-      status: 'Order Placed',
-      location: 'Store System',
-      eventAt: order?.orderDate || baseTime.toISOString(),
-      description: 'Order placed and payment confirmed.',
-    });
-
-    history.push({
-      status: 'Admin Approved',
-      location: 'Central Admin',
-      eventAt: order?.orderDate || baseTime.toISOString(),
-      description: 'Order approved for fulfillment.',
-    });
-
-    if (isPrepared) {
-      history.push({
-        status: 'Package Prepared',
-        location: 'Fulfillment Hub',
-        eventAt: order?.preparingAt || order?.claimedAt || new Date(baseTime.getTime() + 10 * 60000).toISOString(),
-        description: 'Items picked and packed into parcel container.',
-      });
-    }
-
-    if (isReadyForPickup) {
-      history.push({
-        status: 'Ready for Courier Pickup',
-        location: 'Warehouse Staging',
-        eventAt: order?.parcelReadyAt || new Date(baseTime.getTime() + 20 * 60000).toISOString(),
-        description: 'Parcel assigned Citypak waybill. Awaiting courier pickup.',
-      });
-    }
-
-    if (isHandedToCourier) {
-      history.push({
-        status: 'Handed to Citypak Courier',
-        location: 'Citypak Hub',
-        eventAt: order?.sentAt || new Date(baseTime.getTime() + 40 * 60000).toISOString(),
-        description: 'Parcel collected by Citypak courier driver and in transit.',
-      });
-    }
-
-    if (isFinished) {
-      history.push({
-        status: 'Finished',
-        location: 'Destination',
-        eventAt: order?.deliveredAt || order?.completedAt || new Date(baseTime.getTime() + 60 * 60000).toISOString(),
-        description: 'Parcel successfully delivered to customer.',
-      });
-    }
-
-    return {
-      success: true,
-      trackingNumber: actualTrackingNum,
-      isDelivered: isFinished,
-      courierStatus: isFinished ? 'Delivered' : isHandedToCourier ? 'In Transit' : isReadyForPickup ? 'Ready for Courier Pickup' : 'Package Prepared',
-      history,
-    };
   }
 
   /**

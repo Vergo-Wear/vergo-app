@@ -27,11 +27,6 @@ export class EmployeesController {
     return this.employeesService.findByProfileId(profileId);
   }
 
-  @Get('leaderboard')
-  getLeaderboard() {
-    return this.employeesService.getLeaderboard();
-  }
-
   @Patch('me/availability')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('Employee')
