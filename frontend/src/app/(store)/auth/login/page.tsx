@@ -123,38 +123,28 @@ export default function LoginPage() {
             return;
           }
 
-          // Returning user (Customer or Admin)
+          // Returning customer — profile already exists
           const profileData = signinData.profile;
           if (!profileData || profileData.status !== "active") {
             throw new Error(`Account is "${profileData?.status || "inactive"}". Access is only permitted for active accounts.`);
           }
 
-          const isUserAdmin =
-            profileData?.role?.roleName === "Admin" ||
-            profileData?.role === "Admin" ||
-            signinData.user?.role === "Admin" ||
-            session.user.email?.toLowerCase() === "vergo.wearofficial@gmail.com";
-
-          const userRole = isUserAdmin ? "Admin" : "Customer";
-
-          // Fetch display name from customer record if customer
+          // Fetch display name from customer record
           let displayName = "";
           let databaseProfile = {};
-          if (!isUserAdmin) {
-            try {
-              const res = await fetch(`${apiUrl}/customers/profile/${session.user.id}`);
-              if (res.ok) {
-                const customerData = await res.json();
-                databaseProfile = customerData;
-                displayName = `${customerData.firstName} ${customerData.lastName}`;
-              }
-            } catch (e) {
-              console.warn(e);
+          try {
+            const res = await fetch(`${apiUrl}/customers/profile/${session.user.id}`);
+            if (res.ok) {
+              const customerData = await res.json();
+              databaseProfile = customerData;
+              displayName = `${customerData.firstName} ${customerData.lastName}`;
             }
+          } catch (e) {
+            console.warn(e);
           }
 
           if (!displayName) {
-            displayName = isUserAdmin ? "Vergo Admin" : (session.user.user_metadata?.full_name || session.user.email?.split("@")[0].toUpperCase() || "Vergo User");
+            displayName = session.user.user_metadata?.full_name || session.user.email?.split("@")[0].toUpperCase() || "Vergo User";
           }
 
           // Save auth info to local storage
@@ -164,28 +154,24 @@ export default function LoginPage() {
           sessionStorage.setItem(
             "vergo_user",
             JSON.stringify({
-              ...databaseProfile,
               id: session.user.id,
               name: displayName,
               email: session.user.email,
               avatarUrl: session.user.user_metadata?.avatar_url || "/images/default-avatar.png",
-              role: userRole,
+              role: "Customer",
+              ...databaseProfile,
             })
           );
 
           window.dispatchEvent(new Event("vergo-auth-change"));
 
-          setMessage({ text: "Signed in successfully! Redirecting...", type: "success" });
+          setMessage({ text: "Signed in successfully with Google! Redirecting...", type: "success" });
 
-          const redirectPath = isUserAdmin
-            ? "/admin"
-            : sessionStorage.getItem("vergo_login_prefill")
-            ? "/checkout"
-            : "/";
+          const redirectPath = sessionStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
           sessionStorage.removeItem("vergo_login_prefill");
 
           setTimeout(() => {
-            window.location.href = redirectPath;
+            router.push(redirectPath);
           }, 1000);
         }
       } catch (err: any) {
@@ -426,12 +412,9 @@ export default function LoginPage() {
         throw new Error(lastErrorMessage || "Invalid email/phone number or password.");
       }
 
+      // Step 4: Login succeeded! Now resolve the user's display name
       const userId = signinData.user.id;
-      const userEmail = (signinData.user?.email || formData.emailOrMobile.trim()).toLowerCase();
-      const userRole =
-        userEmail === "vergo.wearofficial@gmail.com"
-          ? "Admin"
-          : signinData.user.role;
+      const userRole = signinData.user.role;
       let displayName = "";
       let databaseProfile: Record<string, unknown> = {};
 
@@ -474,13 +457,13 @@ export default function LoginPage() {
       sessionStorage.setItem(
         "vergo_user",
         JSON.stringify({
-          ...databaseProfile,
           id: userId,
           name: displayName,
           email: signinData.user.email,
           avatarUrl: "/images/default-avatar.png",
           role: userRole,
           mustChangePassword,
+          ...databaseProfile,
         })
       );
 
@@ -509,13 +492,13 @@ export default function LoginPage() {
         if (userRole === "Customer") {
           const redirectPath = sessionStorage.getItem("vergo_login_prefill") ? "/checkout" : "/";
           sessionStorage.removeItem("vergo_login_prefill");
-          window.location.href = redirectPath;
+          router.push(redirectPath);
         } else if (userRole === "Employee") {
-          window.location.href = "/employee";
+          router.push("/employee");
         } else if (userRole === "Admin") {
-          window.location.href = "/admin";
+          router.push("/admin");
         } else {
-          window.location.href = "/";
+          router.push("/");
         }
       }, 1000);
     } catch (err: any) {

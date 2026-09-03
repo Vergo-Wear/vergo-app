@@ -42,7 +42,6 @@ export class OptionalSupabaseAuthGuard implements CanActivate {
       throw new UnauthorizedException('Customer account is unavailable.');
     request.user = {
       id: user.id,
-      email: user.email?.toLowerCase() || null,
       role: profile.role?.roleName || null,
       status: profile.status,
     };

@@ -124,10 +124,10 @@ export default function OrderHistoryPage() {
                   </h3>
                   <div className="order-product-options">
                     <div className="option-badge">
-                      Size: <span>{typeof variant?.size === "object" ? (variant?.size as any)?.name : (variant?.size || "-")}</span>
+                      Size: <span>{variant?.size || "-"}</span>
                     </div>
                     <div className="option-badge">
-                      Color: <span>{typeof variant?.color === "object" ? (variant?.color as any)?.name : (variant?.color || "-")}</span>
+                      Color: <span>{variant?.color || "-"}</span>
                     </div>
                     <div className="option-badge">
                       Qty: <span>{firstItem.quantity}</span>

@@ -93,15 +93,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         setStats(data.stats);
         setAnalytics(data.analytics || EMPTY_ANALYTICS);
 
-        fetch(`${API_URL}/orders/manage/pending-checkouts`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((pendingCheckouts) => {
-            if (Array.isArray(pendingCheckouts)) {
-              setOrders(pendingCheckouts);
-            }
-          })
-          .catch(() => null);
-
         fetch(`${API_URL}/admin/employee-logistics`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
           .then((res) => (res.ok ? res.json() : null))
           .then((logistics) => {
@@ -220,7 +211,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           title: "Low Stock Alert",
           message: `${item.name} (${item.sku}) is running low at ${item.location}. Current quantity: ${item.inStock}.`,
           timestamp: "Live",
-          link: "/admin/employees",
+          link: "/admin/inventory",
         });
       }
     });

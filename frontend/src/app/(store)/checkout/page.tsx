@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
@@ -33,26 +33,12 @@ export default function CheckoutPage() {
   const [contactComplete, setContactComplete] = useState(false);
   const [shippingComplete, setShippingComplete] = useState(false);
 
-  // Restore draft contact info for guests or pre-fill logged-in profile
+  // Pre-fill from cached auth data immediately, then refresh from the
+  // customer record because OAuth login data does not always include a phone.
   useEffect(() => {
     setContactComplete(hasCompletedContact());
     setShippingComplete(hasCompletedShipping());
-
-    if (sessionStorage.getItem("vergo_is_logged_in") !== "true") {
-      const storedContact = localStorage.getItem("vergo_checkout_contact");
-      if (storedContact) {
-        try {
-          const contact = JSON.parse(storedContact);
-          if (contact.firstName) setFirstName(contact.firstName);
-          if (contact.lastName) setLastName(contact.lastName);
-          if (contact.email) setEmail(contact.email);
-          if (contact.phone) setPhone(contact.phone);
-        } catch (e) {
-          console.error("Error restoring stored contact info:", e);
-        }
-      }
-      return;
-    }
+    if (sessionStorage.getItem("vergo_is_logged_in") !== "true") return;
 
     const storedUserStr = sessionStorage.getItem("vergo_user");
     if (storedUserStr) {
@@ -83,18 +69,7 @@ export default function CheckoutPage() {
         setPhone(profile.phone || "");
       })
       .catch(() => undefined);
-  }, [router]);
-
-  // Auto-save guest contact inputs locally on edit so data is retained when going back to checkout
-  useEffect(() => {
-    if (sessionStorage.getItem("vergo_is_logged_in") !== "true" && (firstName || lastName || email || phone)) {
-      const normalizedPhone = phone.replace(/[\s-()]/g, "");
-      localStorage.setItem(
-        "vergo_checkout_contact",
-        JSON.stringify({ firstName, lastName, email, phone: normalizedPhone })
-      );
-    }
-  }, [firstName, lastName, email, phone]);
+  }, []);
 
   // Helper to parse LKR price string to number, e.g. "LKR 36,500.00" -> 36500
   const parseLkrPrice = (priceStr: string): number => {
@@ -107,7 +82,7 @@ export default function CheckoutPage() {
   const itemsToDisplay = cart;
   const subtotalLkr = cartSubtotal;
 
-  const validateContactField = useCallback((field: string, value: string) => {
+  const validateContactField = (field: string, value: string) => {
     const trimmed = value.trim();
     if (field === "firstName") {
       if (!trimmed) return "First Name is required.";
@@ -130,45 +105,7 @@ export default function CheckoutPage() {
       }
     }
     return "";
-  }, []);
-
-  const isFormValid = useMemo(() => {
-    return (
-      Boolean(firstName.trim()) &&
-      !validateContactField("firstName", firstName) &&
-      Boolean(lastName.trim()) &&
-      !validateContactField("lastName", lastName) &&
-      Boolean(email.trim()) &&
-      !validateContactField("email", email) &&
-      Boolean(phone.trim()) &&
-      !validateContactField("phone", phone)
-    );
-  }, [firstName, lastName, email, phone, validateContactField]);
-
-  const [hoverErrors, setHoverErrors] = useState<Record<string, string>>({});
-  const getFieldError = (field: string) => errors[field] || hoverErrors[field];
-
-  const checkEmptyRequiredFields = useCallback(() => {
-    const newErrors: Record<string, string> = {};
-
-    const fnErr = validateContactField("firstName", firstName);
-    if (fnErr) newErrors.firstName = fnErr;
-
-    const lnErr = validateContactField("lastName", lastName);
-    if (lnErr) newErrors.lastName = lnErr;
-
-    const emErr = validateContactField("email", email);
-    if (emErr) newErrors.email = emErr;
-
-    const phErr = validateContactField("phone", phone);
-    if (phErr) newErrors.phone = phErr;
-
-    setHoverErrors(newErrors);
-  }, [validateContactField, firstName, lastName, email, phone]);
-
-  const clearHoverErrors = useCallback(() => {
-    setHoverErrors({});
-  }, []);
+  };
 
   const handleInputChange = (field: string, value: string) => {
     if (field === "firstName") setFirstName(value);
@@ -176,11 +113,9 @@ export default function CheckoutPage() {
     if (field === "email") setEmail(value);
     if (field === "phone") setPhone(value);
 
-    setHoverErrors({});
-
     setErrors((prev) => ({
       ...prev,
-      [field]: validateContactField(field, value),
+      [field]: value.trim().length > 1 ? validateContactField(field, value) : "",
     }));
   };
 
@@ -206,7 +141,14 @@ export default function CheckoutPage() {
       localStorage.removeItem("vergo_checkout_as_guest");
     }
 
-    router.push("/checkout/shipping");
+    setTimeout(() => {
+      setIsSubmitting(false);
+      setShowSuccessToast(true);
+      setTimeout(() => {
+        setShowSuccessToast(false);
+        router.push("/checkout/shipping");
+      }, 1500);
+    }, 1000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -328,8 +270,8 @@ export default function CheckoutPage() {
                   id="firstName"
                   type="text"
                   placeholder="e.g. Nimal"
-                  className={`form-input ${errors.firstName || hoverErrors.firstName ? "input-error" : ""}`}
-                  aria-invalid={Boolean(errors.firstName || hoverErrors.firstName)}
+                  className={`form-input ${errors.firstName ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.firstName)}
                   value={firstName}
                   onChange={(e) => handleInputChange("firstName", e.target.value)}
                 />
@@ -346,8 +288,8 @@ export default function CheckoutPage() {
                   id="lastName"
                   type="text"
                   placeholder="e.g. Perera"
-                  className={`form-input ${errors.lastName || hoverErrors.lastName ? "input-error" : ""}`}
-                  aria-invalid={Boolean(errors.lastName || hoverErrors.lastName)}
+                  className={`form-input ${errors.lastName ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.lastName)}
                   value={lastName}
                   onChange={(e) => handleInputChange("lastName", e.target.value)}
                 />
@@ -367,8 +309,8 @@ export default function CheckoutPage() {
                   id="email"
                   type="email"
                   placeholder="e.g. nimal.perera@gmail.com"
-                  className={`form-input form-input-email ${errors.email || hoverErrors.email ? "input-error" : ""}`}
-                  aria-invalid={Boolean(errors.email || hoverErrors.email)}
+                  className={`form-input form-input-email ${errors.email ? "input-error" : ""}`}
+                  aria-invalid={Boolean(errors.email)}
                   value={email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
                 />
@@ -401,8 +343,8 @@ export default function CheckoutPage() {
                 id="phone"
                 type="tel"
                 placeholder="e.g. 0771234567"
-                className={`form-input ${errors.phone || hoverErrors.phone ? "input-error" : ""}`}
-                aria-invalid={Boolean(errors.phone || hoverErrors.phone)}
+                className={`form-input ${errors.phone ? "input-error" : ""}`}
+                aria-invalid={Boolean(errors.phone)}
                 value={phone}
                 onChange={(e) => handleInputChange("phone", e.target.value)}
               />
@@ -428,41 +370,34 @@ export default function CheckoutPage() {
                 </svg>
                 <span>Back to Cart</span>
               </button>
-              <div
-                style={{ width: "100%", display: "inline-block" }}
-                onMouseEnter={checkEmptyRequiredFields}
-                onMouseLeave={clearHoverErrors}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="submit-btn"
               >
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !isFormValid}
-                  className="submit-btn"
-                  style={{ width: "100%" }}
-                >
-                  {isSubmitting ? (
-                    "Saving Details..."
-                  ) : (
-                    <>
-                      Continue to Shipping
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth="2.5"
-                        stroke="currentColor"
-                        width={14}
-                        height={14}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
-                        />
-                      </svg>
-                    </>
-                  )}
-                </button>
-              </div>
+                {isSubmitting ? (
+                  "Saving Details..."
+                ) : (
+                  <>
+                    Continue to Shipping
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="2.5"
+                      stroke="currentColor"
+                      width={14}
+                      height={14}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                      />
+                    </svg>
+                  </>
+                )}
+              </button>
             </div>
           </form>
         </section>
@@ -515,6 +450,10 @@ export default function CheckoutPage() {
             <span className="summary-calc-value italic-muted">Calculated next</span>
           </div>
 
+          <div className="summary-calc-row">
+            <span className="summary-calc-label">Taxes</span>
+            <span className="summary-calc-value">LKR 0.00</span>
+          </div>
 
           <hr className="summary-card-divider" />
 
