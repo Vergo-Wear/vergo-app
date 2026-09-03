@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { AdminProvider, useAdmin } from "./AdminContext";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { createSupabaseClient } from "@/lib/supabase";
+import OnboardingTour, { triggerManualTour } from "@/components/onboarding/OnboardingTour";
 import "@/styles/admin.css";
 
 // Separate the layout contents to use the AdminContext hooks safely
@@ -17,7 +18,6 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     removeNotification,
     searchQuery,
     setSearchQuery,
-    adminAlerts,
   } = useAdmin();
 
   // Real-time unread notification count directly from public.notification table
@@ -168,6 +168,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Dashboard",
       path: "/admin",
+      tourKey: "admin-nav-dashboard",
       icon: (
         <svg
           className="w-5 h-5"
@@ -190,6 +191,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Orders",
       path: "/admin/orders",
+      tourKey: "admin-nav-orders",
       icon: (
         <svg
           className="w-5 h-5"
@@ -209,6 +211,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Analytics",
       path: "/admin/analytics",
+      tourKey: "admin-nav-analytics",
       icon: (
         <svg
           className="w-5 h-5"
@@ -228,6 +231,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Earnings",
       path: "/admin/earnings",
+      tourKey: "admin-nav-earnings",
       icon: (
         <svg
           className="w-5 h-5"
@@ -247,6 +251,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Employees",
       path: "/admin/employees",
+      tourKey: "admin-nav-employees",
       icon: (
         <svg
           className="w-5 h-5"
@@ -266,6 +271,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Inventory",
       path: "/admin/inventory",
+      tourKey: "admin-nav-inventory",
       icon: (
         <svg
           className="w-5 h-5"
@@ -285,6 +291,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Suppliers",
       path: "/admin/suppliers",
+      tourKey: "admin-nav-suppliers",
       icon: (
         <svg
           className="w-5 h-5"
@@ -304,6 +311,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Branches",
       path: "/admin/branches",
+      tourKey: "admin-nav-branches",
       icon: (
         <svg
           className="w-5 h-5"
@@ -323,6 +331,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Web Modify",
       path: "/admin/customization",
+      tourKey: "admin-nav-customization",
       icon: (
         <svg
           className="w-5 h-5"
@@ -343,6 +352,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     {
       name: "Delivery",
       path: "/admin/delivery",
+      tourKey: "admin-nav-delivery",
       icon: (
         <svg
           className="w-5 h-5"
@@ -400,6 +410,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.name}
                 href={item.path}
+                {...((item as any).tourKey ? { "data-tour": (item as any).tourKey } : {})}
                 className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${
                   isActive
                     ? "bg-[rgba(255,255,255,0.08)] text-white"
@@ -422,6 +433,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.name}
                 href={item.path}
+                {...((item as any).tourKey ? { "data-tour": (item as any).tourKey } : {})}
                 className={`flex items-center justify-between px-4 py-3 rounded-md text-sm font-medium transition-all ${
                   isActive
                     ? "bg-[rgba(255,255,255,0.08)] text-white"
@@ -440,7 +452,29 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         {/* User profile at the bottom */}
         <div className="relative p-4 border-t border-[rgba(255,255,255,0.06)]">
           {showLogoutMenu && (
-            <div className="absolute bottom-[calc(100%-8px)] left-4 right-4 bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded shadow-2xl p-1 mb-2 z-50 animate-slide-in">
+            <div className="absolute bottom-[calc(100%-8px)] left-4 right-4 bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded shadow-2xl p-1 mb-2 z-50 animate-slide-in flex flex-col gap-1">
+              <button
+                onClick={() => {
+                  setShowLogoutMenu(false);
+                  triggerManualTour("admin");
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left rounded text-emerald-400 hover:text-white hover:bg-emerald-950/20 transition-all font-bold uppercase text-[9px] tracking-wider cursor-pointer"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19 14.5"
+                  />
+                </svg>
+                <span>TAKE A TOUR</span>
+              </button>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2 px-3 py-2 text-left rounded text-red-400 hover:text-white hover:bg-red-950/20 transition-all font-bold uppercase text-[9px] tracking-wider cursor-pointer"
@@ -544,6 +578,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             <Link
               href="/admin/notifications"
               title="Notifications"
+              data-tour="admin-notifications"
               className="relative p-2 bg-[#121212] border border-[rgba(255,255,255,0.08)] hover:border-emerald-500/40 rounded-lg text-[#8e8e93] hover:text-white transition-all cursor-pointer flex items-center justify-center group"
             >
               <svg
@@ -606,6 +641,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto p-8 bg-[#050505] custom-scrollbar">
           {children}
         </main>
+        <OnboardingTour role="admin" />
       </div>
 
       {/* FLOAT TOAST NOTIFICATIONS */}

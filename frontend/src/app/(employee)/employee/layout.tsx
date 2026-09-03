@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { EmployeeProvider, useEmployee } from "./context/EmployeeContext";
+import OnboardingTour, { triggerManualTour } from "@/components/onboarding/OnboardingTour";
 import "@/styles/employee.css";
 
 // Shared Layout Content to access EmployeeContext
@@ -95,6 +96,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           <nav className="emp-nav-menu">
             <Link
               href="/employee"
+              data-tour="employee-nav-dashboard"
               className={`emp-nav-item ${pathname === "/employee" ? "active" : ""}`}
             >
               <span className="emp-nav-item-left">
@@ -110,6 +112,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
             <Link
               href="/employee/orders"
+              data-tour="employee-nav-orders"
               className={`emp-nav-item ${pathname.includes("/orders") ? "active" : ""}`}
             >
               <span className="emp-nav-item-left">
@@ -122,6 +125,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
             <Link
               href="/employee/product-prep"
+              data-tour="employee-nav-prep"
               className={`emp-nav-item ${pathname.includes("/product-prep") || pathname.includes("/delivery-prep") ? "active" : ""}`}
             >
               <span className="emp-nav-item-left">
@@ -135,6 +139,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
             <Link
               href="/employee/ready-orders"
+              data-tour="employee-nav-ready"
               className={`emp-nav-item ${pathname.includes("/ready-orders") ? "active" : ""}`}
             >
               <span className="emp-nav-item-left">
@@ -147,6 +152,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
             <Link
               href="/employee/stock"
+              data-tour="employee-nav-stock"
               className={`emp-nav-item ${pathname.includes("/stock") ? "active" : ""}`}
             >
               <span className="emp-nav-item-left">
@@ -236,6 +242,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               {/* Navbar Notification Bell Icon */}
               <Link
                 href="/employee/notifications"
+                data-tour="employee-notifications"
                 className="emp-header-icon-btn relative flex items-center justify-center p-2 rounded-lg hover:bg-white/5 transition-all text-[#8e8e93] hover:text-white"
                 title="Notifications"
               >
@@ -252,7 +259,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
 
               {/* Desktop Availability Toggle */}
-              <div className="hidden sm:flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2" data-tour="employee-duty-toggle">
                 <button
                   onClick={toggleAvailability}
                   style={{
@@ -336,6 +343,33 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
                     <button
                       onClick={() => {
+                        setShowProfileMenu(false);
+                        triggerManualTour("employee");
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        padding: "10px 16px",
+                        textAlign: "left",
+                        background: "none",
+                        border: "none",
+                        color: "#ffffff",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        borderBottom: "1px solid var(--emp-border)",
+                        transition: "background 0.2s"
+                      }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 16, height: 16, color: "var(--emp-neon-green)" }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21" />
+                      </svg>
+                      <span>Take a Tour</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
                         logoutEmployee();
                         setShowProfileMenu(false);
                       }}
@@ -371,6 +405,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         <main className="flex-1 w-full max-w-[1440px] mx-auto box-border" style={{ minWidth: 0 }}>
           {children}
         </main>
+        <OnboardingTour role="employee" />
       </div>
 
       {/* Mobile Bottom Navigation Bar (Hidden on Desktop) */}

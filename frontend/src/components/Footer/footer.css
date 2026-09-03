@@ -256,7 +256,7 @@
 .form-group input::placeholder,
 .form-group textarea::placeholder {
   color: #3f3f46;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .form-group input:focus,

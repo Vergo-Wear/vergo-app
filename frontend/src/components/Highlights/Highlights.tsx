@@ -28,7 +28,7 @@ export default function Highlights() {
   }, []);
 
   return (
-    <section id="highlights" className="highlights">
+    <section id="highlights" className="highlights" data-tour="customer-products">
       <div className="highlights-header">
         <div className="highlights-title-area">
           <h2>{title}</h2>

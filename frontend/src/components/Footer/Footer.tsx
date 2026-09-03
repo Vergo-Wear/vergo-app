@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import { triggerManualTour } from "@/components/onboarding/OnboardingTour";
 import "./footer.css";
 
 export default function Footer() {
@@ -36,6 +37,22 @@ export default function Footer() {
     message: "",
   });
   const [contactError, setContactError] = useState<string | null>(null);
+  const [contactSuccess, setContactSuccess] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid = emailRegex.test(formData.email.trim());
+  const isNameValid = formData.fullName.trim().length >= 2;
+  const isSubjectValid = formData.subject.trim().length > 0;
+  const isMessageValid = formData.message.trim().length >= 5;
+  const isFormValid = isEmailValid && isNameValid && isSubjectValid && isMessageValid;
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -46,24 +63,34 @@ export default function Footer() {
 
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFormValid) return;
+
     setContactError(null);
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-    const response = await fetch(`${apiUrl}/contact`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
-    if (!response.ok) {
-      setContactError("Unable to send your message. Please try again.");
-      return;
+    setContactSuccess(null);
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      const response = await fetch(`${apiUrl}/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      if (response.ok) {
+        setToast({ message: "Your message has been sent successfully!", type: "success" });
+        setFormData({
+          fullName: "",
+          email: "",
+          subject: "General Inquiry",
+          message: "",
+        });
+        setActiveModal(null);
+      } else {
+        setToast({ message: "Unable to send your message. Please try again.", type: "error" });
+      }
+    } catch (err) {
+      setToast({ message: "Failed to send message. Connection error.", type: "error" });
     }
-    setFormData({
-      fullName: "",
-      email: "",
-      subject: "General Inquiry",
-      message: "",
-    });
-    setActiveModal(null);
   };
 
   if (hideFooter) return null;
@@ -82,6 +109,14 @@ export default function Footer() {
         </div>
 
         <div className="footer-nav">
+          <button
+            type="button"
+            onClick={() => triggerManualTour("customer")}
+            className="footer-link"
+            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
+          >
+            TAKE A TOUR
+          </button>
           <button
             type="button"
             onClick={() => setActiveModal("privacy")}
@@ -172,6 +207,7 @@ export default function Footer() {
                   Whether you're looking for order updates, exclusive collaborations, or private styling, our concierge team is on standby.
                 </p>
                 <form onSubmit={handleContactSubmit} className="contact-form">
+                  {contactSuccess && <p className="success-message">{contactSuccess}</p>}
                   {contactError && <p className="error-message">{contactError}</p>}
                   <div className="form-group">
                     <label htmlFor="fullName">FULL NAME</label>
@@ -181,9 +217,14 @@ export default function Footer() {
                       name="fullName"
                       value={formData.fullName}
                       onChange={handleInputChange}
-                      placeholder="ALEXANDER VERGO"
+                      placeholder="Kavindya Senanayaka"
                       required
+                      style={formData.fullName.length > 0 && !isNameValid ? { borderColor: "#ef4444" } : {}}
+                      className={formData.fullName.length > 0 && !isNameValid ? "!border-red-500 focus:!border-red-500" : ""}
                     />
+                    {formData.fullName.length > 0 && !isNameValid && (
+                      <p className="text-red-400 text-[11px] mt-1">Full Name must be at least 2 characters.</p>
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="email">EMAIL ADDRESS</label>
@@ -193,9 +234,14 @@ export default function Footer() {
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      placeholder="CONCIERGE@VERGO.COM"
+                      placeholder="kavindya@gmail.com"
                       required
+                      style={formData.email.length > 0 && !isEmailValid ? { borderColor: "#ef4444" } : {}}
+                      className={formData.email.length > 0 && !isEmailValid ? "!border-red-500 focus:!border-red-500" : ""}
                     />
+                    {formData.email.length > 0 && !isEmailValid && (
+                      <p className="text-red-400 text-[11px] mt-1">Please enter a valid email address.</p>
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="subject">SUBJECT</label>
@@ -211,6 +257,7 @@ export default function Footer() {
                         <option value="Order Status">Order Status</option>
                         <option value="Collaborations">Collaborations</option>
                         <option value="Private Styling">Private Styling</option>
+                        <option value="Other">Other</option>
                       </select>
                     </div>
                   </div>
@@ -222,11 +269,22 @@ export default function Footer() {
                       rows={4}
                       value={formData.message}
                       onChange={handleInputChange}
-                      placeholder="HOW CAN WE ASSIST?"
+                      placeholder="Tell us how we can assist..."
                       required
+                      style={formData.message.length > 0 && !isMessageValid ? { borderColor: "#ef4444" } : {}}
+                      className={formData.message.length > 0 && !isMessageValid ? "!border-red-500 focus:!border-red-500" : ""}
                     />
+                    {formData.message.length > 0 && !isMessageValid && (
+                      <p className="text-red-400 text-[11px] mt-1">Message must be at least 5 characters.</p>
+                    )}
                   </div>
-                  <button type="submit" className="contact-submit-btn">
+                  <button
+                    type="submit"
+                    disabled={!isFormValid}
+                    className={`contact-submit-btn transition-all ${
+                      !isFormValid ? "opacity-40 cursor-not-allowed pointer-events-none" : "hover:opacity-90"
+                    }`}
+                  >
                     SEND MESSAGE
                   </button>
                 </form>
@@ -281,6 +339,29 @@ export default function Footer() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification Alert */}
+      {toast && (
+        <div
+          className={`fixed top-6 right-6 z-[9999] flex items-center gap-3 px-5 py-3.5 rounded-lg shadow-2xl backdrop-blur-md transition-all duration-300 ${
+            toast.type === "success"
+              ? "bg-[#0c0c0e]/95 text-[#00FF9D] border border-[#00FF9D]/40"
+              : "bg-[#0c0c0e]/95 text-[#ff4d4d] border border-[#ff4d4d]/40"
+          }`}
+          style={{ minWidth: "300px" }}
+        >
+          {toast.type === "success" ? (
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          <span className="text-xs font-semibold tracking-wide text-white">{toast.message}</span>
         </div>
       )}
     </footer>
