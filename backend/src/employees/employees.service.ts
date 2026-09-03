@@ -361,25 +361,9 @@ export class EmployeesService {
     });
 
     if (!employee) {
-      const profile = await this.prisma.profiles.findUnique({
-        where: { id: profileId },
-        select: {
-          id: true,
-          status: true,
-          createdAt: true,
-          authUser: { select: { email: true } },
-        },
-      });
-      return {
-        employeeId: profileId,
-        profileId,
-        firstName: profile?.authUser?.email?.split('@')[0] || 'Employee',
-        lastName: '',
-        position: 'Fulfillment Specialist',
-        availabilityStatus: 'AVAILABLE',
-        branch: null,
-        profile,
-      };
+      throw new NotFoundException(
+        `No employee found for profile ID "${profileId}".`,
+      );
     }
 
     return employee;
@@ -511,67 +495,5 @@ export class EmployeesService {
 
     this.logger.log(`Employee "${id}" updated`);
     return employee;
-  }
-
-  /**
-   * Returns employee performance leaderboard based on database orders claimed/processed.
-   */
-  async getLeaderboard() {
-    const employees = await this.prisma.employee.findMany({
-      include: {
-        profile: {
-          include: {
-            authUser: true,
-          },
-        },
-        branch: true,
-      },
-    });
-
-    const employeeIds = employees.map((emp) => emp.employeeId);
-
-    const orderCounts = await this.prisma.orders.groupBy({
-      by: ['employeeId'],
-      where: {
-        employeeId: { in: employeeIds },
-      },
-      _count: {
-        orderId: true,
-      },
-    });
-
-    const countMap = new Map<string, number>();
-    for (const group of orderCounts) {
-      if (group.employeeId) {
-        countMap.set(group.employeeId, group._count.orderId);
-      }
-    }
-
-    const leaderboardList = employees.map((emp) => {
-      const name = `${emp.firstName} ${emp.lastName}`.trim();
-      const initials = name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
-
-      return {
-        employeeId: emp.employeeId,
-        profileId: emp.profileId,
-        name,
-        position: emp.position || 'Fulfillment Specialist',
-        branchName: emp.branch?.name || 'Main Branch',
-        items: countMap.get(emp.employeeId) || 0,
-        initials,
-      };
-    });
-
-    leaderboardList.sort((a, b) => b.items - a.items);
-
-    return leaderboardList.map((emp, index) => ({
-      rank: index + 1,
-      ...emp,
-    }));
   }
 }

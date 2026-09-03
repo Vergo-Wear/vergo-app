@@ -394,18 +394,14 @@ export default function OrderDetailsPage({
 
     const itemsHtml = order.orderItems
       .map(
-        (item) => {
-          const sizeStr = typeof item.variant?.size === "object" ? (item.variant?.size as any)?.name : (item.variant?.size || "");
-          const colorStr = typeof item.variant?.color === "object" ? (item.variant?.color as any)?.name : (item.variant?.color || "");
-          return `
+        (item) => `
       <tr>
-        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: left;">${item.variant?.product?.name || "Product"} (${sizeStr}/${colorStr})</td>
+        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: left;">${item.variant?.product?.name || "Product"} (${item.variant?.size || ""}/${item.variant?.color || ""})</td>
         <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
         <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">Rs. ${Number(item.unitPrice).toFixed(2)}</td>
         <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">Rs. ${Number(item.subtotal).toFixed(2)}</td>
       </tr>
-    `;
-        },
+    `,
       )
       .join("");
 
@@ -495,7 +491,7 @@ export default function OrderDetailsPage({
 
             <div style="margin-top: 60px; text-align: center; font-size: 11px; color: #999; border-top: 1px solid #eee; padding-top: 20px;">
               Thank you for shopping with VERGO Streetwear Label.<br>
-              For support, please contact vergo.wearofficial@gmail.com
+              For support, please contact vergo-support@example.com
             </div>
           </div>
           <script>
@@ -949,13 +945,13 @@ export default function OrderDetailsPage({
                             className="option-badge"
                             style={{ padding: "2px 8px", fontSize: "0.65rem" }}
                           >
-                            SIZE: <span>{typeof item.variant?.size === "object" ? (item.variant?.size as any)?.name : (item.variant?.size || (item as any).size || "N/A")}</span>
+                            SIZE: <span>{item.variant?.size || "N/A"}</span>
                           </div>
                           <div
                             className="option-badge"
                             style={{ padding: "2px 8px", fontSize: "0.65rem" }}
                           >
-                            COLOR: <span>{typeof item.variant?.color === "object" ? (item.variant?.color as any)?.name : (item.variant?.color || (item as any).color || "N/A")}</span>
+                            COLOR: <span>{item.variant?.color || "N/A"}</span>
                           </div>
                           <div
                             className="option-badge"
@@ -1233,6 +1229,10 @@ export default function OrderDetailsPage({
                   <span className="val">{formatLkr(order.deliveryFee)}</span>
                 </div>
 
+                <div className="invoice-calc-row">
+                  <span>Taxes (VAT 0%)</span>
+                  <span className="val">{formatLkr(0)}</span>
+                </div>
 
                 <div className="invoice-calc-row total-row">
                   <span>Total Amount</span>
@@ -1328,7 +1328,7 @@ export default function OrderDetailsPage({
 
                 <div style={{ textAlign: "center", marginTop: "12px" }}>
                   <Link
-                    href="mailto:vergo.wearofficial@gmail.com"
+                    href="mailto:vergo-support@example.com"
                     style={{
                       fontSize: "12px",
                       color: "rgba(255,255,255,0.4)",

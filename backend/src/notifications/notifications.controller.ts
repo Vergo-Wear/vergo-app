@@ -1,12 +1,9 @@
 import {
-  Body,
   Controller,
-  Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
-  Post,
   UseGuards,
 } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
@@ -17,26 +14,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('notifications')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
-@Roles('Customer', 'Admin', 'Employee', 'Branch Manager')
+@Roles('Customer')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
-
-  @Post('request-stock')
-  @Roles('Employee', 'Admin', 'Branch Manager')
-  requestStock(
-    @CurrentUser() profileId: string,
-    @Body()
-    dto: {
-      sku: string;
-      productName?: string;
-      size?: string;
-      color?: string;
-      quantity: number;
-      notes?: string;
-    },
-  ) {
-    return this.notificationsService.requestStock(profileId, dto);
-  }
 
   @Get()
   getMyNotifications(@CurrentUser() profileId: string) {
@@ -64,27 +44,6 @@ export class NotificationsController {
     @CurrentUser() profileId: string,
     @Param('id', new ParseUUIDPipe({ version: '4' })) notificationId: string,
   ) {
-    return this.notificationsService.setReadStatus(profileId, notificationId, true);
-  }
-
-  @Patch(':id/unread')
-  markAsUnread(
-    @CurrentUser() profileId: string,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) notificationId: string,
-  ) {
-    return this.notificationsService.setReadStatus(profileId, notificationId, false);
-  }
-
-  @Delete('all')
-  deleteAllNotifications(@CurrentUser() profileId: string) {
-    return this.notificationsService.deleteAllNotifications(profileId);
-  }
-
-  @Delete(':id')
-  deleteNotification(
-    @CurrentUser() profileId: string,
-    @Param('id', new ParseUUIDPipe({ version: '4' })) notificationId: string,
-  ) {
-    return this.notificationsService.deleteNotification(profileId, notificationId);
+    return this.notificationsService.markAsRead(profileId, notificationId);
   }
 }
