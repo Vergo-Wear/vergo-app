@@ -69,7 +69,6 @@ export default function Footer() {
 
       if (response.ok) {
         setContactSuccess("Your message has been sent successfully!");
-        alert("Your message has been sent successfully!");
         setFormData({
           fullName: "",
           email: "",
@@ -82,11 +81,9 @@ export default function Footer() {
         }, 2000);
       } else {
         setContactError("Unable to send your message. Please try again.");
-        alert("Unable to send your message. Please try again.");
       }
     } catch (err) {
       setContactError("Failed to send message. Connection error.");
-      alert("Failed to send message. Please check your connection.");
     }
   };
 
