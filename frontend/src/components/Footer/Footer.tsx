@@ -193,7 +193,7 @@ export default function Footer() {
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      placeholder="Kavindya@gmail.com"
+                      placeholder="kavindya@gmail.com"
                       required
                     />
                   </div>
