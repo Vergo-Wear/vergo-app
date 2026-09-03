@@ -109,8 +109,8 @@ export class AppController {
   }
 
   @Post('/contact')
-  createContactMessage(@Body() dto: ContactMessageDto) {
-    return this.prisma.contactMessage.create({
+  async createContactMessage(@Body() dto: ContactMessageDto) {
+    const created = await this.prisma.contactMessage.create({
       data: {
         fullName: dto.fullName.trim(),
         email: dto.email.trim().toLowerCase(),
@@ -118,5 +118,27 @@ export class AppController {
         message: dto.message.trim(),
       },
     });
+
+    try {
+      const googleFormUrl =
+        'https://docs.google.com/forms/u/0/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/formResponse';
+      const formParams = new URLSearchParams();
+      formParams.append('entry.50538087', dto.fullName.trim());
+      formParams.append('entry.1769001761', dto.email.trim());
+      formParams.append('entry.735047467', dto.subject.trim());
+      formParams.append('entry.865540735', dto.message.trim());
+
+      await fetch(googleFormUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formParams.toString(),
+      });
+    } catch (err) {
+      this.logger.warn(`Google Form submission background error: ${err}`);
+    }
+
+    return created;
   }
 }
