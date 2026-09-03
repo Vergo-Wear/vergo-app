@@ -37,6 +37,14 @@ export default function Footer() {
   });
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactSuccess, setContactSuccess] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailValid = emailRegex.test(formData.email.trim());
@@ -68,22 +76,19 @@ export default function Footer() {
       });
 
       if (response.ok) {
-        setContactSuccess("Your message has been sent successfully!");
+        setToast({ message: "Your message has been sent successfully!", type: "success" });
         setFormData({
           fullName: "",
           email: "",
           subject: "General Inquiry",
           message: "",
         });
-        setTimeout(() => {
-          setActiveModal(null);
-          setContactSuccess(null);
-        }, 2000);
+        setActiveModal(null);
       } else {
-        setContactError("Unable to send your message. Please try again.");
+        setToast({ message: "Unable to send your message. Please try again.", type: "error" });
       }
     } catch (err) {
-      setContactError("Failed to send message. Connection error.");
+      setToast({ message: "Failed to send message. Connection error.", type: "error" });
     }
   };
 
@@ -325,6 +330,29 @@ export default function Footer() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification Alert */}
+      {toast && (
+        <div
+          className={`fixed top-6 right-6 z-[9999] flex items-center gap-3 px-5 py-3.5 rounded-lg shadow-2xl backdrop-blur-md transition-all duration-300 ${
+            toast.type === "success"
+              ? "bg-[#0c0c0e]/95 text-[#00FF9D] border border-[#00FF9D]/40"
+              : "bg-[#0c0c0e]/95 text-[#ff4d4d] border border-[#ff4d4d]/40"
+          }`}
+          style={{ minWidth: "300px" }}
+        >
+          {toast.type === "success" ? (
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          <span className="text-xs font-semibold tracking-wide text-white">{toast.message}</span>
         </div>
       )}
     </footer>
