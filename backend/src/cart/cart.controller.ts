@@ -8,7 +8,7 @@ import { SaveCartDto } from './dto/save-cart.dto';
 
 @Controller('cart')
 @UseGuards(SupabaseAuthGuard, RolesGuard)
-@Roles('Customer', 'Admin', 'Employee')
+@Roles('Customer')
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 

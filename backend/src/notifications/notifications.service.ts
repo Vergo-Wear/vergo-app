@@ -59,13 +59,9 @@ export class NotificationsService {
    * customer can never mark another customer's notification.
    */
   async markAsRead(profileId: string, notificationId: string) {
-    return this.setReadStatus(profileId, notificationId, true);
-  }
-
-  async setReadStatus(profileId: string, notificationId: string, isRead: boolean) {
     const result = await this.prisma.notification.updateMany({
       where: { notificationId, recipientProfileId: profileId },
-      data: { isRead },
+      data: { isRead: true },
     });
     if (result.count === 0) {
       throw new NotFoundException('Notification not found.');
@@ -74,44 +70,6 @@ export class NotificationsService {
       where: { notificationId, recipientProfileId: profileId },
       select: notificationSelect,
     });
-  }
-
-  async deleteNotification(profileId: string, notificationId: string) {
-    try {
-      const result = await this.prisma.notification.deleteMany({
-        where: {
-          notificationId,
-          OR: [
-            { recipientProfileId: profileId },
-            { recipientProfileId: null },
-          ],
-        },
-      });
-      if (result.count === 0) {
-        await this.prisma.notification.deleteMany({
-          where: { notificationId },
-        });
-      }
-    } catch (e) {
-      this.logger.error(`Error deleting notification ${notificationId}`, e);
-    }
-    return { success: true };
-  }
-
-  async deleteAllNotifications(profileId: string) {
-    try {
-      await this.prisma.notification.deleteMany({
-        where: {
-          OR: [
-            { recipientProfileId: profileId },
-            { recipientProfileId: null },
-          ],
-        },
-      });
-    } catch (e) {
-      this.logger.error(`Error deleting all notifications for profile ${profileId}`, e);
-    }
-    return { success: true };
   }
 
   /**
@@ -247,83 +205,6 @@ export class NotificationsService {
       // break the order workflow.
       this.logger.error(
         `Failed to create ORDER_READY notification for order ${orderId}`,
-        error,
-      );
-    }
-  }
-
-  /**
-   * Generic Status Update Notification for Logged-In Customers ONLY.
-   * Fired whenever an Admin or Employee updates the status of an order.
-   * IGNORES guest customers completely (only sends if order.customerId / recipientProfileId exists).
-   */
-  async notifyOrderStatusUpdate(
-    orderId: string,
-    newStatus: string,
-  ): Promise<void> {
-    try {
-      const order = await this.prisma.orders.findUnique({
-        where: { orderId },
-        select: {
-          orderId: true,
-          customerId: true,
-          customer: {
-            select: {
-              profileId: true,
-              firstName: true,
-              email: true,
-            },
-          },
-        },
-      });
-
-      // Strictly enforce: No notifications sent to guest customers (only logged-in registered customers with customerId & profileId)
-      if (!order || !order.customerId || !order.customer?.profileId) {
-        return;
-      }
-
-      const profileId = order.customer.profileId;
-      const formattedNum = orderNumber(orderId);
-
-      let title = `Order Status Update: ${newStatus}`;
-      let message = `Your order ${formattedNum} status has been updated to "${newStatus}".`;
-
-      const st = newStatus.trim().toLowerCase();
-      if (st.includes('approved')) {
-        title = 'Order Approved';
-        message = `Your order ${formattedNum} has been approved by the store manager.`;
-      } else if (st.includes('preparing') || st.includes('package preparing') || st.includes('package prepared')) {
-        title = 'Package Preparing';
-        message = `Our team is now preparing the items for order ${formattedNum}.`;
-      } else if (st.includes('ready')) {
-        title = 'Ready for Courier Pickup';
-        message = `Order ${formattedNum} is packed and staged for courier pickup.`;
-      } else if (st.includes('handed') || st.includes('sent')) {
-        title = 'Handed to Courier';
-        message = `Order ${formattedNum} has been handed to Citypak Courier and is on its way!`;
-      } else if (st.includes('returned')) {
-        title = 'Parcel Returned';
-        message = `Delivery attempt for order ${formattedNum} was returned to the warehouse.`;
-      } else if (st.includes('complete') || st.includes('finish') || st.includes('deliver')) {
-        title = 'Order Completed';
-        message = `Order ${formattedNum} has been successfully completed. Thank you for shopping with Vergo Wear!`;
-      }
-
-      await this.createNotification({
-        recipientProfileId: profileId,
-        orderId,
-        channel: 'IN_APP',
-        type: NotificationType.ORDER_READY,
-        title,
-        message,
-      });
-
-      this.logger.log(
-        `Sent status update (${newStatus}) notification to logged-in customer ${profileId} for order ${orderId}`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to send status update notification for order ${orderId}`,
         error,
       );
     }
@@ -473,16 +354,6 @@ export class NotificationsService {
         once: true,
       });
 
-      if (approved) {
-        await this.notifyEmployees(
-          'New Order Approved',
-          `Order ${reference} has been approved by admin and is ready for processing.`,
-          checkout.order?.orderId ?? null,
-          checkoutId,
-          NotificationType.ORDER_CREATED,
-        );
-      }
-
       if (isBank && !approved) {
         await this.email.sendPaymentRejectedEmail({
           to: recipient.email,
@@ -499,42 +370,17 @@ export class NotificationsService {
     }
   }
 
-  async notifyOrderCreated(checkoutId: string): Promise<void> {
-    try {
-      await this.notifyAdmins(
-        'New Order Received',
-        `A new order ${orderNumber(checkoutId)} has been placed by a customer.`,
-        checkoutId,
-        NotificationType.ORDER_CREATED,
-        true,
-      );
-    } catch (error) {
-      this.logger.error(`Failed to notify admins for new order ${checkoutId}`, error);
-    }
-  }
-
-  private async notifyAdmins(
-    title: string,
-    message: string,
-    id: string | null = null,
-    type: NotificationType = NotificationType.ORDER_CREATED,
-    isCheckout = false,
-  ) {
+  private async notifyAdmins(title: string, message: string, orderId: string, type: NotificationType) {
     try {
       const adminProfiles = await this.prisma.profiles.findMany({
-        where: {
-          role: {
-            roleName: { in: ['Admin', 'admin', 'ADMIN'], mode: 'insensitive' },
-          },
-        },
+        where: { role: { roleName: 'Admin' } },
         select: { id: true },
       });
 
       for (const admin of adminProfiles) {
         await this.createNotification({
           recipientProfileId: admin.id,
-          orderId: isCheckout ? null : id,
-          checkoutId: isCheckout ? id : null,
+          orderId,
           channel: 'IN_APP',
           type,
           title: `[Logistics Alert] ${title}`,
@@ -542,46 +388,7 @@ export class NotificationsService {
         });
       }
     } catch (err) {
-      this.logger.error(`Failed to notify admins for ${id}`, err);
-    }
-  }
-
-  private async notifyEmployees(
-    title: string,
-    message: string,
-    orderId?: string | null,
-    checkoutId?: string | null,
-    type: NotificationType = NotificationType.ORDER_CREATED,
-  ) {
-    try {
-      const employeeProfiles = await this.prisma.profiles.findMany({
-        where: {
-          role: {
-            roleName: {
-              equals: 'Employee',
-              mode: 'insensitive',
-            },
-          },
-        },
-        select: { id: true },
-      });
-
-      for (const employee of employeeProfiles) {
-        await this.createNotification({
-          recipientProfileId: employee.id,
-          orderId: orderId ?? null,
-          checkoutId: checkoutId ?? null,
-          channel: 'IN_APP',
-          type,
-          title: `[Order Update] ${title}`,
-          message,
-        });
-      }
-    } catch (err) {
-      this.logger.error(
-        `Failed to notify employees for ${orderId || checkoutId}`,
-        err,
-      );
+      this.logger.error(`Failed to notify admins for order ${orderId}`, err);
     }
   }
 
@@ -699,85 +506,5 @@ export class NotificationsService {
     } catch (error) {
       this.logger.error(`Failed to create ORDER_RETURNED notification for ${orderId}`, error);
     }
-  }
-
-  /**
-   * ORDER_CLAIMED — fired when an employee claims an order.
-   * Sends an admin notification: "Order <id> is taken by <employee name> (<branch name>)"
-   */
-  async notifyOrderClaimed(
-    orderId: string,
-    employeeName: string,
-    branchName?: string,
-  ): Promise<void> {
-    try {
-      const displayOrderId = orderNumber(orderId);
-      const branchText = branchName ? ` (${branchName})` : '';
-      const message = `Order ${displayOrderId} is taken by ${employeeName}${branchText}`;
-
-      await this.notifyAdmins(
-        'Order Taken',
-        message,
-        orderId,
-        NotificationType.ORDER_READY,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to create ORDER_CLAIMED notification for order ${orderId}`,
-        error,
-      );
-    }
-  }
-
-  /**
-   * STOCK_REQUEST — fired when an employee requests stock from Admin.
-   * Sends an admin notification detailing the requested product, SKU, quantity, and employee info.
-   */
-  async requestStock(
-    profileId: string,
-    dto: {
-      sku: string;
-      productName?: string;
-      size?: string;
-      color?: string;
-      quantity: number;
-      notes?: string;
-    },
-  ) {
-    let employeeName = 'Employee';
-    try {
-      const employee = await this.prisma.employee.findFirst({
-        where: { profileId },
-      });
-      if (employee) {
-        employeeName = `${employee.firstName} ${employee.lastName}`.trim();
-      } else {
-        const profile = await this.prisma.profiles.findUnique({
-          where: { id: profileId },
-        });
-        if (profile) {
-          employeeName = (profile as any).email || profile.username || 'Employee';
-        }
-      }
-    } catch (e) {
-      this.logger.warn(`Could not resolve employee profile for ${profileId}`, e);
-    }
-
-    const title = `Stock Request: ${dto.productName || dto.sku}`;
-    const variantInfo = [dto.size ? `Size: ${dto.size}` : null, dto.color ? `Color: ${dto.color}` : null]
-      .filter(Boolean)
-      .join(' / ');
-    const variantText = variantInfo ? ` (${variantInfo})` : '';
-    const notesText = dto.notes ? ` Notes: ${dto.notes}` : '';
-    const message = `${employeeName} requested ${dto.quantity} units of ${dto.productName || 'product'} [SKU: ${dto.sku}]${variantText}.${notesText}`;
-
-    await this.notifyAdmins(
-      title,
-      message,
-      null,
-      NotificationType.STOCK_REQUEST,
-    );
-
-    return { success: true, message: 'Stock request notification sent to Admin.' };
   }
 }

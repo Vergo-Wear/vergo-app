@@ -24,8 +24,6 @@ export default function EmployeeDashboard() {
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  const [dbLeaderboard, setDbLeaderboard] = useState<any[]>([]);
-
   useEffect(() => {
     const localUserRaw = typeof window !== "undefined" ? sessionStorage.getItem("vergo_user") : null;
     const localUser = localUserRaw ? JSON.parse(localUserRaw) : null;
@@ -43,13 +41,6 @@ export default function EmployeeDashboard() {
     } else {
       setLoadingProfile(false);
     }
-
-    fetch(`${apiUrl}/employees/leaderboard`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (Array.isArray(data)) setDbLeaderboard(data);
-      })
-      .catch((err) => console.warn("Failed to fetch employee leaderboard:", err));
   }, []);
 
   const localUserRaw = typeof window !== "undefined" ? sessionStorage.getItem("vergo_user") : null;
@@ -85,7 +76,7 @@ export default function EmployeeDashboard() {
   // Filter tasks that are pending
   const pendingTasks = pickingQueue.filter(t => t.status === "pending").slice(0, 5);
 
-  // Dynamic Leaderboard data from DB
+  // Dynamic Leaderboard data
   const userInitials = employeeName
     .split(" ")
     .map((n: string) => n[0])
@@ -93,20 +84,16 @@ export default function EmployeeDashboard() {
     .toUpperCase()
     .slice(0, 2);
 
-  const leaderboardToDisplay = dbLeaderboard.length > 0
-    ? dbLeaderboard.map((item) => ({
-        rank: item.rank,
-        name: item.profileId === profileData?.profileId ? `${item.name} (You)` : item.name,
-        role: item.position || "Fulfillment Specialist",
-        items: item.items || 0,
-        isMe: item.profileId === profileData?.profileId,
-        initials: item.initials || "EM",
-      }))
-    : [
-        { rank: 1, name: `${employeeName} (You)`, role: employeeRole, items: dailyTotal, isMe: true, initials: userInitials },
-      ];
+  const leaderboard = [
+    { rank: 1, name: "Elena S.", role: "Night Shift Lead", items: 1492, isMe: false, initials: "ES" },
+    { rank: 2, name: `${employeeName} (You)`, role: employeeRole, items: dailyTotal, isMe: true, initials: userInitials },
+    { rank: 3, name: "James K.", role: "Warehouse Assoc.", items: 1156, isMe: false, initials: "JK" },
+  ].sort((a, b) => b.items - a.items);
 
-  const lowStockAlerts = stockLevels.filter((s) => s.qty <= (s.lowStockLimit || 10));
+  // Assign ranks dynamically based on sorted items
+  leaderboard.forEach((item, index) => {
+    item.rank = index + 1;
+  });
 
   // Employee Metadata for PDF Report
   const employeeInfo = {
@@ -328,7 +315,159 @@ export default function EmployeeDashboard() {
         </div>
       </div>
 
+      {/* Logged-in Employee Summary Banner Card */}
+      <div
+        className="emp-card"
+        style={{
+          marginBottom: "24px",
+          background:
+            "linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(20, 20, 23, 0.95) 100%)",
+          border: "1px solid rgba(16, 185, 129, 0.2)",
+          padding: "20px 24px",
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "20px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div
+            style={{
+              width: "50px",
+              height: "50px",
+              borderRadius: "12px",
+              background: "rgba(16, 185, 129, 0.15)",
+              border: "1.5px solid rgba(16, 185, 129, 0.4)",
+              color: "#10b981",
+              fontWeight: 800,
+              fontSize: "17px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 4px 12px rgba(16, 185, 129, 0.15)",
+            }}
+          >
+            {userInitials}
+          </div>
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "17px",
+                  fontWeight: 800,
+                  color: "#ffffff",
+                  margin: 0,
+                }}
+              >
+                {employeeName}
+              </h2>
+              <span
+                className="emp-badge"
+                style={{
+                  backgroundColor: "rgba(16, 185, 129, 0.15)",
+                  color: "#10b981",
+                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                }}
+              >
+                {employeeRole}
+              </span>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontFamily: "monospace",
+                  color: "var(--emp-text-muted)",
+                  background: "rgba(255,255,255,0.05)",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                }}
+              >
+                {employeeId}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--emp-text-muted)",
+                marginTop: "4px",
+                display: "flex",
+                gap: "16px",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                Branch: <strong style={{ color: "#ffffff" }}>{branchName}</strong>
+              </span>
+              <span>
+                Email: <strong style={{ color: "#ffffff" }}>{email}</strong>
+              </span>
+              <span>
+                Phone:{" "}
+                <strong
+                  style={{ color: "#ffffff", fontFamily: "monospace" }}
+                >
+                  {phone}
+                </strong>
+              </span>
+            </div>
+          </div>
+        </div>
 
+        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+          <div style={{ textAlign: "right" }}>
+            <span
+              style={{
+                fontSize: "9px",
+                textTransform: "uppercase",
+                color: "var(--emp-text-muted)",
+                fontWeight: 700,
+                letterSpacing: "0.5px",
+                display: "block",
+              }}
+            >
+              COMMISSION RATE
+            </span>
+            <span
+              style={{ fontSize: "14px", fontWeight: 800, color: "#10b981" }}
+            >
+              {commissionText}
+            </span>
+          </div>
+          <div
+            style={{
+              width: "1px",
+              height: "28px",
+              background: "var(--emp-border)",
+            }}
+          ></div>
+          <div style={{ textAlign: "right" }}>
+            <span
+              style={{
+                fontSize: "9px",
+                textTransform: "uppercase",
+                color: "var(--emp-text-muted)",
+                fontWeight: 700,
+                letterSpacing: "0.5px",
+                display: "block",
+              }}
+            >
+              JOINED DATE
+            </span>
+            <span
+              style={{ fontSize: "13px", fontWeight: 700, color: "#ffffff" }}
+            >
+              {joinedDate}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* Stats Cards - Four Column Grid */}
       <div className="emp-stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
@@ -539,12 +678,12 @@ export default function EmployeeDashboard() {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 18, height: 18, color: "var(--emp-neon-green)" }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
-                <span>Leaderboard</span>
+                <span>Volume Leaderboard</span>
               </h2>
             </div>
 
             <div className="emp-leaderboard-list">
-              {leaderboardToDisplay.map((user) => (
+              {leaderboard.map((user) => (
                 <div key={user.name} className={`emp-leaderboard-item ${user.isMe ? "me" : ""}`}>
                   <div className="emp-leaderboard-left">
                     <div className={`emp-user-avatar-circle ${user.rank === 1 ? "rank-1" : ""}`}>
@@ -578,15 +717,15 @@ export default function EmployeeDashboard() {
             </div>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
-              {lowStockAlerts.length === 0 ? (
+              {stockLevels.filter(s => s.qty < 10).length === 0 ? (
                 <div style={{ color: "var(--emp-neon-green)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", padding: "10px 0" }}>
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ width: 16, height: 16 }}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>All database stock levels are optimal.</span>
+                  <span>All stock levels are optimal.</span>
                 </div>
               ) : (
-                lowStockAlerts.slice(0, 5).map(stock => (
+                stockLevels.filter(s => s.qty < 10).map(stock => (
                   <div
                     key={stock.id}
                     style={{
@@ -600,15 +739,13 @@ export default function EmployeeDashboard() {
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: "13px", fontWeight: 700 }}>
-                        {stock.name} {[stock.color, stock.size].filter(Boolean).length > 0 ? `(${[stock.color, stock.size].filter(Boolean).join(" / ")})` : ""}
-                      </div>
+                      <div style={{ fontSize: "13px", fontWeight: 700 }}>{stock.name}</div>
                       <div style={{ fontSize: "11px", color: "var(--emp-text-muted)" }}>SKU: {stock.sku}</div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <span style={{ fontSize: "12px", fontWeight: 800 }}>{stock.qty} units</span>
                       {stock.qty < 5 ? (
-                        <span className="emp-badge red" style={{ fontSize: "8.5px", padding: "1px 5px" }}>Critical Low</span>
+                        <span className="emp-badge red" style={{ fontSize: "8.5px", padding: "1px 5px" }}>Low Stock</span>
                       ) : (
                         <span className="emp-badge" style={{ fontSize: "8.5px", padding: "1px 5px", backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>Low Stock</span>
                       )}

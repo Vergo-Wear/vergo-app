@@ -21,7 +21,6 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { CustomizationModule } from './customization/customization.module';
 import { StockReservationModule } from './stock-reservation/stock-reservation.module';
 import { CitypakModule } from './integrations/citypak/citypak.module';
-import { DeliveryFeesModule } from './delivery-fees/delivery-fees.module';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -51,7 +50,6 @@ import { ScheduleModule } from '@nestjs/schedule';
     CustomizationModule,
     StockReservationModule,
     CitypakModule,
-    DeliveryFeesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
