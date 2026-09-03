@@ -58,6 +58,7 @@ export default function PaymentPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showPaymentSelectionToast, setShowPaymentSelectionToast] =
     useState(false);
+  const [hoverPaymentError, setHoverPaymentError] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   const [reservationExpiresAt, setReservationExpiresAt] = useState<
@@ -78,6 +79,176 @@ export default function PaymentPage() {
   const subtotalLkr = cartSubtotal;
   const deliveryFee = shippingInfo?.deliveryFee || 0;
   const grandTotalLkr = subtotalLkr + deliveryFee;
+
+  const handleDownloadOrderPdf = useCallback(() => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const orderDate = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const escapeHtml = (str: string | undefined | null) =>
+      String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    const itemsHtml = itemsToDisplay
+      .map((item) => {
+        const price = item.product.lkrPrice
+          ? parseFloat(item.product.lkrPrice.replace(/LKR/g, "").replace(/,/g, "").trim())
+          : 0;
+        const itemTotal = price * item.quantity;
+        return `
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #eeeeee;">
+              <strong style="font-size: 14px;">${escapeHtml(item.product.name)}</strong><br/>
+              <span style="font-size: 12px; color: #666666;">Size: ${escapeHtml(item.size)} | Color: ${escapeHtml(item.color || item.product.colors?.[0] || "Default")}</span>
+            </td>
+            <td style="padding: 12px; border-bottom: 1px solid #eeeeee; text-align: center; font-size: 14px;">${item.quantity}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eeeeee; text-align: right; font-size: 14px;">${formatLkr(price)}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eeeeee; text-align: right; font-weight: bold; font-size: 14px;">${formatLkr(itemTotal)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const refNo = orderId ? `#${orderId}` : "N/A";
+    const selectedPayMethod = paymentMethod === "bank_transfer" ? "Direct Bank Transfer" : "Cash on Delivery (COD)";
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>VERGO WEAR - Order ${escapeHtml(refNo)}</title>
+          <style>
+            body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111111; padding: 40px; margin: 0; background: #ffffff; }
+            .invoice-container { max-width: 800px; margin: 0 auto; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111111; padding-bottom: 20px; margin-bottom: 30px; }
+            .brand-name { font-size: 32px; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; color: #000000; }
+            .brand-subtitle { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #666666; margin-top: 4px; }
+            .invoice-meta { text-align: right; }
+            .invoice-title { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #555555; }
+            .order-ref { font-size: 18px; font-weight: 900; color: #111111; margin-top: 4px; font-family: monospace; }
+            .date-stamp { font-size: 12px; color: #666666; margin-top: 4px; }
+            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
+            .info-card { background: #fafafa; border: 1px solid #eeeeee; border-radius: 8px; padding: 18px; }
+            .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; color: #888888; margin-bottom: 10px; border-bottom: 1px solid #eeeeee; padding-bottom: 6px; }
+            .info-content { font-size: 13px; line-height: 1.6; color: #222222; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            th { background: #f4f4f4; padding: 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #444444; border-bottom: 2px solid #dddddd; }
+            .totals-container { display: flex; justify-content: flex-end; margin-bottom: 30px; }
+            .totals-table { width: 320px; }
+            .totals-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; color: #444444; }
+            .grand-total-row { border-top: 2px solid #111111; padding-top: 12px; margin-top: 8px; font-weight: 900; font-size: 17px; color: #000000; }
+            .payment-badge-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; font-size: 13px; margin-bottom: 40px; display: flex; justify-content: space-between; align-items: center; }
+            .footer { border-top: 1px solid #eeeeee; padding-top: 24px; text-align: center; font-size: 12px; color: #777777; }
+            @media print {
+              body { padding: 0; }
+              @page { margin: 1.5cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-container">
+            <div class="header">
+              <div>
+                <div class="brand-name">VERGO WEAR</div>
+                <div class="brand-subtitle">Official Order Confirmation Invoice</div>
+              </div>
+              <div class="invoice-meta">
+                <div class="invoice-title">Order Receipt</div>
+                <div class="order-ref">${escapeHtml(refNo)}</div>
+                <div class="date-stamp">Date: ${escapeHtml(orderDate)}</div>
+              </div>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-card">
+                <div class="section-title">Customer Information</div>
+                <div class="info-content">
+                  <strong>${escapeHtml(contactInfo?.firstName || "")} ${escapeHtml(contactInfo?.lastName || "")}</strong><br/>
+                  Email: ${escapeHtml(contactInfo?.email || "N/A")}<br/>
+                  Phone: ${escapeHtml(contactInfo?.phone || "N/A")}
+                </div>
+              </div>
+              <div class="info-card">
+                <div class="section-title">Shipping Destination</div>
+                <div class="info-content">
+                  <strong>${escapeHtml(shippingInfo?.receiverName || ((contactInfo?.firstName || "") + " " + (contactInfo?.lastName || "")))}</strong><br/>
+                  ${escapeHtml(shippingInfo?.addressLine1 || "")}${shippingInfo?.addressLine2 ? ", " + escapeHtml(shippingInfo.addressLine2) : ""}<br/>
+                  ${escapeHtml(shippingInfo?.city || "")}, ${escapeHtml(shippingInfo?.district || "")} ${shippingInfo?.postalCode ? `(${escapeHtml(shippingInfo.postalCode)})` : ""}<br/>
+                  Phone: ${escapeHtml(shippingInfo?.receiverPhone || contactInfo?.phone || "N/A")}
+                </div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Item Details</th>
+                  <th style="text-align: center;">Qty</th>
+                  <th style="text-align: right;">Unit Price</th>
+                  <th style="text-align: right;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+
+            <div class="totals-container">
+              <div class="totals-table">
+                <div class="totals-row">
+                  <span>Product Subtotal:</span>
+                  <span>${formatLkr(subtotalLkr)}</span>
+                </div>
+                <div class="totals-row">
+                  <span>Delivery Fee:</span>
+                  <span>${formatLkr(deliveryFee)}</span>
+                </div>
+                <div class="totals-row grand-total-row">
+                  <span>Total Amount:</span>
+                  <span>${formatLkr(grandTotalLkr)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="payment-badge-box">
+              <div>
+                <strong>Payment Option:</strong> ${selectedPayMethod}<br/>
+                <span style="font-size: 12px; color: #666666;">Status: Pending Confirmation</span>
+              </div>
+              <div style="font-weight: 800; font-size: 16px; color: #111111;">
+                ${formatLkr(grandTotalLkr)}
+              </div>
+            </div>
+
+            <div class="footer">
+              Thank you for shopping with <strong>VERGO WEAR</strong>.<br/>
+              This is a computer-generated invoice for your online purchase.
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }, [itemsToDisplay, orderId, paymentMethod, contactInfo, shippingInfo, subtotalLkr, deliveryFee, grandTotalLkr, formatLkr]);
 
   const createCheckoutPayload = useCallback(
     (method: "cod" | "bank_transfer") => ({
@@ -122,6 +293,18 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const handleBeforeUnload = () => {
+        sessionStorage.setItem("vergo_checkout_is_reloading", "true");
+      };
+      window.addEventListener("beforeunload", handleBeforeUnload);
+
+      const isReloading = sessionStorage.getItem("vergo_checkout_is_reloading") === "true";
+      if (isReloading) {
+        sessionStorage.removeItem("vergo_checkout_is_reloading");
+        router.replace("/cart");
+        return;
+      }
+
       const forcedGuest =
         localStorage.getItem("vergo_checkout_as_guest") === "true";
       const storedUser = sessionStorage.getItem("vergo_user");
@@ -508,6 +691,7 @@ export default function PaymentPage() {
         grandTotalLkr={grandTotalLkr}
         formatLkr={formatLkr}
         onClose={handleFinishCheckout}
+        onDownloadPdf={handleDownloadOrderPdf}
         onExpired={() => {
           clearCart();
           localStorage.removeItem("vergo_checkout_contact");
@@ -672,7 +856,7 @@ export default function PaymentPage() {
                 border:
                   paymentMethod === "bank_transfer"
                     ? "1.5px solid #00FF9D"
-                    : showPaymentSelectionToast && !paymentMethod
+                    : (hoverPaymentError || showPaymentSelectionToast) && !paymentMethod && isLoggedIn
                       ? "1.5px solid #ff453a"
                       : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
@@ -685,6 +869,7 @@ export default function PaymentPage() {
                 if (isLoggedIn) {
                   setIsChoosingAlternativePayment(false);
                   setShowPaymentSelectionToast(false);
+                  setHoverPaymentError(false);
                   setPaymentMethod("bank_transfer");
                 }
               }}
@@ -771,7 +956,7 @@ export default function PaymentPage() {
                 border:
                   paymentMethod === "cod"
                     ? "1.5px solid #00FF9D"
-                    : showPaymentSelectionToast && !paymentMethod
+                    : (hoverPaymentError || showPaymentSelectionToast) && !paymentMethod
                       ? "1.5px solid #ff453a"
                       : "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "12px",
@@ -782,6 +967,7 @@ export default function PaymentPage() {
               onClick={() => {
                 setIsChoosingAlternativePayment(true);
                 setShowPaymentSelectionToast(false);
+                setHoverPaymentError(false);
                 setPaymentMethod("cod");
               }}
             >
@@ -892,11 +1078,7 @@ export default function PaymentPage() {
               </span>
             </div>
 
-            {/* Taxes */}
-            <div className="summary-calc-row">
-              <span className="summary-calc-label">Taxes</span>
-              <span className="summary-calc-value">{formatLkr(0)}</span>
-            </div>
+
 
             <hr className="summary-card-divider" />
 
@@ -937,20 +1119,33 @@ export default function PaymentPage() {
               >
                 Back
               </button>
-              <button
-                type="button"
-                disabled={isSubmitting || isCheckingActiveReservation}
-                className="submit-btn"
-                onClick={handlePlaceOrder}
+              <div
+                style={{ width: "100%", display: "inline-block" }}
+                onMouseEnter={() => {
+                  if (!paymentMethod) setHoverPaymentError(true);
+                }}
+                onMouseLeave={() => {
+                  setHoverPaymentError(false);
+                }}
               >
-                {isCheckingActiveReservation
-                  ? "Checking payment..."
-                  : isSubmitting
-                    ? "Processing..."
-                    : paymentMethod === "bank_transfer"
-                      ? "Proceed"
-                      : "Submit"}
-              </button>
+                <button
+                  type="button"
+                  disabled={
+                    isSubmitting || isCheckingActiveReservation || !paymentMethod
+                  }
+                  className="submit-btn"
+                  onClick={handlePlaceOrder}
+                  style={{ width: "100%" }}
+                >
+                  {isCheckingActiveReservation
+                    ? "Checking payment..."
+                    : isSubmitting
+                      ? "Processing..."
+                      : paymentMethod === "bank_transfer"
+                        ? "Proceed"
+                        : "Submit"}
+                </button>
+              </div>
             </div>
           </div>
         </aside>
@@ -1022,11 +1217,48 @@ export default function PaymentPage() {
                 Pending Checkout Reference: <strong>#{orderId}</strong>
               </span>
             </p>
-            <div className="modal-buttons-container">
+            <div className="modal-buttons-container" style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
+              <button
+                type="button"
+                className="modal-secondary-btn"
+                onClick={handleDownloadOrderPdf}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  padding: "14px 20px",
+                  backgroundColor: "rgba(255, 255, 255, 0.06)",
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
+                  borderRadius: "8px",
+                  color: "#ffffff",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#00FF9D"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Download Order PDF
+              </button>
               <button
                 type="button"
                 className="modal-primary-btn"
-                style={{ backgroundColor: "#00FF9D" }}
+                style={{ backgroundColor: "#00FF9D", padding: "14px 20px" }}
                 onClick={handleFinishCheckout}
               >
                 Back to Homepage
@@ -1046,6 +1278,7 @@ interface BankTransferFlowProps {
   grandTotalLkr: number;
   formatLkr: (val: number) => string;
   onClose: () => void;
+  onDownloadPdf?: () => void;
   onExpired: () => void;
   onBackToPaymentSelection?: () => void;
 }
@@ -1069,6 +1302,7 @@ function BankTransferFlow({
   grandTotalLkr,
   formatLkr,
   onClose,
+  onDownloadPdf,
   onExpired,
   onBackToPaymentSelection,
 }: BankTransferFlowProps) {
@@ -2055,7 +2289,7 @@ function BankTransferFlow({
                   lineHeight: "1.4",
                 }}
               >
-                Total amount includes standard delivery fee and tax.
+                Total amount includes standard delivery fee.
               </div>
             </div>
           </div>
@@ -2837,11 +3071,50 @@ function BankTransferFlow({
                 Pending Checkout Reference: <strong>#{orderId}</strong>
               </span>
             </p>
-            <div className="modal-buttons-container">
+            <div className="modal-buttons-container" style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
+              {onDownloadPdf && (
+                <button
+                  type="button"
+                  className="modal-secondary-btn"
+                  onClick={onDownloadPdf}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    padding: "14px 20px",
+                    backgroundColor: "rgba(255, 255, 255, 0.06)",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    borderRadius: "8px",
+                    color: "#ffffff",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#00FF9D"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Download Order PDF
+                </button>
+              )}
               <button
                 type="button"
                 className="modal-primary-btn"
-                style={{ backgroundColor: "#00FF9D" }}
+                style={{ backgroundColor: "#00FF9D", padding: "14px 20px" }}
                 onClick={onClose}
               >
                 Back to Homepage

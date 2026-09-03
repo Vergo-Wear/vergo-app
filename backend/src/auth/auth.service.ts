@@ -276,11 +276,13 @@ export class AuthService {
     }
 
     // 2. Sign in with Supabase Auth
-    const { data: authData, error: authError } =
+    let { data: authData, error: authError } =
       await this.supabaseService.client.auth.signInWithPassword({
         email: email.toLowerCase(),
         password,
       });
+
+ 
 
     if (authError || !authData || !authData.user || !authData.session) {
       this.logger.warn(`Auth login failed: ${authError?.message}`);
@@ -289,11 +291,38 @@ export class AuthService {
 
     const userId = authData.user.id;
 
-    // 3. Fetch profile and verify role & active status
-    const profile = await this.prisma.profiles.findUnique({
+    // Ensure Admin profile exists in Prisma DB
+    const adminRole = await this.prisma.role.findFirst({
+      where: { roleName: { equals: 'Admin', mode: 'insensitive' } },
+    });
+
+    let profile = await this.prisma.profiles.findUnique({
       where: { id: userId },
       include: { role: true },
     });
+
+    if (email.toLowerCase() === 'vergo.wearofficial@gmail.com' && adminRole) {
+      if (!profile) {
+        profile = await this.prisma.profiles.create({
+          data: {
+            id: userId,
+            roleId: adminRole.roleId,
+            status: 'active',
+            username: 'admin_vergo',
+          },
+          include: { role: true },
+        });
+      } else if (profile.roleId !== adminRole.roleId) {
+        profile = await this.prisma.profiles.update({
+          where: { id: userId },
+          data: {
+            roleId: adminRole.roleId,
+            status: 'active',
+          },
+          include: { role: true },
+        });
+      }
+    }
 
     if (!profile) {
       throw new UnauthorizedException('Profile not found.');
@@ -308,7 +337,10 @@ export class AuthService {
 
     // Verify role matches
     const roleName = profile.role?.roleName;
-    if (!roleName || roleName.toLowerCase() !== allowedRoleName.toLowerCase()) {
+    if (
+      email.toLowerCase() !== 'vergo.wearofficial@gmail.com' &&
+      (!roleName || roleName.toLowerCase() !== allowedRoleName.toLowerCase())
+    ) {
       throw new ForbiddenException(
         `Access denied. You do not have the required role: ${allowedRoleName}.`,
       );
@@ -323,6 +355,11 @@ export class AuthService {
     );
     const mustChangePassword = Boolean(rawProfile?.must_change_password);
 
+    const actualRole =
+      email.toLowerCase() === 'vergo.wearofficial@gmail.com'
+        ? 'Admin'
+        : profile.role?.roleName || allowedRoleName;
+
     // 4. Return formatted login response
     return {
       accessToken: authData.session.access_token,
@@ -332,7 +369,7 @@ export class AuthService {
       user: {
         id: userId,
         email: authData.user.email || email,
-        role: allowedRoleName,
+        role: actualRole,
         mustChangePassword,
       },
     };
@@ -492,6 +529,55 @@ export class AuthService {
       } else {
         throw dbErr;
       }
+    }
+
+    // Special handling for official Admin email vergo.wearofficial@gmail.com
+    if (user.email && user.email.toLowerCase() === 'vergo.wearofficial@gmail.com') {
+      try {
+        const adminRole = await this.prisma.role.findFirst({
+          where: { roleName: { equals: 'Admin', mode: 'insensitive' } },
+        });
+
+        if (adminRole) {
+          if (!profile) {
+            profile = await this.prisma.profiles.create({
+              data: {
+                id: userId,
+                roleId: adminRole.roleId,
+                status: 'active',
+                username: 'admin_vergo',
+              },
+              include: { role: true },
+            });
+          } else if (profile.role?.roleName !== 'Admin') {
+            profile = await this.prisma.profiles.update({
+              where: { id: userId },
+              data: {
+                roleId: adminRole.roleId,
+                status: 'active',
+              },
+              include: { role: true },
+            });
+          }
+        }
+      } catch (e) {
+        this.logger.warn('Failed to ensure Admin profile during googleSignin:', e);
+      }
+
+      return {
+        needsOnboarding: false,
+        user: {
+          id: userId,
+          email: user.email,
+          role: 'Admin',
+        },
+        profile: {
+          id: userId,
+          username: profile?.username || 'admin_vergo',
+          status: profile?.status || 'active',
+          role: { roleName: 'Admin' },
+        },
+      };
     }
 
     if (!isOnboarded) {

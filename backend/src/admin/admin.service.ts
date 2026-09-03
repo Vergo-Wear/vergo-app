@@ -1797,4 +1797,236 @@ export class AdminService {
       totalUnitsAllocated: totalAllocatedUnits,
     };
   }
+
+  async getEarningsOverview() {
+    const orders = await this.prisma.orders.findMany({
+      include: {
+        orderItems: {
+          include: {
+            variant: { include: { product: true, color: true, size: true } },
+          },
+        },
+        customerDetails: true,
+        shippingDetails: true,
+      },
+      orderBy: { orderDate: 'desc' },
+    });
+
+    let vergoConfirmedNetIncome = 0;
+    let bankTransferProductIncome = 0;
+    let bankTransferCourierFees = 0;
+    let bankTransferTotalCollected = 0;
+
+    let confirmedCodIncome = 0;
+    let pendingCodIncome = 0;
+    let codCourierFeesDirect = 0;
+
+    let citypakCourierFeesTotal = 0;
+    let returnedCodDeductions = 0;
+    let totalGrossVolume = 0;
+    let totalCompletedOrders = 0;
+    let totalDeliveredCodOrders = 0;
+    let totalPendingCodOrders = 0;
+    let totalReturnedOrders = 0;
+
+    const ledger = orders.map((order) => {
+      const status = (order.orderStatus || '').toLowerCase();
+      const method = (order.paymentMethod || '').toLowerCase();
+      const isBank = method.includes('bank') || method.includes('transfer');
+      const isCod = method.includes('cod') || method.includes('cash');
+      const isReturnedOrCancelled = ['cancelled', 'returned', 'rtm', 'rejected'].includes(status);
+      const isDeliveredOrCompleted = ['delivered', 'completed'].includes(status);
+
+      const productAmount = Number(order.productTotal || 0);
+      const deliveryFee = Number(order.deliveryFee || 0);
+      const totalAmount = Number(order.totalAmount || 0);
+
+      totalGrossVolume += totalAmount;
+      citypakCourierFeesTotal += deliveryFee;
+
+      let codStatus: 'CONFIRMED' | 'PENDING' | 'UPFRONT_BANK' | 'RETURNED' = 'UPFRONT_BANK';
+      let recognizedProductIncome = 0;
+
+      if (isReturnedOrCancelled) {
+        totalReturnedOrders += 1;
+        codStatus = 'RETURNED';
+        if (isCod) {
+          returnedCodDeductions += productAmount;
+        }
+      } else {
+        totalCompletedOrders += 1;
+
+        if (isBank) {
+          bankTransferProductIncome += productAmount;
+          bankTransferCourierFees += deliveryFee;
+          bankTransferTotalCollected += totalAmount;
+          vergoConfirmedNetIncome += productAmount;
+          recognizedProductIncome = productAmount;
+          codStatus = 'UPFRONT_BANK';
+        } else if (isCod) {
+          if (isDeliveredOrCompleted) {
+            confirmedCodIncome += productAmount;
+            vergoConfirmedNetIncome += productAmount;
+            totalDeliveredCodOrders += 1;
+            codCourierFeesDirect += deliveryFee;
+            recognizedProductIncome = productAmount;
+            codStatus = 'CONFIRMED';
+          } else {
+            pendingCodIncome += productAmount;
+            totalPendingCodOrders += 1;
+            codCourierFeesDirect += deliveryFee;
+            recognizedProductIncome = 0; // Not confirmed until customer receives parcel
+            codStatus = 'PENDING';
+          }
+        }
+      }
+
+      return {
+        orderId: order.orderId,
+        displayId: `#${order.orderId.slice(0, 8).toUpperCase()}`,
+        orderDate: order.orderDate,
+        customerName: order.customerDetails
+          ? `${order.customerDetails.firstName} ${order.customerDetails.lastName}`
+          : 'Guest',
+        paymentMethod: isBank ? 'Bank Transfer' : 'Cash On Delivery',
+        orderStatus: order.orderStatus,
+        productAmount,
+        deliveryFee,
+        totalAmount,
+        isReturnedOrCancelled,
+        isBank,
+        isCod,
+        codStatus,
+        citypakTransferRequired: isBank ? deliveryFee : 0,
+        recognizedProductIncome,
+      };
+    });
+
+    return {
+      summary: {
+        vergoConfirmedNetIncome,
+        bankTransferProductIncome,
+        bankTransferCourierFees,
+        bankTransferTotalCollected,
+        confirmedCodIncome,
+        pendingCodIncome,
+        codCourierFeesDirect,
+        citypakCourierFeesTotal,
+        citypakPayableFromBankTransfers: bankTransferCourierFees,
+        returnedCodDeductions,
+        totalGrossVolume,
+        totalOrdersCount: orders.length,
+        totalCompletedOrders,
+        totalDeliveredCodOrders,
+        totalPendingCodOrders,
+        totalReturnedOrders,
+      },
+      ledger,
+    };
+  }
+
+  async getCustomerDistribution() {
+    const orders = await this.prisma.orders.findMany({
+      include: {
+        shippingDetails: true,
+        customerDetails: true,
+      },
+    });
+
+    const SRI_LANKA_DISTRICTS: Record<string, string> = {
+      colombo: 'Western',
+      gampaha: 'Western',
+      kalutara: 'Western',
+      kandy: 'Central',
+      matale: 'Central',
+      'nuwara eliya': 'Central',
+      galle: 'Southern',
+      matara: 'Southern',
+      hambantota: 'Southern',
+      jaffna: 'Northern',
+      kilinochchi: 'Northern',
+      mannar: 'Northern',
+      vavuniya: 'Northern',
+      mullaitivu: 'Northern',
+      batticaloa: 'Eastern',
+      ampara: 'Eastern',
+      trincomalee: 'Eastern',
+      kurunegala: 'North Western',
+      puttalam: 'North Western',
+      anuradhapura: 'North Central',
+      polonnaruwa: 'North Central',
+      badulla: 'Uva',
+      moneragala: 'Uva',
+      ratnapura: 'Sabaragamuwa',
+      kegalle: 'Sabaragamuwa',
+    };
+
+    const districtStats: Record<
+      string,
+      { district: string; province: string; ordersCount: number; totalRevenue: number; customers: Set<string> }
+    > = {};
+
+    Object.entries(SRI_LANKA_DISTRICTS).forEach(([dKey, prov]) => {
+      const formattedName = dKey
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+      districtStats[dKey] = {
+        district: formattedName,
+        province: prov,
+        ordersCount: 0,
+        totalRevenue: 0,
+        customers: new Set(),
+      };
+    });
+
+    let totalOrders = 0;
+    let totalRevenueSum = 0;
+
+    for (const order of orders) {
+      const rawDistrict = (order.shippingDetails?.district || 'colombo').trim().toLowerCase();
+      const matchedKey = Object.keys(SRI_LANKA_DISTRICTS).find((k) => rawDistrict.includes(k)) || 'colombo';
+
+      totalOrders += 1;
+      const orderAmount = Number(order.totalAmount || 0);
+      totalRevenueSum += orderAmount;
+
+      if (!districtStats[matchedKey]) {
+        const formattedName = matchedKey
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+        districtStats[matchedKey] = {
+          district: formattedName,
+          province: SRI_LANKA_DISTRICTS[matchedKey] || 'Western',
+          ordersCount: 0,
+          totalRevenue: 0,
+          customers: new Set(),
+        };
+      }
+
+      districtStats[matchedKey].ordersCount += 1;
+      districtStats[matchedKey].totalRevenue += orderAmount;
+      if (order.customerId) {
+        districtStats[matchedKey].customers.add(order.customerId);
+      }
+    }
+
+    const list = Object.values(districtStats).map((item) => ({
+      district: item.district,
+      province: item.province,
+      ordersCount: item.ordersCount,
+      totalRevenue: item.totalRevenue,
+      customerCount: item.customers.size,
+      percentage: totalOrders > 0 ? Number(((item.ordersCount / totalOrders) * 100).toFixed(1)) : 0,
+    }));
+
+    list.sort((a, b) => b.ordersCount - a.ordersCount || b.totalRevenue - a.totalRevenue);
+
+    return {
+      totalOrders,
+      totalRevenueSum,
+      districts: list,
+    };
+  }
 }

@@ -120,10 +120,13 @@ async function requestCart(token: string, init?: RequestInit) {
       }
     }
   }
-  if (response.status === 401) {
-    logoutExpiredSession();
-  }
   if (!response.ok) {
+    if (response.status === 401) {
+      logoutExpiredSession();
+    }
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      return { items: [] };
+    }
     throw new Error(`Cart request failed with status ${response.status}.`);
   }
   return response.json() as Promise<{ items: unknown }>;

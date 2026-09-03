@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AdminProvider, useAdmin } from "./AdminContext";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { createSupabaseClient } from "@/lib/supabase";
 import "@/styles/admin.css";
 
 // Separate the layout contents to use the AdminContext hooks safely
@@ -17,6 +19,38 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     setSearchQuery,
     adminAlerts,
   } = useAdmin();
+
+  // Real-time unread notification count directly from public.notification table
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const fetchUnreadCount = useCallback(() => {
+    const token = sessionStorage.getItem("vergo_access_token");
+    if (!token) return;
+
+    authenticatedFetch("/notifications/unread-count", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res?.ok) return null;
+        return res.json() as Promise<{ count: number }>;
+      })
+      .then((data) => {
+        if (data && typeof data.count === "number") {
+          setUnreadCount(data.count);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    fetchUnreadCount();
+    window.addEventListener("vergo_notifications_updated", fetchUnreadCount);
+    const interval = setInterval(fetchUnreadCount, 3000);
+    return () => {
+      window.removeEventListener("vergo_notifications_updated", fetchUnreadCount);
+      clearInterval(interval);
+    };
+  }, [fetchUnreadCount]);
+
+  const unreadTotal = unreadCount;
 
   // Sri Lanka Local Clock State
   const [localTime, setLocalTime] = useState("");
@@ -55,17 +89,36 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   } | null>(null);
   const [accessChecked, setAccessChecked] = useState(false);
 
-  // Route protection: only authenticated Admin users may view the dashboard
+  // Strict Route protection: ONLY vergo.wearofficial@gmail.com with Admin role may view the admin dashboard
   useEffect(() => {
-    const token = sessionStorage.getItem("vergo_access_token");
-    const stored = sessionStorage.getItem("vergo_user");
+    const token =
+      sessionStorage.getItem("vergo_access_token") ||
+      localStorage.getItem("vergo_access_token");
+    const stored =
+      sessionStorage.getItem("vergo_user") ||
+      localStorage.getItem("vergo_user");
     let role: string | null = null;
+    let email: string | null = null;
     try {
-      role = stored ? (JSON.parse(stored).role as string) : null;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        role = parsed.role;
+        email = parsed.email || parsed.username || null;
+      }
     } catch {
       role = null;
+      email = null;
     }
-    if (!token || role !== "Admin") {
+
+    const isOfficialAdmin =
+      Boolean(token) &&
+      (role === "Admin" || role === "admin") &&
+      Boolean(email && email.toLowerCase() === "vergo.wearofficial@gmail.com");
+
+    if (!isOfficialAdmin) {
+      sessionStorage.removeItem("vergo_is_logged_in");
+      sessionStorage.removeItem("vergo_access_token");
+      sessionStorage.removeItem("vergo_user");
       window.location.replace("/auth/login");
       return;
     }
@@ -87,10 +140,17 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("vergo_access_token");
-    sessionStorage.removeItem("vergo_user");
-    sessionStorage.removeItem("vergo_refresh_token");
+  const handleLogout = async () => {
+    try {
+      const client = createSupabaseClient();
+      if (client) {
+        await client.auth.signOut().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+    sessionStorage.clear();
+    window.dispatchEvent(new Event("vergo-auth-change"));
     window.location.href = "/auth/login";
   };
 
@@ -161,6 +221,25 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             strokeLinecap="round"
             strokeLinejoin="round"
             d="M3 3v18h18M7 16l4-5 4 3 5-7"
+          />
+        </svg>
+      ),
+    },
+    {
+      name: "Earnings",
+      path: "/admin/earnings",
+      icon: (
+        <svg
+          className="w-5 h-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
       ),
@@ -257,6 +336,30 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             strokeLinejoin="round"
             strokeWidth={2}
             d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+          />
+        </svg>
+      ),
+    },
+    {
+      name: "Delivery",
+      path: "/admin/delivery",
+      icon: (
+        <svg
+          className="w-5 h-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M8.25 18.75a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM18.75 18.75a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"
+          />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M2.25 6h10.5a.75.75 0 01.75.75v8.25a.75.75 0 01-.75.75H2.25A.75.75 0 011.5 15V6.75A.75.75 0 012.25 6zM13.5 9h3l3 3.75v3a.75.75 0 01-.75.75h-1.5"
           />
         </svg>
       ),
@@ -456,9 +559,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                   d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
                 />
               </svg>
-              {adminAlerts.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full min-w-[18px] text-center border border-[#050505] shadow-lg animate-pulse">
-                  {adminAlerts.length}
+              {unreadTotal > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-[#ef4444] text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center border border-[#050505] shadow-lg animate-pulse">
+                  {unreadTotal > 99 ? "99+" : unreadTotal}
                 </span>
               )}
             </Link>

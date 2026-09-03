@@ -27,6 +27,13 @@ export class EmployeesController {
     return this.employeesService.findByProfileId(profileId);
   }
 
+  @Get('leaderboard')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee', 'Admin', 'Branch Manager')
+  getLeaderboard() {
+    return this.employeesService.getLeaderboard();
+  }
+
   @Patch('me/availability')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('Employee')
@@ -62,6 +69,8 @@ export class EmployeesController {
   }
 
   @Get('profile/:profileId')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee', 'Admin', 'Branch Manager')
   async findByProfileId(@Param('profileId') profileId: string) {
     return this.employeesService.findByProfileId(profileId);
   }

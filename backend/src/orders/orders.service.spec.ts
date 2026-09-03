@@ -89,6 +89,7 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     expireActive: jest.fn(),
   };
   const notifications = {
+    notifyOrderCreated: jest.fn().mockResolvedValue(undefined),
     notifyOrderReady: jest.fn(),
     notifyCheckoutReviewed: jest.fn(),
   };
@@ -167,15 +168,21 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     ...overrides,
   });
 
-  let service: OrdersService;
-
   beforeEach(() => {
     jest.clearAllMocks();
+    const deliveryFeesService = {
+      calculateDeliveryFee: jest.fn().mockResolvedValue({
+        totalDeliveryFee: 460,
+        baseDeliveryCharge: 400,
+        fuelSurchargeAmount: 60,
+      }),
+    };
     service = new OrdersService(
       prisma,
       { get: jest.fn() } as never,
       notifications as never,
       stockReservations as never,
+      deliveryFeesService as never,
     );
     customer.findUnique.mockResolvedValue({ customerId });
     productVariant.findUnique.mockResolvedValue({
@@ -489,7 +496,7 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
       data: expect.objectContaining({
         checkoutId,
         customerId,
-        orderStatus: 'Ready to Process',
+        orderStatus: 'Admin Approved',
       }),
     });
     expect(stockReservations.commitPendingCheckout).toHaveBeenCalledWith(

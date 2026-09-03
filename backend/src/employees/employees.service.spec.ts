@@ -3,12 +3,14 @@ import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../auth/supabase.service';
+import { EmailService } from '../email/email.service';
 import { CreateEmployeeAccountDto } from './dto/create-employee-account.dto';
 
 describe('EmployeesService — createEmployeeAccount', () => {
   let service: EmployeesService;
   let prismaMock: any;
   let supabaseMock: any;
+  let emailMock: any;
 
   const dto: CreateEmployeeAccountDto = {
     firstName: 'John',
@@ -55,6 +57,7 @@ describe('EmployeesService — createEmployeeAccount', () => {
         update: jest.fn(),
       },
       $transaction: jest.fn((callback: any) => callback(prismaMock)),
+      $executeRawUnsafe: jest.fn().mockResolvedValue(1),
     };
 
     supabaseMock = {
@@ -71,11 +74,16 @@ describe('EmployeesService — createEmployeeAccount', () => {
       },
     };
 
+    emailMock = {
+      sendEmployeeWelcomeEmail: jest.fn().mockResolvedValue(true),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmployeesService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: SupabaseService, useValue: supabaseMock },
+        { provide: EmailService, useValue: emailMock },
       ],
     }).compile();
 

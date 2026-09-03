@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Res,
   UseGuards,
@@ -14,6 +15,7 @@ import type { Response } from 'express';
 import { CitypakService } from './citypak.service';
 import { CreateCitypakShipmentDto } from './dto/create-citypak-shipment.dto';
 import { CreateCitypakPickupDto } from './dto/create-citypak-pickup.dto';
+import { UpdateShipperProfileDto } from './dto/update-shipper-profile.dto';
 import { SupabaseAuthGuard } from '../../auth/guards/supabase-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -28,6 +30,13 @@ export class CitypakController {
   @Roles('Employee', 'Admin')
   getShipperProfile() {
     return this.citypakService.getShipperProfile();
+  }
+
+  @Put('shipper-profile')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin')
+  updateShipperProfile(@Body() dto: UpdateShipperProfileDto) {
+    return this.citypakService.updateShipperProfile(dto);
   }
 
   @Post('shipments/:orderId')
