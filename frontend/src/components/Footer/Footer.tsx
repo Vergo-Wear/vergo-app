@@ -36,28 +36,84 @@ export default function Footer() {
     message: "",
   });
   const [contactError, setContactError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    fullName?: string;
+    email?: string;
+    subject?: string;
+    message?: string;
+  }>({});
+
+  const validateForm = () => {
+    const errors: {
+      fullName?: string;
+      email?: string;
+      subject?: string;
+      message?: string;
+    } = {};
+
+    if (!formData.fullName.trim()) {
+      errors.fullName = "Full Name is required.";
+    } else if (formData.fullName.trim().length < 2) {
+      errors.fullName = "Full Name must be at least 2 characters.";
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email.trim()) {
+      errors.email = "Email Address is required.";
+    } else if (!emailRegex.test(formData.email.trim())) {
+      errors.email = "Please enter a valid email address.";
+    }
+
+    if (!formData.subject.trim()) {
+      errors.subject = "Subject is required.";
+    }
+
+    if (!formData.message.trim()) {
+      errors.message = "Message is required.";
+    } else if (formData.message.trim().length < 10) {
+      errors.message = "Message must be at least 10 characters.";
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    if (fieldErrors[name as keyof typeof fieldErrors]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setContactError(null);
-    window.open(
-      "https://docs.google.com/forms/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/viewform?usp=pp_url",
-      "_blank",
-      "noopener,noreferrer"
+
+    if (!validateForm()) {
+      return;
+    }
+
+    const targetUrl = new URL(
+      "https://docs.google.com/forms/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/viewform"
     );
+    targetUrl.searchParams.set("usp", "pp_url");
+    targetUrl.searchParams.set("fullName", formData.fullName.trim());
+    targetUrl.searchParams.set("email", formData.email.trim());
+    targetUrl.searchParams.set("subject", formData.subject.trim());
+    targetUrl.searchParams.set("message", formData.message.trim());
+
+    window.open(targetUrl.toString(), "_blank", "noopener,noreferrer");
+
     setFormData({
       fullName: "",
       email: "",
       subject: "General Inquiry",
       message: "",
     });
+    setFieldErrors({});
     setActiveModal(null);
   };
 
@@ -166,7 +222,7 @@ export default function Footer() {
                 <p className="contact-desc">
                   Whether you're looking for order updates, exclusive collaborations, or private styling, our concierge team is on standby.
                 </p>
-                <form onSubmit={handleContactSubmit} className="contact-form">
+                <form onSubmit={handleContactSubmit} className="contact-form" noValidate>
                   {contactError && <p className="error-message">{contactError}</p>}
                   <div className="form-group">
                     <label htmlFor="fullName">FULL NAME</label>
@@ -177,8 +233,10 @@ export default function Footer() {
                       value={formData.fullName}
                       onChange={handleInputChange}
                       placeholder="ALEXANDER VERGO"
-                      required
                     />
+                    {fieldErrors.fullName && (
+                      <p className="error-message text-xs mt-1">{fieldErrors.fullName}</p>
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="email">EMAIL ADDRESS</label>
@@ -189,8 +247,10 @@ export default function Footer() {
                       value={formData.email}
                       onChange={handleInputChange}
                       placeholder="CONCIERGE@VERGO.COM"
-                      required
                     />
+                    {fieldErrors.email && (
+                      <p className="error-message text-xs mt-1">{fieldErrors.email}</p>
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="subject">SUBJECT</label>
@@ -200,7 +260,6 @@ export default function Footer() {
                         name="subject"
                         value={formData.subject}
                         onChange={handleInputChange}
-                        required
                       >
                         <option value="General Inquiry">General Inquiry</option>
                         <option value="Order Status">Order Status</option>
@@ -208,6 +267,9 @@ export default function Footer() {
                         <option value="Private Styling">Private Styling</option>
                       </select>
                     </div>
+                    {fieldErrors.subject && (
+                      <p className="error-message text-xs mt-1">{fieldErrors.subject}</p>
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="message">MESSAGE</label>
@@ -218,22 +280,14 @@ export default function Footer() {
                       value={formData.message}
                       onChange={handleInputChange}
                       placeholder="HOW CAN WE ASSIST?"
-                      required
                     />
+                    {fieldErrors.message && (
+                      <p className="error-message text-xs mt-1">{fieldErrors.message}</p>
+                    )}
                   </div>
-                  <div className="flex flex-col gap-2">
-                    <button type="submit" className="contact-submit-btn">
-                      CONTINUE TO GOOGLE FORM
-                    </button>
-                    <a
-                      href="https://docs.google.com/forms/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/viewform?usp=pp_url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-center text-[#8e8e93] hover:text-white underline mt-2 block"
-                    >
-                      Or click here to open official Contact Form directly
-                    </a>
-                  </div>
+                  <button type="submit" className="contact-submit-btn">
+                    SUBMIT
+                  </button>
                 </form>
               </div>
 
