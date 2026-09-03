@@ -116,7 +116,7 @@ export default function SriLankaCustomerMap() {
       scrollWheelZoom: false,
     });
 
-    const cartoKey = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NEXT_PUBLIC_CARTO_API_KEY;
+    const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
     const tileUrl = cartoKey
       ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`
       : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
