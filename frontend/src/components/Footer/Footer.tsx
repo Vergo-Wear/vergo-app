@@ -212,6 +212,8 @@ export default function Footer() {
                       onChange={handleInputChange}
                       placeholder="Kavindya Senanayaka"
                       required
+                      style={formData.fullName.length > 0 && !isNameValid ? { borderColor: "#ef4444" } : {}}
+                      className={formData.fullName.length > 0 && !isNameValid ? "!border-red-500 focus:!border-red-500" : ""}
                     />
                     {formData.fullName.length > 0 && !isNameValid && (
                       <p className="text-red-400 text-[11px] mt-1">Full Name must be at least 2 characters.</p>
@@ -227,6 +229,8 @@ export default function Footer() {
                       onChange={handleInputChange}
                       placeholder="kavindya@gmail.com"
                       required
+                      style={formData.email.length > 0 && !isEmailValid ? { borderColor: "#ef4444" } : {}}
+                      className={formData.email.length > 0 && !isEmailValid ? "!border-red-500 focus:!border-red-500" : ""}
                     />
                     {formData.email.length > 0 && !isEmailValid && (
                       <p className="text-red-400 text-[11px] mt-1">Please enter a valid email address.</p>
@@ -260,6 +264,8 @@ export default function Footer() {
                       onChange={handleInputChange}
                       placeholder="Tell us how we can assist..."
                       required
+                      style={formData.message.length > 0 && !isMessageValid ? { borderColor: "#ef4444" } : {}}
+                      className={formData.message.length > 0 && !isMessageValid ? "!border-red-500 focus:!border-red-500" : ""}
                     />
                     {formData.message.length > 0 && !isMessageValid && (
                       <p className="text-red-400 text-[11px] mt-1">Message must be at least 5 characters.</p>
