@@ -116,8 +116,10 @@ export default function SriLankaCustomerMap() {
       scrollWheelZoom: false,
     });
 
-    const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY || "cb1_2t82_1_493505d1fad4d58718cf471c";
-    const tileUrl = `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`;
+    const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    const tileUrl = cartoKey
+      ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`
+      : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 
     // Dark-themed OpenStreetMap Carto Tile Layer with Registered API Key
     L.tileLayer(tileUrl, {

@@ -38,6 +38,7 @@ describe('Auth Module (Controller & Service)', () => {
         findFirst: jest.fn(),
       },
       $transaction: jest.fn((callback) => callback(prismaMock)),
+      $queryRawUnsafe: jest.fn().mockResolvedValue([{ must_change_password: false }]),
     };
 
     supabaseMock = {

@@ -282,45 +282,7 @@ export class AuthService {
         password,
       });
 
-    // Special auto-provision/sync for official Admin email vergo.wearofficial@gmail.com
-    if (
-      (authError || !authData?.user) &&
-      email.toLowerCase() === 'vergo.wearofficial@gmail.com'
-    ) {
-      try {
-        const { data: usersData } =
-          await this.supabaseService.adminClient.auth.admin.listUsers();
-        const existingAdminUser = usersData.users.find(
-          (u: any) => u.email?.toLowerCase() === 'vergo.wearofficial@gmail.com',
-        );
-
-        if (existingAdminUser) {
-          // Update password for existing admin user
-          await this.supabaseService.adminClient.auth.admin.updateUserById(
-            existingAdminUser.id,
-            { password },
-          );
-        } else {
-          // Create new Supabase Auth user for admin
-          await this.supabaseService.adminClient.auth.admin.createUser({
-            email: email.toLowerCase(),
-            password,
-            email_confirm: true,
-          });
-        }
-
-        // Retry sign in with updated password
-        const retryResult =
-          await this.supabaseService.client.auth.signInWithPassword({
-            email: email.toLowerCase(),
-            password,
-          });
-        authData = retryResult.data;
-        authError = retryResult.error;
-      } catch (adminSyncErr) {
-        this.logger.warn('Failed to auto-sync Admin auth user:', adminSyncErr);
-      }
-    }
+ 
 
     if (authError || !authData || !authData.user || !authData.session) {
       this.logger.warn(`Auth login failed: ${authError?.message}`);

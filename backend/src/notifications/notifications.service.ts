@@ -77,23 +77,17 @@ export class NotificationsService {
   }
 
   async deleteNotification(profileId: string, notificationId: string) {
-    try {
-      const result = await this.prisma.notification.deleteMany({
-        where: {
-          notificationId,
-          OR: [
-            { recipientProfileId: profileId },
-            { recipientProfileId: null },
-          ],
-        },
-      });
-      if (result.count === 0) {
-        await this.prisma.notification.deleteMany({
-          where: { notificationId },
-        });
-      }
-    } catch (e) {
-      this.logger.error(`Error deleting notification ${notificationId}`, e);
+    const result = await this.prisma.notification.deleteMany({
+      where: {
+        notificationId,
+        OR: [
+          { recipientProfileId: profileId },
+          { recipientProfileId: null },
+        ],
+      },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('Notification not found.');
     }
     return { success: true };
   }

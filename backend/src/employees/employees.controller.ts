@@ -28,6 +28,8 @@ export class EmployeesController {
   }
 
   @Get('leaderboard')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee', 'Admin', 'Branch Manager')
   getLeaderboard() {
     return this.employeesService.getLeaderboard();
   }
@@ -67,6 +69,8 @@ export class EmployeesController {
   }
 
   @Get('profile/:profileId')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee', 'Admin', 'Branch Manager')
   async findByProfileId(@Param('profileId') profileId: string) {
     return this.employeesService.findByProfileId(profileId);
   }

@@ -40,7 +40,7 @@ export async function getSupabaseRedirectSession(
   const code = url.searchParams.get("code");
   const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
   const accessToken = hash.get("access_token");
-  const refreshToken = hash.get("refresh_token") || accessToken;
+  const refreshToken = hash.get("refresh_token");
 
   let session: Session | null = null;
   if (code) {
@@ -48,11 +48,11 @@ export async function getSupabaseRedirectSession(
     if (error) throw error;
     session = data.session;
     url.searchParams.delete("code");
-  } else if (accessToken) {
+  } else if (accessToken && refreshToken) {
     try {
       const { data, error } = await client.auth.setSession({
         access_token: accessToken,
-        refresh_token: refreshToken || "",
+        refresh_token: refreshToken,
       });
       if (error) throw error;
       session = data.session;
