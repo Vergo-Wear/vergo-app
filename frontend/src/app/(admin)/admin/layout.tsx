@@ -113,7 +113,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     const isOfficialAdmin =
       Boolean(token) &&
       (role === "Admin" || role === "admin") &&
-      (!email || email.toLowerCase() === "vergo.wearofficial@gmail.com");
+      Boolean(email && email.toLowerCase() === "vergo.wearofficial@gmail.com");
 
     if (!isOfficialAdmin) {
       sessionStorage.removeItem("vergo_is_logged_in");

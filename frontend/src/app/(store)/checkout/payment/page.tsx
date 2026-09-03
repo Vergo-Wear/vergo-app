@@ -92,6 +92,14 @@ export default function PaymentPage() {
       minute: "2-digit",
     });
 
+    const escapeHtml = (str: string | undefined | null) =>
+      String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
     const itemsHtml = itemsToDisplay
       .map((item) => {
         const price = item.product.lkrPrice
@@ -101,8 +109,8 @@ export default function PaymentPage() {
         return `
           <tr>
             <td style="padding: 12px; border-bottom: 1px solid #eeeeee;">
-              <strong style="font-size: 14px;">${item.product.name}</strong><br/>
-              <span style="font-size: 12px; color: #666666;">Size: ${item.size} | Color: ${item.color || item.product.colors?.[0] || "Default"}</span>
+              <strong style="font-size: 14px;">${escapeHtml(item.product.name)}</strong><br/>
+              <span style="font-size: 12px; color: #666666;">Size: ${escapeHtml(item.size)} | Color: ${escapeHtml(item.color || item.product.colors?.[0] || "Default")}</span>
             </td>
             <td style="padding: 12px; border-bottom: 1px solid #eeeeee; text-align: center; font-size: 14px;">${item.quantity}</td>
             <td style="padding: 12px; border-bottom: 1px solid #eeeeee; text-align: right; font-size: 14px;">${formatLkr(price)}</td>
@@ -119,7 +127,7 @@ export default function PaymentPage() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>VERGO WEAR - Order ${refNo}</title>
+          <title>VERGO WEAR - Order ${escapeHtml(refNo)}</title>
           <style>
             body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111111; padding: 40px; margin: 0; background: #ffffff; }
             .invoice-container { max-width: 800px; margin: 0 auto; }
@@ -157,8 +165,8 @@ export default function PaymentPage() {
               </div>
               <div class="invoice-meta">
                 <div class="invoice-title">Order Receipt</div>
-                <div class="order-ref">${refNo}</div>
-                <div class="date-stamp">Date: ${orderDate}</div>
+                <div class="order-ref">${escapeHtml(refNo)}</div>
+                <div class="date-stamp">Date: ${escapeHtml(orderDate)}</div>
               </div>
             </div>
 
@@ -166,18 +174,18 @@ export default function PaymentPage() {
               <div class="info-card">
                 <div class="section-title">Customer Information</div>
                 <div class="info-content">
-                  <strong>${contactInfo?.firstName || ""} ${contactInfo?.lastName || ""}</strong><br/>
-                  Email: ${contactInfo?.email || "N/A"}<br/>
-                  Phone: ${contactInfo?.phone || "N/A"}
+                  <strong>${escapeHtml(contactInfo?.firstName || "")} ${escapeHtml(contactInfo?.lastName || "")}</strong><br/>
+                  Email: ${escapeHtml(contactInfo?.email || "N/A")}<br/>
+                  Phone: ${escapeHtml(contactInfo?.phone || "N/A")}
                 </div>
               </div>
               <div class="info-card">
                 <div class="section-title">Shipping Destination</div>
                 <div class="info-content">
-                  <strong>${shippingInfo?.receiverName || (contactInfo?.firstName + " " + contactInfo?.lastName)}</strong><br/>
-                  ${shippingInfo?.addressLine1 || ""}${shippingInfo?.addressLine2 ? ", " + shippingInfo.addressLine2 : ""}<br/>
-                  ${shippingInfo?.city || ""}, ${shippingInfo?.district || ""} ${shippingInfo?.postalCode ? `(${shippingInfo.postalCode})` : ""}<br/>
-                  Phone: ${shippingInfo?.receiverPhone || contactInfo?.phone || "N/A"}
+                  <strong>${escapeHtml(shippingInfo?.receiverName || ((contactInfo?.firstName || "") + " " + (contactInfo?.lastName || "")))}</strong><br/>
+                  ${escapeHtml(shippingInfo?.addressLine1 || "")}${shippingInfo?.addressLine2 ? ", " + escapeHtml(shippingInfo.addressLine2) : ""}<br/>
+                  ${escapeHtml(shippingInfo?.city || "")}, ${escapeHtml(shippingInfo?.district || "")} ${shippingInfo?.postalCode ? `(${escapeHtml(shippingInfo.postalCode)})` : ""}<br/>
+                  Phone: ${escapeHtml(shippingInfo?.receiverPhone || contactInfo?.phone || "N/A")}
                 </div>
               </div>
             </div>

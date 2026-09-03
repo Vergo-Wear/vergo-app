@@ -180,14 +180,6 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   } as const;
 
   onModuleInit() {
-    if (typeof (this.prisma as any).$executeRawUnsafe === 'function') {
-      this.prisma
-        .$executeRawUnsafe(
-          'ALTER TABLE "orders" DROP CONSTRAINT IF EXISTS "orders_order_status_check";',
-        )
-        .catch(() => {});
-    }
-
     const sweep = () => void this.runPaymentProofExpirySweep();
     sweep();
     this.expirySweepTimer = setInterval(sweep, PROOF_EXPIRY_SWEEP_INTERVAL_MS);
@@ -1051,7 +1043,13 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`Could not lookup employee record for ${profileId}`, err);
     }
 
+    const isDbAdmin = role?.toLowerCase() === 'admin';
+    const whereClause: Prisma.OrdersWhereInput = isDbAdmin
+      ? {}
+      : { orderStatus: { in: EMPLOYEE_PROCESSING_STATUSES } };
+
     const orders = await this.prisma.orders.findMany({
+      where: whereClause,
       include: this.orderInclude,
       orderBy: { orderDate: 'desc' },
     });
