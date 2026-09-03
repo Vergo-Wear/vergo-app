@@ -44,19 +44,21 @@ export default function Footer() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleContactSubmit = async (e: React.FormEvent) => {
+  const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setContactError(null);
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-    const response = await fetch(`${apiUrl}/contact`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
-    if (!response.ok) {
-      setContactError("Unable to send your message. Please try again.");
-      return;
-    }
+
+    const targetUrl = new URL(
+      "https://docs.google.com/forms/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/viewform"
+    );
+    targetUrl.searchParams.set("usp", "pp_url");
+    targetUrl.searchParams.set("entry.50538087", formData.fullName.trim());
+    targetUrl.searchParams.set("entry.1769001761", formData.email.trim());
+    targetUrl.searchParams.set("entry.735047467", formData.subject.trim());
+    targetUrl.searchParams.set("entry.865540735", formData.message.trim());
+
+    window.open(targetUrl.toString(), "_blank", "noopener,noreferrer");
+
     setFormData({
       fullName: "",
       email: "",
