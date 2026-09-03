@@ -93,9 +93,12 @@ export class CustomizationService {
 
     // Submit to Google Form
     try {
-      const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLScF53RVDt07H3U9TJKbpzKsW8fVLxS9jL2h14ihgO-YB3TtCg/formResponse';
+      const formUrl =
+        process.env.GOOGLE_FORM_NEWSLETTER_URL ||
+        'https://docs.google.com/forms/d/e/1FAIpQLScF53RVDt07H3U9TJKbpzKsW8fVLxS9jL2h14ihgO-YB3TtCg/formResponse';
+      const entryKey = process.env.GOOGLE_FORM_ENTRY_NEWSLETTER_EMAIL || 'entry.2064532578';
       const body = new URLSearchParams();
-      body.append('entry.2064532578', normalized);
+      body.append(entryKey, normalized);
 
       await fetch(formUrl, {
         method: 'POST',

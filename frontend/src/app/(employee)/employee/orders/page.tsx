@@ -19,7 +19,7 @@ export default function OrdersManagement() {
 
   const handleClaimOrder = async (orderId: string) => {
     const claimed = await claimOrder(orderId);
-    if (claimed) window.location.href = "/employee/product-prep";
+    if (claimed) window.location.assign("/employee/product-prep");
   };
 
   // Filter orders

@@ -121,12 +121,18 @@ export class AppController {
 
     try {
       const googleFormUrl =
+        process.env.GOOGLE_FORM_RESPONSE_URL ||
         'https://docs.google.com/forms/u/0/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/formResponse';
+      const entryName = process.env.GOOGLE_FORM_ENTRY_NAME || 'entry.1897634418';
+      const entryEmail = process.env.GOOGLE_FORM_ENTRY_EMAIL || 'entry.457820340';
+      const entrySubject = process.env.GOOGLE_FORM_ENTRY_SUBJECT || 'entry.2108323';
+      const entryMessage = process.env.GOOGLE_FORM_ENTRY_MESSAGE || 'entry.197243906';
+
       const formParams = new URLSearchParams();
-      formParams.append('entry.1897634418', dto.fullName.trim());
-      formParams.append('entry.457820340', dto.email.trim());
-      formParams.append('entry.2108323', dto.subject.trim());
-      formParams.append('entry.197243906', dto.message.trim());
+      formParams.append(entryName, dto.fullName.trim());
+      formParams.append(entryEmail, dto.email.trim());
+      formParams.append(entrySubject, dto.subject.trim());
+      formParams.append(entryMessage, dto.message.trim());
 
       await fetch(googleFormUrl, {
         method: 'POST',

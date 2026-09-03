@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import { triggerManualTour } from "@/components/onboarding/OnboardingTour";
 import "./footer.css";
 
 export default function Footer() {
@@ -108,6 +109,14 @@ export default function Footer() {
         </div>
 
         <div className="footer-nav">
+          <button
+            type="button"
+            onClick={() => triggerManualTour("customer")}
+            className="footer-link"
+            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
+          >
+            TAKE A TOUR
+          </button>
           <button
             type="button"
             onClick={() => setActiveModal("privacy")}

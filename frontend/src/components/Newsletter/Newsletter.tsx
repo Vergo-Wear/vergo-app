@@ -40,16 +40,19 @@ export default function Newsletter() {
     return () => controller.abort();
   }, []);
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailValid = emailRegex.test(email.trim());
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (!isEmailValid) return;
 
     setStatus("loading");
     try {
       const res = await fetch(`${API_URL}/customization/newsletter/subscribe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: email.trim() }),
       });
       const data = await res.json();
       if (data.status === "already_subscribed") {
@@ -112,20 +115,32 @@ export default function Newsletter() {
               <form onSubmit={handleSubmit} className="newsletter-form">
                 <input
                   type="email"
-                  className="newsletter-input"
-                  placeholder="ENTER YOUR EMAIL ADDRESS"
+                  className={`newsletter-input ${
+                    email.length > 0 && !isEmailValid ? "!border-red-500" : ""
+                  }`}
+                  style={email.length > 0 && !isEmailValid ? { borderColor: "#ef4444" } : {}}
+                  placeholder="Enter your email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
                 <button
                   type="submit"
-                  className="newsletter-btn"
-                  disabled={status === "loading"}
+                  className={`newsletter-btn transition-all ${
+                    !isEmailValid || status === "loading"
+                      ? "opacity-40 cursor-not-allowed pointer-events-none"
+                      : "hover:opacity-90"
+                  }`}
+                  disabled={!isEmailValid || status === "loading"}
                 >
                   {status === "loading" ? "SUBMITTING..." : "JOIN"}
                 </button>
               </form>
+              {email.length > 0 && !isEmailValid && (
+                <p style={{ color: "#ff4d4d", fontSize: "11px", marginTop: "6px", fontWeight: 500 }}>
+                  Please enter a valid email address.
+                </p>
+              )}
               {status === "error" && (
                 <p style={{ color: "#ff4d4d", fontSize: "12px", marginTop: "8px", fontWeight: 600 }}>
                   {responseMsg}
