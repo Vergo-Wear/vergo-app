@@ -44,19 +44,14 @@ export default function Footer() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleContactSubmit = async (e: React.FormEvent) => {
+  const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setContactError(null);
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-    const response = await fetch(`${apiUrl}/contact`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
-    if (!response.ok) {
-      setContactError("Unable to send your message. Please try again.");
-      return;
-    }
+    window.open(
+      "https://docs.google.com/forms/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/viewform?usp=pp_url",
+      "_blank",
+      "noopener,noreferrer"
+    );
     setFormData({
       fullName: "",
       email: "",
@@ -226,9 +221,19 @@ export default function Footer() {
                       required
                     />
                   </div>
-                  <button type="submit" className="contact-submit-btn">
-                    SEND MESSAGE
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button type="submit" className="contact-submit-btn">
+                      CONTINUE TO GOOGLE FORM
+                    </button>
+                    <a
+                      href="https://docs.google.com/forms/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/viewform?usp=pp_url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-center text-[#8e8e93] hover:text-white underline mt-2 block"
+                    >
+                      Or click here to open official Contact Form directly
+                    </a>
+                  </div>
                 </form>
               </div>
 
