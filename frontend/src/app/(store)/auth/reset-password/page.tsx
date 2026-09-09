@@ -100,8 +100,17 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (newPassword.length < 6) {
-      setMessage({ text: "Password must be at least 6 characters.", type: "error" });
+    if (
+      newPassword.length < 6 ||
+      !/[a-z]/.test(newPassword) ||
+      !/[A-Z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) ||
+      !/[!@#$%^&*()_+=[\]{};':"\\|<>?,./`~-]/.test(newPassword)
+    ) {
+      setMessage({
+        text: "Password does not meet the requirements listed below.",
+        type: "error",
+      });
       return;
     }
 
@@ -225,7 +234,23 @@ export default function ResetPasswordPage() {
     }
   };
 
-  const isPasswordInvalid = newPassword.length > 1 && newPassword.length < 6;
+  const hasMinLength = newPassword.length >= 6;
+  const hasLowerCase = /[a-z]/.test(newPassword);
+  const hasUpperCase = /[A-Z]/.test(newPassword);
+  const hasNumber = /[0-9]/.test(newPassword);
+  const hasSpecialChar = /[!@#$%^&*()_+=[\]{};':"\\|<>?,./`~-]/.test(newPassword);
+  const isPasswordValid =
+    hasMinLength && hasLowerCase && hasUpperCase && hasNumber && hasSpecialChar;
+
+  const passwordRequirements = [
+    { label: "At least 6 characters", met: hasMinLength },
+    { label: "At least one lowercase letter (a-z)", met: hasLowerCase },
+    { label: "At least one uppercase letter (A-Z)", met: hasUpperCase },
+    { label: "At least one number (0-9)", met: hasNumber },
+    { label: "At least one special character (!@#$%^&* etc.)", met: hasSpecialChar },
+  ];
+
+  const isPasswordInvalid = newPassword.length > 0 && !isPasswordValid;
   const isConfirmInvalid = confirmPassword.length > 1 && newPassword !== confirmPassword;
 
   return (
@@ -327,7 +352,7 @@ export default function ResetPasswordPage() {
                 <div className="password-input-wrapper">
                   <input
                     type={showPassword ? "text" : "password"}
-                    placeholder="Enter new password (min. 6 chars)"
+                    placeholder="Enter new password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     style={{
@@ -355,10 +380,57 @@ export default function ResetPasswordPage() {
                     )}
                   </button>
                 </div>
-                {isPasswordInvalid && (
-                  <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
-                    Password must be at least 6 characters.
-                  </span>
+                {newPassword.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      padding: "12px 14px",
+                      borderRadius: "8px",
+                      background: "rgba(255, 255, 255, 0.03)",
+                      border: "1px solid rgba(255, 255, 255, 0.08)",
+                      textAlign: "left",
+                    }}
+                  >
+                    <p
+                      style={{
+                        color: "var(--text-primary, #ffffff)",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Your password requires the following:
+                    </p>
+                    <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {passwordRequirements.map((req) => (
+                        <li
+                          key={req.label}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "0.75rem",
+                            color: req.met ? "#00FF9D" : "#ff4d4d",
+                            transition: "color 0.2s ease",
+                          }}
+                        >
+                          {req.met ? (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                              <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                              <polyline points="8 12.5 11 15.5 16 9" />
+                            </svg>
+                          ) : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                              <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                              <line x1="9" y1="9" x2="15" y2="15" />
+                              <line x1="15" y1="9" x2="9" y2="15" />
+                            </svg>
+                          )}
+                          <span>{req.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
 

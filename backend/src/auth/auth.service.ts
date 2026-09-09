@@ -400,6 +400,17 @@ export class AuthService {
       throw new BadRequestException('New password must be at least 6 characters long.');
     }
 
+    const hasLower = /[a-z]/.test(newPassword);
+    const hasUpper = /[A-Z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSpecial = /[!@#$%^&*()_+=[\]{};':"\\|<>?,./`~-]/.test(newPassword);
+
+    if (!hasLower || !hasUpper || !hasNumber || !hasSpecial) {
+      throw new BadRequestException(
+        'New password must contain at least one lowercase letter, one uppercase letter, one number, and one special character.',
+      );
+    }
+
     // 1. Authenticate employee with their current temporary password
     const { data: authData, error: authError } =
       await this.supabaseService.client.auth.signInWithPassword({
