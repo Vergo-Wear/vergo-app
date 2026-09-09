@@ -161,7 +161,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         ? `${order.customerDetails.firstName} ${order.customerDetails.lastName}`
         : "Guest";
 
-      if (method.includes("bank") && status === "Pending Verification") {
+      if (method.includes("bank") && (status === "Pending Review" || status === "Pending Verification" || status === "Pending")) {
         list.push({
           id: `pending-verify-${order.orderId}`,
           type: "payment_pending",

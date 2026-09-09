@@ -67,13 +67,77 @@ export async function loadProducts(): Promise<Product[]> {
       subTitle: item.category?.name || "ESSENTIALS",
       description: item.description || undefined,
       images: allImages.length > 0 ? allImages : ["/logo.png"],
-      sizes: [...new Set(allVariants.map((v) => v.size))],
+      sizes: sortSizes([...new Set(allVariants.map((v) => v.size))]),
       colors: [...new Set(allVariants.map((v) => v.color))],
       variants: allVariants,
     };
   });
 }
 
+const STANDARD_SIZE_ORDER: Record<string, number> = {
+  "3XS": 5,
+  "XXXS": 5,
+  "2XS": 10,
+  "XXS": 10,
+  "XS": 20,
+  "EXTRA SMALL": 20,
+  "S": 30,
+  "SMALL": 30,
+  "M": 40,
+  "MEDIUM": 40,
+  "L": 50,
+  "LARGE": 50,
+  "XL": 60,
+  "1XL": 60,
+  "EXTRA LARGE": 60,
+  "2XL": 70,
+  "XXL": 70,
+  "3XL": 80,
+  "XXXL": 80,
+  "4XL": 90,
+  "XXXXL": 90,
+  "5XL": 100,
+  "6XL": 110,
+  "7XL": 120,
+  "8XL": 130,
+  "9XL": 140,
+  "10XL": 150,
+  "FREE SIZE": 999,
+  "FREE": 999,
+  "ONE SIZE": 999,
+  "OS": 999,
+};
+
+export function sortSizes(sizes: string[]): string[] {
+  return [...sizes].sort((a, b) => {
+    const normA = String(a).trim().toUpperCase();
+    const normB = String(b).trim().toUpperCase();
+
+    const rankA = STANDARD_SIZE_ORDER[normA];
+    const rankB = STANDARD_SIZE_ORDER[normB];
+
+    if (rankA !== undefined && rankB !== undefined) {
+      return rankA - rankB;
+    }
+    if (rankA !== undefined) return -1;
+    if (rankB !== undefined) return 1;
+
+    const numMatchA = normA.match(/\d+(\.\d+)?/);
+    const numMatchB = normB.match(/\d+(\.\d+)?/);
+
+    if (numMatchA && numMatchB) {
+      const valA = parseFloat(numMatchA[0]);
+      const valB = parseFloat(numMatchB[0]);
+      if (valA !== valB) {
+        return valA - valB;
+      }
+    }
+
+    return normA.localeCompare(normB, undefined, { numeric: true, sensitivity: "base" });
+  });
+}
+
 export function getInitialProducts(): Product[] {
   return [];
 }
+

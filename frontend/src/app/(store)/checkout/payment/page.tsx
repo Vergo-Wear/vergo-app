@@ -1328,7 +1328,7 @@ function BankTransferFlow({
   const [showReceiptSubmittedModal, setShowReceiptSubmittedModal] =
     useState(false);
   const [submittedPaymentStatus, setSubmittedPaymentStatus] = useState(
-    "Pending Verification",
+    "Pending Review",
   );
   const expiredHandledRef = useRef(false);
 
@@ -1562,7 +1562,7 @@ function BankTransferFlow({
         throw new Error(errMsg || "Proof receipt upload failed.");
       }
 
-      const paymentStatus = data.status || "Pending Verification";
+      const paymentStatus = data.status || "Pending Review";
       const pendingCheckoutId = data.checkoutId || data.reservationId;
       if (!pendingCheckoutId) {
         throw new Error("The pending checkout has no valid reference.");

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -25,6 +26,26 @@ export class ReviewsController {
     return this.reviewsService.findForProduct(productId);
   }
 
+  @Get('eligibility')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Customer')
+  checkEligibility(
+    @CurrentUser() profileId: string,
+    @Param('productId', new ParseUUIDPipe({ version: '4' })) productId: string,
+  ) {
+    return this.reviewsService.checkEligibility(profileId, productId);
+  }
+
+  @Get('mine')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Customer')
+  findMine(
+    @CurrentUser() profileId: string,
+    @Param('productId', new ParseUUIDPipe({ version: '4' })) productId: string,
+  ) {
+    return this.reviewsService.findMineForProduct(profileId, productId);
+  }
+
   @Put('mine')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('Customer')
@@ -35,4 +56,15 @@ export class ReviewsController {
   ) {
     return this.reviewsService.save(profileId, productId, dto);
   }
+
+  @Delete('mine')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Customer')
+  removeMine(
+    @CurrentUser() profileId: string,
+    @Param('productId', new ParseUUIDPipe({ version: '4' })) productId: string,
+  ) {
+    return this.reviewsService.removeMine(profileId, productId);
+  }
 }
+

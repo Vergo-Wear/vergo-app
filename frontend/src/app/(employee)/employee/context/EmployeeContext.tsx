@@ -84,6 +84,20 @@ export interface StockItem {
   qty: number;
   lowStockLimit: number;
 }
+export interface EmployeeAllocatedStock {
+  inventoryId: string;
+  variantId: string;
+  sku: string;
+  productName: string;
+  category: string;
+  size: string;
+  color: string;
+  qty: number;
+  reorderLevel: number;
+  lastUpdated: string | null;
+  branchName: string;
+  imageUrl: string | null;
+}
 export interface StockRequest {
   id: string;
   productName: string;
@@ -108,6 +122,9 @@ interface EmployeeContextType {
   readyPickups: ReadyPickupItem[];
   notifications: NotificationItem[];
   stockLevels: StockItem[];
+  myStock: EmployeeAllocatedStock[];
+  loadingMyStock: boolean;
+  fetchMyStock: () => Promise<void>;
   stockRequests: StockRequest[];
   isEmployeeAvailable: boolean;
   availabilityStatus: "AVAILABLE" | "BUSY" | "OFF DUTY";
@@ -227,6 +244,8 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [stockLevels, setStockLevels] = useState<StockItem[]>([]);
+  const [myStock, setMyStock] = useState<EmployeeAllocatedStock[]>([]);
+  const [loadingMyStock, setLoadingMyStock] = useState(false);
   const [stockRequests, setStockRequests] = useState<StockRequest[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [availabilityStatus, setAvailabilityStatus] = useState<
@@ -404,7 +423,31 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch((err) => console.error("Error fetching employee profile:", err));
+
+    fetchMyStock();
   }, []);
+
+  const fetchMyStock = async () => {
+    const auth = token();
+    if (!auth) return;
+    setLoadingMyStock(true);
+    try {
+      const res = await fetch(`${API_URL}/employees/me/stock`, {
+        headers: { Authorization: `Bearer ${auth}` },
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.allocatedStock)) {
+          setMyStock(data.allocatedStock);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching employee stock:", err);
+    } finally {
+      setLoadingMyStock(false);
+    }
+  };
 
   const updateOrderStatus = async (id: string, status: OrderItem["status"]) => {
     const auth = token();
@@ -885,6 +928,9 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     readyPickups,
     notifications,
     stockLevels,
+    myStock,
+    loadingMyStock,
+    fetchMyStock,
     stockRequests,
     isEmployeeAvailable: availabilityStatus === "AVAILABLE",
     availabilityStatus,

@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 // Polyfill BigInt to support JSON serialization in NestJS/Express responses
@@ -9,6 +10,9 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.use(json({ limit: '15mb' }));
+  app.use(urlencoded({ limit: '15mb', extended: true }));
 
   // Normalize leading double slashes in incoming request URLs (e.g., //product-catalogue -> /product-catalogue)
   app.use((req: any, res: any, next: () => void) => {

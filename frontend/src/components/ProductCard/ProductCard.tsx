@@ -28,6 +28,8 @@ export default function ProductCard({ product }: any) {
           width={400}
           height={500}
           className="product-image"
+          loading="eager"
+          priority
         />
 
         {!product.isAvailable && (
