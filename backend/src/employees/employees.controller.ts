@@ -27,6 +27,13 @@ export class EmployeesController {
     return this.employeesService.findByProfileId(profileId);
   }
 
+  @Get('me/stock')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee')
+  getMyStock(@CurrentUser() profileId: string) {
+    return this.employeesService.getMyStock(profileId);
+  }
+
   @Get('leaderboard')
   @UseGuards(SupabaseAuthGuard, RolesGuard)
   @Roles('Employee', 'Admin', 'Branch Manager')

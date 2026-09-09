@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useProductsState } from "@/hooks/useProducts";
+import { sortSizes } from "@/lib/products";
 import ProductFeedback from "@/components/ProductFeedback";
 import { useCart } from "@/context/CartContext";
 
@@ -28,11 +29,34 @@ export default function ProductDetailPage({ params }: PageProps) {
   // Gallery state
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  // Size & Color options
-  const sizeOptions = product?.sizes || ["S", "M", "L", "XL"];
+  // Size & Color options (sorted from smallest to largest)
+  const sizeOptions = useMemo(() => {
+    const rawSizes = product?.sizes || ["S", "M", "L", "XL"];
+    return sortSizes(rawSizes);
+  }, [product?.sizes]);
+
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0] || "M");
   const [selectedColor, setSelectedColor] = useState("");
   const [quantity, setQuantity] = useState(1);
+
+  // Size Guide Modal state
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsSizeGuideOpen(false);
+    };
+    if (isSizeGuideOpen) {
+      document.body.style.overflow = "hidden";
+      window.addEventListener("keydown", handleKeyDown);
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSizeGuideOpen]);
 
   // Update selectedColor and selectedSize when product data arrives
   useEffect(() => {
@@ -40,11 +64,11 @@ export default function ProductDetailPage({ params }: PageProps) {
       if (product.colors && product.colors.length > 0 && (!selectedColor || !product.colors.includes(selectedColor))) {
         setSelectedColor(product.colors[0]);
       }
-      if (product.sizes && product.sizes.length > 0 && (!selectedSize || !product.sizes.includes(selectedSize))) {
-        setSelectedSize(product.sizes[0]);
+      if (sizeOptions.length > 0 && (!selectedSize || !sizeOptions.includes(selectedSize))) {
+        setSelectedSize(sizeOptions[0]);
       }
     }
-  }, [product, selectedColor, selectedSize]);
+  }, [product, selectedColor, selectedSize, sizeOptions]);
 
   const selectedVariant = useMemo(
     () =>
@@ -227,7 +251,13 @@ export default function ProductDetailPage({ params }: PageProps) {
               <div className="size-selection-section">
                 <div className="size-header">
                   <span className="size-label">SELECT SIZE</span>
-                  <button type="button" className="size-guide-link">Size Guide</button>
+                  <button
+                    type="button"
+                    className="size-guide-link"
+                    onClick={() => setIsSizeGuideOpen(true)}
+                  >
+                    Size Guide
+                  </button>
                 </div>
 
                 <div className="size-options-grid">
@@ -415,6 +445,46 @@ export default function ProductDetailPage({ params }: PageProps) {
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
           <span>{toast}</span>
+        </div>
+      )}
+
+      {/* Size Guide Modal */}
+      {isSizeGuideOpen && (
+        <div
+          className="size-guide-modal-overlay"
+          onClick={() => setIsSizeGuideOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Size Guide"
+        >
+          <div
+            className="size-guide-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="size-guide-modal-header">
+              <h3 className="size-guide-modal-title">
+                SIZE GUIDE <span>/ VERGO</span>
+              </h3>
+              <button
+                type="button"
+                className="size-guide-close-btn"
+                onClick={() => setIsSizeGuideOpen(false)}
+                aria-label="Close size guide"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="size-guide-modal-body">
+              <Image
+                src="/Size Guide.png"
+                alt="Vergo Wear Size Guide"
+                width={800}
+                height={550}
+                className="size-guide-image"
+                priority
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

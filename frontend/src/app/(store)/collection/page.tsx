@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import ProductCard from "@/components/ProductCard/ProductCard";
 import { useProductsState } from "@/hooks/useProducts";
+import { sortSizes } from "@/lib/products";
 
 function CollectionLoader() {
   return (
@@ -117,7 +118,7 @@ function CollectionContent() {
     products.forEach((p) => {
       p.sizes?.forEach((s) => list.add(s));
     });
-    return Array.from(list).sort();
+    return sortSizes(Array.from(list));
   }, [products]);
 
   const colorsList = useMemo(() => {

@@ -46,9 +46,10 @@ interface OrderDetails {
     unitPrice: string | number;
     subtotal: string | number;
     variant: {
+      productId?: string;
       size: string;
       color: string;
-      product: { name: string; basePrice: string | number } | null;
+      product: { id?: string; productId?: string; name: string; basePrice: string | number } | null;
       images: Array<{ imageUrl: string }>;
     } | null;
   }>;
@@ -372,7 +373,7 @@ export default function OrderDetailsPage({
 
       setUploadSuccess(
         `Bank transfer receipt submitted successfully. Payment status: ${
-          data.status || "Pending Verification"
+          data.status || "Pending Review"
         }.`,
       );
       setSelectedFile(null);
@@ -983,22 +984,26 @@ export default function OrderDetailsPage({
                           {formatLkr(item.subtotal)}
                         </div>
 
-                        {statusStr === "completed" && (
-                          <div style={{ marginTop: "8px" }}>
-                            <Link
-                              href={`/collection/999?add-feedback=true`}
-                              style={{
-                                color: "#00FF9D",
-                                textDecoration: "none",
-                                fontSize: "11px",
-                                fontWeight: "700",
-                                textTransform: "uppercase",
-                              }}
-                            >
-                              ⟲ Return Item
-                            </Link>
-                          </div>
-                        )}
+                        {(statusStr === "completed" || statusStr === "delivered") && (() => {
+                          const itemProductId = (item.variant as any)?.productId || (item.variant?.product as any)?.productId || (item.variant?.product as any)?.id;
+                          if (!itemProductId) return null;
+                          return (
+                            <div style={{ marginTop: "8px" }}>
+                              <Link
+                                href={`/collection/${itemProductId}?add-feedback=true`}
+                                style={{
+                                  color: "#00FF9D",
+                                  textDecoration: "none",
+                                  fontSize: "11px",
+                                  fontWeight: "700",
+                                  textTransform: "uppercase",
+                                }}
+                              >
+                                ★ Leave Feedback
+                              </Link>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
@@ -1249,15 +1254,19 @@ export default function OrderDetailsPage({
                   gap: "12px",
                 }}
               >
-                {statusStr === "completed" && (
-                  <Link
-                    href={`/collection/999?add-feedback=true`}
-                    className="order-action-btn btn-track-package"
-                    style={{ textDecoration: "none", width: "100%" }}
-                  >
-                    🗩 Write a Review
-                  </Link>
-                )}
+                {(statusStr === "completed" || statusStr === "delivered") && (() => {
+                  const firstProductId = (order.orderItems?.[0]?.variant as any)?.productId || (order.orderItems?.[0]?.variant?.product as any)?.productId || (order.orderItems?.[0]?.variant?.product as any)?.id;
+                  if (!firstProductId) return null;
+                  return (
+                    <Link
+                      href={`/collection/${firstProductId}?add-feedback=true`}
+                      className="order-action-btn btn-track-package"
+                      style={{ textDecoration: "none", width: "100%" }}
+                    >
+                      🗩 Write a Review
+                    </Link>
+                  );
+                })()}
 
                 {canCancel && (
                   <button

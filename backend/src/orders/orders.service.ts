@@ -310,10 +310,18 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   private presentCheckout(checkout: any) {
     const totals = this.checkoutTotals(checkout);
+    const proof = checkout.paymentProof;
+    const paymentProofObj = proof
+      ? {
+          ...proof,
+          receiptUrl: proof.fileUrl,
+        }
+      : null;
     return {
       ...checkout,
       ...totals,
       checkoutPayload: this.checkoutDto(checkout),
+      paymentProof: paymentProofObj,
       receiptUrl: checkout.paymentProof?.fileUrl ?? null,
       receiptUploadedAt: checkout.paymentProof?.uploadedAt ?? null,
       // Compatibility alias: the checkout is now the reservation owner.
@@ -1144,7 +1152,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     status: string,
     rejectionReason?: string,
   ) {
-    const order = await this.prisma.orders.findUnique({ where: { orderId } });
+    const order = await this.prisma.orders.findUnique({
+      where: { orderId },
+      include: { orderItems: true },
+    });
     if (!order) throw new NotFoundException('Order not found.');
     if (role?.toLowerCase() === 'admin' && status === 'Claimed') {
       throw new ForbiddenException('Only an employee can claim an order.');
@@ -1242,6 +1253,24 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                 ? { completedAt: transitionedAt, deliveredAt: order.deliveredAt || transitionedAt }
                 : {};
     const updated = await this.prisma.$transaction(async (tx) => {
+      if (dbTargetStatus === 'Admin Approved') {
+        const orderItems = (order.orderItems || []).map((i: any) => ({
+          variantId: i.variantId,
+          quantity: i.quantity,
+        }));
+        if (orderItems.length > 0) {
+          const hasEmployeeStock = await this.verifyEmployeeSufficientStockForCheckout(
+            tx,
+            order.checkoutId || order.orderId,
+            orderItems,
+          );
+          if (!hasEmployeeStock) {
+            throw new ConflictException(
+              'Cannot approve order: No employee has sufficient stock in their inventory to fulfill this order.',
+            );
+          }
+        }
+      }
       const result = await tx.orders.update({
         where: { orderId },
         data: { orderStatus: dbTargetStatus, employeeId, ...statusTimestamp },
@@ -1287,6 +1316,85 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     // Notify logged-in customer on every status update (skips guest customers)
     await this.notifications?.notifyOrderStatusUpdate?.(orderId, status);
     return this.presentOrder(updated);
+  }
+
+  private async verifyEmployeeSufficientStockForCheckout(
+    tx: Prisma.TransactionClient,
+    checkoutId: string,
+    items: { variantId: string; quantity: number }[],
+  ): Promise<boolean> {
+    if (!items || items.length === 0) return true;
+
+    const reservations = await tx.stockReservation.findMany({
+      where: { checkoutId, status: { in: ['Active', 'Pending Verification'] } },
+      include: { inventory: true },
+    });
+
+    if (reservations.length > 0) {
+      const empReservationMap = new Map<string, Map<string, number>>();
+      for (const res of reservations) {
+        const empId = res.inventory?.employeeId;
+        if (!empId) continue;
+        if (!empReservationMap.has(empId)) {
+          empReservationMap.set(empId, new Map());
+        }
+        const varMap = empReservationMap.get(empId)!;
+        const vId = res.inventory?.variantId || (res as any).variantId;
+        varMap.set(vId, (varMap.get(vId) ?? 0) + res.quantity);
+      }
+
+      for (const [, varMap] of empReservationMap.entries()) {
+        const holdsAll = items.every(
+          (item) => (varMap.get(item.variantId) ?? 0) >= item.quantity,
+        );
+        if (holdsAll) return true;
+      }
+    }
+
+    const employees = await tx.inventory.findMany({
+      where: { employeeId: { not: null }, quantity: { gt: 0 } },
+      select: { employeeId: true },
+      distinct: ['employeeId'],
+    });
+
+    if (employees.length === 0) {
+      return true;
+    }
+
+    for (const emp of employees) {
+      if (!emp.employeeId) continue;
+      let hasAll = true;
+
+      for (const item of items) {
+        const invRows = await tx.inventory.findMany({
+          where: { employeeId: emp.employeeId, variantId: item.variantId },
+          select: { inventoryId: true, quantity: true },
+        });
+
+        let available = 0;
+        for (const inv of invRows) {
+          const held = await tx.stockReservation.aggregate({
+            where: {
+              inventoryId: inv.inventoryId,
+              checkoutId: { not: checkoutId },
+              status: { in: ['Active', 'Pending Verification'] },
+            },
+            _sum: { quantity: true },
+          });
+          const heldQty = held._sum.quantity ?? 0;
+          available += Math.max(0, inv.quantity - heldQty);
+        }
+
+        if (available < item.quantity) {
+          hasAll = false;
+          break;
+        }
+      }
+
+      if (hasAll) return true;
+    }
+
+    return false;
   }
 
   async reviewPendingCheckout(
@@ -1352,6 +1460,20 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       ) {
         throw new ConflictException(
           'The Bank Transfer checkout has no verified receipt or stock hold.',
+        );
+      }
+      const checkoutItems = (checkout.items || []).map((i: any) => ({
+        variantId: i.variantId,
+        quantity: i.quantity,
+      }));
+      const hasEmployeeStock = await this.verifyEmployeeSufficientStockForCheckout(
+        tx,
+        checkoutId,
+        checkoutItems,
+      );
+      if (!hasEmployeeStock) {
+        throw new ConflictException(
+          'Cannot approve order: No employee has sufficient stock in their inventory to fulfill this order.',
         );
       }
       const result = await this.persistOrder(tx, checkout);

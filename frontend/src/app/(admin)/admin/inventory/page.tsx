@@ -1267,20 +1267,44 @@ export default function InventoryDashboard() {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex justify-between items-center px-6 py-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0d0d0d] flex-shrink-0">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 py-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0d0d0d] flex-shrink-0 gap-3">
               <div>
                 <h3 className="text-sm font-bold tracking-widest uppercase text-white flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
-                  {modalMode === "edit" ? `EDIT PRODUCT: ${productForm.name || "GARMENT"}` : "ADD CLOTH & MULTI-VARIANTS"}
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse"></span>
+                  {modalMode === "edit" ? `EDIT GARMENT: ${productForm.name || "PRODUCT"}` : "NEW GARMENT & MULTI-VARIANTS"}
                 </h3>
                 <p className="text-[10px] text-[#8e8e93] uppercase font-semibold mt-0.5">
-                  Configure garment, per-color photo gallery, sizes & stock matrix
+                  Configure garment information, per-color photo gallery, sizes & stock matrix
                 </p>
               </div>
+
+              {/* Step Navigation Pills */}
+              <div className="flex items-center gap-1.5 bg-[#141416] p-1 rounded-lg border border-[rgba(255,255,255,0.06)]">
+                <a
+                  href="#sec-general-info"
+                  className="text-[9.5px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 transition-all hover:bg-emerald-900/60"
+                >
+                  1. Info
+                </a>
+                <a
+                  href="#sec-colors-gallery"
+                  className="text-[9.5px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded text-white/80 hover:text-white hover:bg-white/10 transition-all"
+                >
+                  2. Colors & Media
+                </a>
+                <a
+                  href="#sec-stock-matrix"
+                  className="text-[9.5px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded text-white/80 hover:text-white hover:bg-white/10 transition-all"
+                >
+                  3. Stock Matrix
+                </a>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setIsProductModalOpen(false)}
-                className="text-[#8e8e93] hover:text-white transition-colors cursor-pointer p-1"
+                className="text-[#8e8e93] hover:text-white transition-colors cursor-pointer p-1 rounded-md hover:bg-white/5"
+                title="Close modal"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1288,20 +1312,29 @@ export default function InventoryDashboard() {
               </button>
             </div>
 
-            {/* Modal Body (Scrollable) */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-              
+            {/* Modal Body (Scrollable Form) */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleSaveMultiVariantProduct("live");
+              }}
+              className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+            >
               {/* --- SECTION 1: CORE PRODUCT DETAILS --- */}
-              <div className="admin-card p-5 space-y-4">
-                <h4 className="text-[10px] font-bold text-white tracking-widest uppercase pb-2 border-b border-[rgba(255,255,255,0.04)]">
-                  1. GENERAL PRODUCT DETAILS
-                </h4>
+              <div id="sec-general-info" className="bg-[#121214] border border-[rgba(255,255,255,0.06)] rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-[rgba(255,255,255,0.04)]">
+                  <h4 className="text-[11px] font-extrabold text-white tracking-widest uppercase flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] flex items-center justify-center font-mono">1</span>
+                    GENERAL PRODUCT DETAILS
+                  </h4>
+                  <span className="text-[9.5px] text-[#8e8e93] uppercase font-mono-meta">* REQUIRED FIELDS</span>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* Product Name */}
                   <div className="sm:col-span-2">
                     <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
-                      PRODUCT NAME *
+                      PRODUCT NAME <span className="text-emerald-400">*</span>
                     </label>
                     <input
                       required
@@ -1309,19 +1342,19 @@ export default function InventoryDashboard() {
                       value={productForm.name}
                       onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
                       placeholder="E.g. Oversized Heavyweight T-Shirt"
-                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white uppercase placeholder-[#555] focus:outline-none focus:border-white/20"
+                      className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg px-3.5 py-2 text-xs text-white uppercase placeholder-[#555] focus:outline-none focus:border-emerald-500/50 transition-all font-semibold"
                     />
                   </div>
 
                   {/* Collection Dropdown */}
                   <div>
                     <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
-                      COLLECTION (CATEGORY) *
+                      COLLECTION (CATEGORY) <span className="text-emerald-400">*</span>
                     </label>
                     <select
                       value={productForm.categoryId}
                       onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
-                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer uppercase font-bold"
+                      className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer uppercase font-bold transition-all"
                     >
                       <option value="" className="bg-[#121212]">-- UNASSIGNED COLLECTION --</option>
                       {categories.map((c) => (
@@ -1335,7 +1368,7 @@ export default function InventoryDashboard() {
                   {/* Base Price */}
                   <div>
                     <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
-                      BASE PRICE ($ / LKR) *
+                      BASE PRICE ($ / LKR) <span className="text-emerald-400">*</span>
                     </label>
                     <input
                       required
@@ -1344,19 +1377,19 @@ export default function InventoryDashboard() {
                       min="0"
                       value={productForm.basePrice}
                       onChange={(e) => setProductForm({ ...productForm, basePrice: e.target.value })}
-                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs font-mono-meta font-bold text-white focus:outline-none focus:border-white/20"
+                      className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg px-3.5 py-2 text-xs font-mono-meta font-extrabold text-white focus:outline-none focus:border-emerald-500/50 transition-all"
                     />
                   </div>
 
                   {/* Supplier */}
                   <div>
                     <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
-                      SUPPLIER
+                      SUPPLIER (OPTIONAL)
                     </label>
                     <select
                       value={productForm.supplierId}
                       onChange={(e) => setProductForm({ ...productForm, supplierId: e.target.value })}
-                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer"
+                      className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer transition-all"
                     >
                       <option value="" className="bg-[#121212]">-- NO SUPPLIER --</option>
                       {suppliers.map((s) => (
@@ -1375,7 +1408,7 @@ export default function InventoryDashboard() {
                     <select
                       value={productForm.branchId}
                       onChange={(e) => setProductForm({ ...productForm, branchId: e.target.value })}
-                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 cursor-pointer"
+                      className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer transition-all"
                     >
                       <option value="" className="bg-[#121212]">-- UNASSIGNED BRANCH --</option>
                       {branches.map((b) => (
@@ -1396,24 +1429,26 @@ export default function InventoryDashboard() {
                       value={productForm.description}
                       onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
                       placeholder="Fabric GSM, fit details, model sizing, streetwear aesthetics..."
-                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-white/20 placeholder-[#555]"
+                      className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50 placeholder-[#555] transition-all"
                     />
                   </div>
                 </div>
               </div>
 
               {/* --- SECTION 2: COLORS & PER-COLOR GALLERIES --- */}
-              <div className="admin-card p-5 space-y-4">
+              <div id="sec-colors-gallery" className="bg-[#121214] border border-[rgba(255,255,255,0.06)] rounded-xl p-5 space-y-4">
                 <div className="flex justify-between items-center pb-2 border-b border-[rgba(255,255,255,0.04)]">
-                  <h4 className="text-[10px] font-bold text-white tracking-widest uppercase">
-                    2. COLORS & COLOR GALLERIES ({selectedColorIds.length} SELECTED)
+                  <h4 className="text-[11px] font-extrabold text-white tracking-widest uppercase flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] flex items-center justify-center font-mono">2</span>
+                    COLORS & COLOR GALLERIES ({selectedColorIds.length} SELECTED)
                   </h4>
+                  <span className="text-[9.5px] text-[#8e8e93] uppercase font-mono-meta">ATTACH PHOTOS PER COLOR</span>
                 </div>
 
                 {/* Color Selector Chips */}
                 <div>
                   <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-2">
-                    SELECT AVAILABLE COLORS:
+                    SELECT AVAILABLE COLORS <span className="text-emerald-400">*</span>:
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {colors.map((c) => {
@@ -1423,18 +1458,18 @@ export default function InventoryDashboard() {
                           key={c.colorId}
                           type="button"
                           onClick={() => toggleColorSelection(c.colorId)}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-white text-black border border-white shadow-sm"
-                              : "bg-[#161616] text-[#8e8e93] hover:text-white border border-[rgba(255,255,255,0.08)]"
+                              ? "bg-white text-black border border-white shadow-md shadow-white/10"
+                              : "bg-[#18181b] text-[#8e8e93] hover:text-white border border-[rgba(255,255,255,0.08)]"
                           }`}
                         >
                           <span
-                            className="w-3 h-3 rounded-full border border-black/20"
+                            className="w-3.5 h-3.5 rounded-full border border-black/20"
                             style={{ backgroundColor: c.hexCode || "#555" }}
                           ></span>
                           <span>{c.name}</span>
-                          {isSelected && <span className="font-extrabold">✓</span>}
+                          {isSelected && <span className="font-extrabold text-emerald-600 ml-0.5">✓</span>}
                         </button>
                       );
                     })}
@@ -1445,7 +1480,7 @@ export default function InventoryDashboard() {
                 {selectedColorIds.length > 0 && (
                   <div className="space-y-3 pt-2">
                     <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase">
-                      COLOR GALLERIES (PHOTOS PER COLOR):
+                      COLOR GALLERIES (UPLOAD / PASTE PHOTOS PER COLOR):
                     </label>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1457,30 +1492,30 @@ export default function InventoryDashboard() {
                         return (
                           <div
                             key={colorId}
-                            className="bg-[#121212] border border-[rgba(255,255,255,0.06)] rounded-lg p-3.5 space-y-3"
+                            className="bg-[#161618] border border-[rgba(255,255,255,0.08)] rounded-xl p-4 space-y-3 shadow-inner"
                           >
                             {/* Color Header */}
-                            <div className="flex justify-between items-center pb-2 border-b border-[rgba(255,255,255,0.04)]">
+                            <div className="flex justify-between items-center pb-2 border-b border-[rgba(255,255,255,0.06)]">
                               <div className="flex items-center gap-2">
                                 <span
-                                  className="w-3.5 h-3.5 rounded-full border border-white/20"
+                                  className="w-3.5 h-3.5 rounded-full border border-white/30"
                                   style={{ backgroundColor: colorObj?.hexCode || "#555" }}
                                 ></span>
-                                <span className="text-white font-bold text-xs uppercase tracking-wide">
+                                <span className="text-white font-extrabold text-xs uppercase tracking-wide">
                                   {colorObj?.name}
                                 </span>
                               </div>
-                              <span className="text-[9px] text-[#8e8e93] font-mono-meta">
+                              <span className="text-[9.5px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded font-mono-meta font-bold">
                                 {imgs.length} photo{imgs.length !== 1 ? "s" : ""}
                               </span>
                             </div>
 
                             {/* Images Thumbnail List */}
-                            <div className="flex flex-wrap gap-2 min-h-[52px] items-center p-2 bg-[#0a0a0a] border border-[rgba(255,255,255,0.04)] rounded-md">
+                            <div className="flex flex-wrap gap-2 min-h-[56px] items-center p-2.5 bg-[#0a0a0c] border border-[rgba(255,255,255,0.06)] rounded-lg">
                               {imgs.map((url, imgIdx) => (
                                 <div
                                   key={imgIdx}
-                                  className="relative group w-12 h-12 rounded border border-[rgba(255,255,255,0.1)] bg-[#161616] overflow-hidden flex-shrink-0"
+                                  className="relative group w-12 h-12 rounded-lg border border-[rgba(255,255,255,0.12)] bg-[#161616] overflow-hidden flex-shrink-0"
                                 >
                                   <img
                                     src={url}
@@ -1491,14 +1526,14 @@ export default function InventoryDashboard() {
                                     type="button"
                                     onClick={() => handleRemoveImageFromColor(colorId, imgIdx)}
                                     title="Delete Image"
-                                    className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 hover:text-red-300 transition-opacity cursor-pointer"
+                                    className="absolute inset-0 bg-black/85 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 hover:text-red-300 transition-opacity cursor-pointer"
                                   >
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                   </button>
                                   {imgIdx === 0 && (
-                                    <span className="absolute bottom-0 inset-x-0 bg-white text-black text-[7px] text-center font-extrabold uppercase py-0.2 pointer-events-none">
+                                    <span className="absolute bottom-0 inset-x-0 bg-emerald-400 text-black text-[7px] text-center font-extrabold uppercase py-0.2 pointer-events-none">
                                       MAIN
                                     </span>
                                   )}
@@ -1506,8 +1541,8 @@ export default function InventoryDashboard() {
                               ))}
 
                               {imgs.length === 0 && (
-                                <span className="text-[10px] text-[#555] uppercase font-bold text-center w-full">
-                                  No images attached for {colorObj?.name}
+                                <span className="text-[10px] text-[#666] uppercase font-bold text-center w-full py-1">
+                                  No photos attached for {colorObj?.name}
                                 </span>
                               )}
                             </div>
@@ -1515,7 +1550,7 @@ export default function InventoryDashboard() {
                             {/* Upload & URL Inputs */}
                             <div className="space-y-2">
                               <div className="flex gap-2">
-                                <label className="flex-1 flex items-center justify-center gap-1.5 bg-white/5 hover:bg-white/10 border border-[rgba(255,255,255,0.1)] text-white text-[10px] font-bold tracking-wider uppercase py-1.5 px-3 rounded-md cursor-pointer transition-all">
+                                <label className="flex-1 flex items-center justify-center gap-1.5 bg-white/5 hover:bg-white/10 border border-[rgba(255,255,255,0.1)] text-white text-[10px] font-bold tracking-wider uppercase py-2 px-3 rounded-lg cursor-pointer transition-all">
                                   <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                                   </svg>
@@ -1547,12 +1582,12 @@ export default function InventoryDashboard() {
                                       handleAddImageUrlToColor(colorId);
                                     }
                                   }}
-                                  className="flex-1 bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-md px-2.5 py-1 text-[10px] text-white focus:outline-none focus:border-white/20 placeholder-[#555]"
+                                  className="flex-1 bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg px-3 py-1.5 text-[10px] text-white focus:outline-none focus:border-emerald-500/50 placeholder-[#555]"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => handleAddImageUrlToColor(colorId)}
-                                  className="bg-white/10 hover:bg-white text-white hover:text-black font-bold text-[9px] uppercase tracking-wider px-3 py-1 rounded-md transition-all cursor-pointer"
+                                  className="bg-white/10 hover:bg-white text-white hover:text-black font-extrabold text-[9.5px] uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all cursor-pointer"
                                 >
                                   ADD
                                 </button>
@@ -1567,37 +1602,38 @@ export default function InventoryDashboard() {
               </div>
 
               {/* --- SECTION 3: SIZES & STOCK MATRIX TABLE --- */}
-              <div className="admin-card p-5 space-y-4">
+              <div id="sec-stock-matrix" className="bg-[#121214] border border-[rgba(255,255,255,0.06)] rounded-xl p-5 space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-2 border-b border-[rgba(255,255,255,0.04)]">
-                  <h4 className="text-[10px] font-bold text-white tracking-widest uppercase">
-                    3. SIZES & STOCK MATRIX ({matrixStats.totalVariants} VARIANTS)
+                  <h4 className="text-[11px] font-extrabold text-white tracking-widest uppercase flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] flex items-center justify-center font-mono">3</span>
+                    SIZES & STOCK MATRIX ({matrixStats.totalVariants} VARIANTS GENERATED)
                   </h4>
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => applySizePreset("standard")}
-                      className="text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded border border-[rgba(255,255,255,0.08)] cursor-pointer"
+                      className="text-[9px] font-extrabold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded-md border border-[rgba(255,255,255,0.08)] cursor-pointer"
                     >
                       STANDARD (S, M, L, XL)
                     </button>
                     <button
                       type="button"
                       onClick={() => applySizePreset("full")}
-                      className="text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded border border-[rgba(255,255,255,0.08)] cursor-pointer"
+                      className="text-[9px] font-extrabold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded-md border border-[rgba(255,255,255,0.08)] cursor-pointer"
                     >
                       FULL RANGE (XS - 3XL)
                     </button>
                     <button
                       type="button"
                       onClick={() => applySizePreset("all")}
-                      className="text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded border border-[rgba(255,255,255,0.08)] cursor-pointer"
+                      className="text-[9px] font-extrabold tracking-wider uppercase px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white rounded-md border border-[rgba(255,255,255,0.08)] cursor-pointer"
                     >
                       ALL SIZES
                     </button>
                     <button
                       type="button"
                       onClick={() => applySizePreset("clear")}
-                      className="text-[9px] font-bold tracking-wider uppercase px-2 py-1 text-[#8e8e93] hover:text-white rounded hover:bg-white/5 cursor-pointer"
+                      className="text-[9px] font-extrabold tracking-wider uppercase px-2 py-1 text-[#8e8e93] hover:text-white rounded-md hover:bg-white/5 cursor-pointer"
                     >
                       CLEAR
                     </button>
@@ -1607,7 +1643,7 @@ export default function InventoryDashboard() {
                 {/* Size Selector Chips */}
                 <div>
                   <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-2">
-                    SELECT SIZES:
+                    SELECT AVAILABLE SIZES <span className="text-emerald-400">*</span>:
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {sizes.map((s) => {
@@ -1617,13 +1653,13 @@ export default function InventoryDashboard() {
                           key={s.sizeId}
                           type="button"
                           onClick={() => toggleSizeSelection(s.sizeId)}
-                          className={`px-3.5 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-white text-black border border-white shadow-sm"
-                              : "bg-[#161616] text-[#8e8e93] hover:text-white border border-[rgba(255,255,255,0.08)]"
+                              ? "bg-white text-black border border-white shadow-md shadow-white/10"
+                              : "bg-[#18181b] text-[#8e8e93] hover:text-white border border-[rgba(255,255,255,0.08)]"
                           }`}
                         >
-                          {s.name} {isSelected && "✓"}
+                          {s.name} {isSelected && <span className="font-extrabold text-emerald-600">✓</span>}
                         </button>
                       );
                     })}
@@ -1633,7 +1669,7 @@ export default function InventoryDashboard() {
                 {/* Matrix Table & Bulk Toolbar */}
                 {selectedColorIds.length > 0 && selectedSizeIds.length > 0 && (
                   <div className="space-y-3 pt-2">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 bg-[#121212] border border-[rgba(255,255,255,0.06)] rounded-lg">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 bg-[#161618] border border-[rgba(255,255,255,0.08)] rounded-xl">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-bold text-[#8e8e93] uppercase">SET ALL QUANTITIES TO:</span>
                         <input
@@ -1641,12 +1677,12 @@ export default function InventoryDashboard() {
                           min="0"
                           value={bulkQtyValue}
                           onChange={(e) => setBulkQtyValue(e.target.value)}
-                          className="w-16 bg-[#161616] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-xs font-mono-meta text-white text-center focus:outline-none focus:border-white/30"
+                          className="w-16 bg-[#18181b] border border-[rgba(255,255,255,0.12)] rounded-md px-2 py-1 text-xs font-mono-meta font-extrabold text-white text-center focus:outline-none focus:border-emerald-500/50"
                         />
                         <button
                           type="button"
                           onClick={() => bulkApplyAllQuantities(parseInt(bulkQtyValue) || 0)}
-                          className="text-[9px] font-bold uppercase tracking-wider px-3 py-1.5 bg-white text-black hover:bg-[#eaeaea] rounded cursor-pointer transition-all"
+                          className="text-[9.5px] font-extrabold uppercase tracking-wider px-3.5 py-1.5 bg-white text-black hover:bg-[#eaeaea] rounded-md cursor-pointer transition-all shadow-sm"
                         >
                           APPLY TO ALL
                         </button>
@@ -1656,7 +1692,7 @@ export default function InventoryDashboard() {
                         <button
                           type="button"
                           onClick={() => copyQuantitiesToAllColors(selectedColorIds[0])}
-                          className="text-[9px] font-bold uppercase tracking-wider px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded border border-[rgba(255,255,255,0.1)] cursor-pointer"
+                          className="text-[9.5px] font-extrabold uppercase tracking-wider px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-md border border-[rgba(255,255,255,0.1)] cursor-pointer transition-all"
                         >
                           COPY 1ST COLOR QUANTITIES ACROSS ALL
                         </button>
@@ -1664,28 +1700,28 @@ export default function InventoryDashboard() {
                     </div>
 
                     {/* Matrix Grid Table */}
-                    <div className="overflow-x-auto border border-[rgba(255,255,255,0.06)] rounded-lg custom-scrollbar max-h-[320px] overflow-y-auto">
+                    <div className="overflow-x-auto border border-[rgba(255,255,255,0.08)] rounded-xl custom-scrollbar max-h-[340px] overflow-y-auto">
                       <table className="w-full text-left text-xs border-collapse">
-                        <thead className="bg-[#080808] text-[#8e8e93] sticky top-0 z-10">
+                        <thead className="bg-[#0a0a0c] text-[#8e8e93] sticky top-0 z-10">
                           <tr>
-                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)]">
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.08)]">
                               Color
                             </th>
-                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)]">
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.08)]">
                               Size
                             </th>
-                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)]">
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.08)]">
                               Generated SKU
                             </th>
-                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)] w-36">
-                              Stock Qty
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.08)] w-36">
+                              Stock Qty (Units)
                             </th>
-                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.06)] w-32">
+                            <th className="py-2.5 px-4 font-bold tracking-wider uppercase text-[9px] border-b border-[rgba(255,255,255,0.08)] w-36">
                               Price Adjust ($)
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[rgba(255,255,255,0.03)] bg-[#0f0f0f]">
+                        <tbody className="divide-y divide-[rgba(255,255,255,0.04)] bg-[#0f0f11]">
                           {selectedColorIds.map((colorId) => {
                             const colorObj = colors.find((c) => c.colorId === colorId);
                             const colorName = colorObj?.name || "Color";
@@ -1699,20 +1735,20 @@ export default function InventoryDashboard() {
                               const generatedSku = `VG-${prefix}-${colorName.substring(0, 3).toUpperCase()}-${sizeName.toUpperCase()}`;
 
                               return (
-                                <tr key={key} className="hover:bg-white/[0.02] transition-colors">
+                                <tr key={key} className="hover:bg-white/[0.03] transition-colors">
                                   <td className="py-2.5 px-4">
                                     <div className="flex items-center gap-2">
                                       <span
-                                        className="w-3 h-3 rounded-full border border-white/20 flex-shrink-0"
+                                        className="w-3.5 h-3.5 rounded-full border border-white/20 flex-shrink-0"
                                         style={{ backgroundColor: colorObj?.hexCode || "#555" }}
                                       ></span>
-                                      <span className="font-bold text-white uppercase text-[11px]">
+                                      <span className="font-extrabold text-white uppercase text-[11px]">
                                         {colorName}
                                       </span>
                                     </div>
                                   </td>
                                   <td className="py-2.5 px-4">
-                                    <span className="bg-[#161616] text-white font-bold px-2 py-0.5 rounded border border-[rgba(255,255,255,0.08)] uppercase text-[10px]">
+                                    <span className="bg-[#18181b] text-white font-extrabold px-2.5 py-0.5 rounded border border-[rgba(255,255,255,0.08)] uppercase text-[10px]">
                                       {sizeName}
                                     </span>
                                   </td>
@@ -1727,7 +1763,7 @@ export default function InventoryDashboard() {
                                       onChange={(e) =>
                                         handleMatrixChange(colorId, sizeId, "quantity", parseInt(e.target.value) || 0)
                                       }
-                                      className="w-24 bg-[#161616] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-xs font-mono-meta font-bold text-white focus:outline-none focus:border-white/30 text-center"
+                                      className="w-28 bg-[#18181b] border border-[rgba(255,255,255,0.12)] rounded-lg px-2.5 py-1 text-xs font-mono-meta font-extrabold text-white focus:outline-none focus:border-emerald-500/50 text-center"
                                     />
                                   </td>
                                   <td className="py-2.5 px-4">
@@ -1739,7 +1775,7 @@ export default function InventoryDashboard() {
                                         handleMatrixChange(colorId, sizeId, "priceAdjustment", parseFloat(e.target.value) || 0)
                                       }
                                       placeholder="0.00"
-                                      className="w-24 bg-[#161616] border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-xs font-mono-meta text-[#a1a1aa] focus:outline-none focus:border-white/30 text-center"
+                                      className="w-28 bg-[#18181b] border border-[rgba(255,255,255,0.12)] rounded-lg px-2.5 py-1 text-xs font-mono-meta text-[#a1a1aa] focus:outline-none focus:border-emerald-500/50 text-center"
                                     />
                                   </td>
                                 </tr>
@@ -1752,16 +1788,19 @@ export default function InventoryDashboard() {
                   </div>
                 )}
               </div>
-            </div>
+
+              {/* Form Hidden Submit Trigger */}
+              <button type="submit" className="hidden" aria-hidden="true" />
+            </form>
 
             {/* Modal Footer */}
             <div className="px-6 py-4 border-t border-[rgba(255,255,255,0.06)] bg-[#0d0d0d] flex flex-col sm:flex-row justify-between items-center gap-4 flex-shrink-0">
               <div className="flex items-center gap-3 text-xs text-[#8e8e93] font-mono-meta">
-                <span className="bg-white/5 text-white px-3 py-1.5 rounded border border-[rgba(255,255,255,0.08)] font-bold">
+                <span className="bg-white/5 text-white px-3 py-1.5 rounded-lg border border-[rgba(255,255,255,0.08)] font-bold">
                   {matrixStats.totalVariants} VARIANTS
                 </span>
                 <span>•</span>
-                <span className="bg-emerald-950/40 text-emerald-400 px-3 py-1.5 rounded border border-emerald-800/40 font-bold">
+                <span className="bg-emerald-950/40 text-emerald-400 px-3 py-1.5 rounded-lg border border-emerald-800/40 font-bold">
                   {matrixStats.totalStock} TOTAL STOCK UNITS
                 </span>
               </div>
@@ -1771,7 +1810,7 @@ export default function InventoryDashboard() {
                   <button
                     type="button"
                     onClick={() => handleDeleteProduct(editingProductId)}
-                    className="bg-red-950/30 text-[#ef4444] hover:bg-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] font-bold text-xs tracking-widest px-4 py-2 rounded-md uppercase cursor-pointer transition-all mr-auto sm:mr-2"
+                    className="bg-red-950/30 text-[#ef4444] hover:bg-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] font-bold text-xs tracking-widest px-4 py-2 rounded-lg uppercase cursor-pointer transition-all mr-auto sm:mr-2"
                   >
                     DELETE
                   </button>
@@ -1779,7 +1818,7 @@ export default function InventoryDashboard() {
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}
-                  className="bg-transparent hover:bg-white/5 border border-[rgba(255,255,255,0.1)] text-[#8e8e93] hover:text-white font-bold tracking-widest px-4 py-2 rounded-md transition-all uppercase cursor-pointer"
+                  className="bg-transparent hover:bg-white/5 border border-[rgba(255,255,255,0.1)] text-[#8e8e93] hover:text-white font-bold tracking-widest px-4 py-2 rounded-lg transition-all uppercase cursor-pointer"
                 >
                   CANCEL
                 </button>
@@ -1787,7 +1826,7 @@ export default function InventoryDashboard() {
                   type="button"
                   onClick={() => void handleSaveMultiVariantProduct("hidden")}
                   disabled={loading || matrixStats.totalVariants === 0}
-                  className="bg-[#161616] hover:bg-[#202020] border border-[rgba(255,255,255,0.15)] text-white font-bold text-xs tracking-widest px-5 py-2 rounded-md uppercase cursor-pointer transition-all disabled:opacity-50"
+                  className="bg-[#18181b] hover:bg-[#222225] border border-[rgba(255,255,255,0.15)] text-white font-bold text-xs tracking-widest px-5 py-2 rounded-lg uppercase cursor-pointer transition-all disabled:opacity-50"
                 >
                   SAVE AS HIDDEN
                 </button>
@@ -1795,18 +1834,25 @@ export default function InventoryDashboard() {
                   type="button"
                   onClick={() => void handleSaveMultiVariantProduct("live")}
                   disabled={loading || matrixStats.totalVariants === 0}
-                  className="bg-white text-black hover:bg-[#eaeaea] font-bold text-xs tracking-widest px-6 py-2 rounded-md shadow-md shadow-white/5 uppercase cursor-pointer transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                  className="bg-white text-black hover:bg-[#eaeaea] font-extrabold text-xs tracking-widest px-6 py-2 rounded-lg shadow-md shadow-white/10 uppercase cursor-pointer transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>{modalMode === "edit" ? "SAVE CHANGES & SET LIVE" : "SET PRODUCT LIVE"}</span>
+                  {loading ? (
+                    <span>SAVING...</span>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>{modalMode === "edit" ? "SAVE CHANGES & SET LIVE" : "SET PRODUCT LIVE"}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

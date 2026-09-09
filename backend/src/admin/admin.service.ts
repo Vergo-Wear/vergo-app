@@ -730,30 +730,26 @@ export class AdminService {
           ),
         );
 
-        // 3. Delete existing images & inventory & variants for this product
-        const oldVariantIds = existingProduct.variants.map((v) => v.variantId);
-        if (oldVariantIds.length > 0) {
-          await tx.cartItem.deleteMany({
-            where: { variantId: { in: oldVariantIds } },
-          });
-          await tx.pendingCheckoutItem.deleteMany({
-            where: { variantId: { in: oldVariantIds } },
-          });
-          await tx.images.deleteMany({
-            where: { variantId: { in: oldVariantIds } },
-          });
-          await tx.inventory.deleteMany({
-            where: { variantId: { in: oldVariantIds } },
-          });
-          await tx.productVariant.deleteMany({
-            where: { variantId: { in: oldVariantIds } },
-          });
-        }
+        const existingVariantMap = new Map<string, any>();
+        existingProduct.variants.forEach((v) => {
+          const key = `${v.colorId || ''}_${v.sizeId || ''}`;
+          existingVariantMap.set(key, v);
+          if (v.sku) {
+            existingVariantMap.set(v.sku.toLowerCase(), v);
+          }
+        });
 
-        // 4. Re-create new updated variants
+        const processedVariantIds = new Set<string>();
+
+        // 3. Smart Upsert Variants (Update existing or create new)
         for (let i = 0; i < dto.variants.length; i++) {
           const variantDto = dto.variants[i];
           const refs = references[i];
+          const key = `${refs.colorId || ''}_${refs.sizeId || ''}`;
+
+          const existingVar =
+            existingVariantMap.get(key) ||
+            existingVariantMap.get(variantDto.sku.trim().toLowerCase());
 
           const colorRows: any[] = refs.colorId
             ? await tx.$queryRawUnsafe(
@@ -766,37 +762,123 @@ export class AdminService {
           const mainProductImgUrl = dto.imageUrl?.trim();
           const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
 
-          const imageList: string[] = (variantDto.images && variantDto.images.length > 0)
-            ? variantDto.images.filter(Boolean)
-            : targetImgUrl ? [targetImgUrl] : [];
+          const imageList: string[] =
+            variantDto.images && variantDto.images.length > 0
+              ? variantDto.images.filter(Boolean)
+              : targetImgUrl
+                ? [targetImgUrl]
+                : [];
 
-          await tx.productVariant.create({
-            data: {
-              productId: productId,
-              sku: variantDto.sku.trim(),
-              status: variantDto.status || 'show',
-              sizeId: refs.sizeId,
-              colorId: refs.colorId,
-              priceAdjustment: variantDto.priceAdjustment,
-              inventory: {
-                create: {
+          if (existingVar) {
+            processedVariantIds.add(existingVar.variantId);
+
+            // Update existing variant in-place
+            await tx.productVariant.update({
+              where: { variantId: existingVar.variantId },
+              data: {
+                sku: variantDto.sku.trim(),
+                status: variantDto.status || 'show',
+                priceAdjustment: variantDto.priceAdjustment,
+              },
+            });
+
+            // Update or create inventory for existing variant
+            const existingInv = existingVar.inventory?.[0];
+            if (existingInv) {
+              await tx.inventory.update({
+                where: { inventoryId: existingInv.inventoryId },
+                data: {
+                  quantity: variantDto.quantity,
+                  branchId: variantDto.branchId || null,
+                  reorderLevel: variantDto.reorderLevel ?? 10,
+                  lastUpdated: new Date(),
+                },
+              });
+            } else {
+              await tx.inventory.create({
+                data: {
+                  variantId: existingVar.variantId,
                   quantity: variantDto.quantity,
                   branchId: variantDto.branchId || null,
                   reorderLevel: variantDto.reorderLevel ?? 10,
                 },
+              });
+            }
+
+            // Update images for existing variant
+            await tx.images.deleteMany({
+              where: { variantId: existingVar.variantId },
+            });
+            if (imageList.length > 0) {
+              await tx.images.createMany({
+                data: imageList.map((url, idx) => ({
+                  variantId: existingVar.variantId,
+                  imageUrl: url,
+                  title: idx === 0 ? 'Main' : `Gallery ${idx}`,
+                })),
+              });
+            }
+          } else {
+            // Create brand new variant
+            const newVar = await tx.productVariant.create({
+              data: {
+                productId: productId,
+                sku: variantDto.sku.trim(),
+                status: variantDto.status || 'show',
+                sizeId: refs.sizeId,
+                colorId: refs.colorId,
+                priceAdjustment: variantDto.priceAdjustment,
+                inventory: {
+                  create: {
+                    quantity: variantDto.quantity,
+                    branchId: variantDto.branchId || null,
+                    reorderLevel: variantDto.reorderLevel ?? 10,
+                  },
+                },
+                ...(imageList.length > 0
+                  ? {
+                      images: {
+                        create: imageList.map((url, idx) => ({
+                          imageUrl: url,
+                          title: idx === 0 ? 'Main' : `Gallery ${idx}`,
+                        })),
+                      },
+                    }
+                  : {}),
               },
-              ...(imageList.length > 0
-                ? {
-                    images: {
-                      create: imageList.map((url, idx) => ({
-                        imageUrl: url,
-                        title: idx === 0 ? 'Main' : `Gallery ${idx}`,
-                      })),
-                    },
-                  }
-                : {}),
-            },
-          });
+            });
+            processedVariantIds.add(newVar.variantId);
+          }
+        }
+
+        // 4. Handle removed variants gracefully
+        const removedVariantIds = existingProduct.variants
+          .map((v) => v.variantId)
+          .filter((id) => !processedVariantIds.has(id));
+
+        if (removedVariantIds.length > 0) {
+          for (const remId of removedVariantIds) {
+            try {
+              await tx.cartItem.deleteMany({ where: { variantId: remId } });
+              await tx.pendingCheckoutItem.deleteMany({
+                where: { variantId: remId },
+              });
+              await tx.inventoryCommitment.deleteMany({
+                where: { inventory: { variantId: remId } },
+              });
+              await tx.stockReservation.deleteMany({
+                where: { inventory: { variantId: remId } },
+              });
+              await tx.images.deleteMany({ where: { variantId: remId } });
+              await tx.inventory.deleteMany({ where: { variantId: remId } });
+              await tx.productVariant.delete({ where: { variantId: remId } });
+            } catch (err) {
+              await tx.productVariant.update({
+                where: { variantId: remId },
+                data: { status: 'hidden' },
+              });
+            }
+          }
         }
 
         return tx.product.findUnique({
@@ -866,6 +948,18 @@ export class AdminService {
         const variantIds = variants.map((v) => v.variantId);
 
         if (variantIds.length > 0) {
+          await tx.cartItem.deleteMany({
+            where: { variantId: { in: variantIds } },
+          });
+          await tx.pendingCheckoutItem.deleteMany({
+            where: { variantId: { in: variantIds } },
+          });
+          await tx.inventoryCommitment.deleteMany({
+            where: { inventory: { variantId: { in: variantIds } } },
+          });
+          await tx.stockReservation.deleteMany({
+            where: { inventory: { variantId: { in: variantIds } } },
+          });
           await tx.images.deleteMany({
             where: { variantId: { in: variantIds } },
           });

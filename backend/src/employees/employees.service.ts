@@ -574,4 +574,80 @@ export class EmployeesService {
       ...emp,
     }));
   }
+
+  /**
+   * Fetches stock inventory assigned specifically to the current employee.
+   */
+  async getMyStock(profileId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { profileId },
+    });
+
+    if (!employee) {
+      return {
+        totalItems: 0,
+        totalUnits: 0,
+        allocatedStock: [],
+      };
+    }
+
+    const inventoryItems = await this.prisma.inventory.findMany({
+      where: {
+        employeeId: employee.employeeId,
+      },
+      include: {
+        variant: {
+          include: {
+            product: {
+              include: {
+                category: true,
+              },
+            },
+            color: true,
+            size: true,
+            images: { orderBy: { createdAt: 'asc' }, take: 1 },
+          },
+        },
+        branch: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: { lastUpdated: 'desc' },
+    });
+
+    const allocatedStock = inventoryItems.map((item) => {
+      const sizeName = item.variant?.size?.name || 'Standard';
+      const colorName = item.variant?.color?.name || 'Standard';
+      const productName = item.variant?.product?.name || 'Product Item';
+      const sku =
+        item.variant?.sku || item.inventoryId.substring(0, 8).toUpperCase();
+      const imageUrl = item.variant?.images?.[0]?.imageUrl || null;
+
+      return {
+        inventoryId: item.inventoryId,
+        variantId: item.variantId,
+        sku,
+        productName,
+        category: item.variant?.product?.category?.name || 'Apparel',
+        size: sizeName,
+        color: colorName,
+        qty: item.quantity,
+        reorderLevel: item.reorderLevel ?? 10,
+        lastUpdated: item.lastUpdated,
+        branchName: item.branch?.name || 'Main Warehouse',
+        imageUrl,
+      };
+    });
+
+    const totalUnits = allocatedStock.reduce((sum, item) => sum + item.qty, 0);
+
+    return {
+      totalItems: allocatedStock.length,
+      totalUnits,
+      allocatedStock,
+    };
+  }
 }
+

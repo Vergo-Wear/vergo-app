@@ -153,8 +153,15 @@ const mapApiRecord = (record: ApiRecord, pendingCheckout: boolean): Order => {
             status: pendingCheckout
               ? paymentStatus
               : proof?.status || "Approved",
-            receipt_url: proof?.receiptUrl || undefined,
-            uploaded_at: proof?.uploadedAt || undefined,
+            receipt_url:
+              proof?.receiptUrl ||
+              (proof as any)?.fileUrl ||
+              (record as any).receiptUrl ||
+              undefined,
+            uploaded_at:
+              proof?.uploadedAt ||
+              (record as any).receiptUploadedAt ||
+              undefined,
             expires_at:
               (pendingCheckout ? record.expiresAt : proof?.expiresAt) ||
               undefined,
@@ -262,7 +269,7 @@ export default function OrdersDashboard() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("All");
   const [dateRangeFilter, setDateRangeFilter] = useState("All");
-  const [sortOption, setSortOption] = useState("Newest First");
+  const [sortOption, setSortOption] = useState("Pending First (Oldest First)");
 
   // Modals & Drawers State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -417,27 +424,38 @@ export default function OrdersDashboard() {
 
   // --- DERIVATIONS ---
   const getDerivedStatus = (order: Order) => {
+    if (order.order_status === "Cancelled") return "Cancelled";
+    if (
+      order.order_status === "Admin Rejected" ||
+      order.order_status === "Rejected" ||
+      order.confirmation_status === "Rejected" ||
+      order.payment_proofs?.status === "Rejected"
+    )
+      return "Admin Rejected";
+
+    if (
+      order.order_status === "Admin Approved" ||
+      order.confirmation_status === "Confirmed" ||
+      order.payment_proofs?.status === "Approved"
+    )
+      return "Admin Approved";
+
     if (
       order.payment_method === "Bank Transfer" &&
       order.payment_proofs?.status === "Expired"
     )
       return "Expired";
-    if (order.order_status === "Cancelled") return "Cancelled";
-    if (
-      order.order_status === "Rejected" ||
-      order.confirmation_status === "Rejected"
-    )
-      return "Rejected";
+
     if (order.payment_method === "Cash On Delivery") {
       return order.confirmation_status === "Pending"
         ? "Waiting COD"
-        : "Approved";
+        : "Admin Approved";
     }
+
     if (order.payment_method === "Bank Transfer") {
-      if (order.payment_proofs?.status) return order.payment_proofs.status;
-      return "Pending Upload";
+      return "Pending Review";
     }
-    return "Approved";
+    return order.order_status || "Pending Review";
   };
 
   const statusConfig: Record<
@@ -450,25 +468,19 @@ export default function OrdersDashboard() {
       border: "border-blue-500/30",
       icon: Icons.Clock,
     },
-    "Pending Upload": {
-      color: "text-zinc-400",
-      bg: "bg-zinc-800/50",
-      border: "border-zinc-700/50",
-      icon: Icons.AlertTriangle,
-    },
-    "Pending Verification": {
+    "Pending Review": {
       color: "text-amber-400",
       bg: "bg-amber-500/10",
       border: "border-amber-500/30",
       icon: Icons.BadgeInfo,
     },
-    Approved: {
+    "Admin Approved": {
       color: "text-emerald-400",
       bg: "bg-emerald-500/10",
       border: "border-emerald-500/30",
       icon: Icons.CheckCircle,
     },
-    Rejected: {
+    "Admin Rejected": {
       color: "text-red-400",
       bg: "bg-red-500/10",
       border: "border-red-500/30",
@@ -515,6 +527,32 @@ export default function OrdersDashboard() {
       );
     }
     result.sort((a, b) => {
+      if (sortOption === "Pending First (Oldest First)") {
+        const statusA = getDerivedStatus(a);
+        const statusB = getDerivedStatus(b);
+        const isReviewA = statusA === "Waiting COD" || statusA === "Pending Review";
+        const isReviewB = statusB === "Waiting COD" || statusB === "Pending Review";
+
+        if (isReviewA && !isReviewB) return -1;
+        if (!isReviewA && isReviewB) return 1;
+
+        if (isReviewA && isReviewB) {
+          // Oldest added order first for pending review
+          return (
+            new Date(a.order_date).getTime() - new Date(b.order_date).getTime()
+          );
+        } else {
+          // Latest admin action / newest order date first for already reviewed orders
+          const dateA = new Date(
+            a.payment_proofs?.acted_at || a.order_date
+          ).getTime();
+          const dateB = new Date(
+            b.payment_proofs?.acted_at || b.order_date
+          ).getTime();
+          return dateB - dateA;
+        }
+      }
+
       if (sortOption === "Newest First")
         return (
           new Date(b.order_date).getTime() - new Date(a.order_date).getTime()
@@ -542,10 +580,9 @@ export default function OrdersDashboard() {
   const statCounts = useMemo(() => {
     const counts: Record<string, number> = {
       "Waiting COD": 0,
-      "Pending Upload": 0,
-      "Pending Verification": 0,
-      Approved: 0,
-      Rejected: 0,
+      "Pending Review": 0,
+      "Admin Approved": 0,
+      "Admin Rejected": 0,
       Expired: 0,
       Cancelled: 0,
     };
@@ -652,7 +689,7 @@ export default function OrdersDashboard() {
       )}
 
       {/* TOP SUMMARY CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
         {Object.keys(statCounts).map((status) => {
           const config = statusConfig[status];
           const isActive = statusFilter === status;
@@ -661,22 +698,30 @@ export default function OrdersDashboard() {
             <div
               key={status}
               onClick={() => setStatusFilter(isActive ? "All" : status)}
-              className={`p-3.5 sm:p-4 rounded-xl border shadow-sm cursor-pointer transition-all ${
+              className={`relative overflow-hidden p-4 rounded-2xl border shadow-md cursor-pointer transition-all duration-200 flex flex-col justify-between min-h-[110px] group ${
                 isActive
-                  ? "bg-[#18181b] border-emerald-500/50 ring-1 ring-emerald-500/30"
-                  : "bg-[#09090b] border-[#27272a] hover:border-emerald-500/30 hover:bg-[#121215]"
+                  ? "bg-[#141419] border-emerald-500/60 ring-1 ring-emerald-500/40 shadow-emerald-950/20"
+                  : "bg-[#0c0c0e] border-white/10 hover:border-white/20 hover:bg-[#111115] hover:-translate-y-0.5"
               }`}
             >
-              <div className="flex items-start justify-between mb-2 sm:mb-3">
-                <div className={`p-2 rounded-lg ${config.bg} ${config.color} border ${config.border}`}>
+              {isActive && (
+                <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
+              )}
+              <div className="flex items-center justify-between mb-3">
+                <div className={`w-8 h-8 rounded-xl ${config.bg} ${config.color} border ${config.border} flex items-center justify-center transition-transform group-hover:scale-105`}>
                   <Icon />
                 </div>
+                {isActive && (
+                  <span className="text-[9px] font-bold tracking-widest text-emerald-400 uppercase bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    Selected
+                  </span>
+                )}
               </div>
               <div>
-                <p className="text-[9px] sm:text-[10px] font-bold text-[#8e8e93] uppercase tracking-wider mb-1 truncate">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 truncate">
                   {status}
                 </p>
-                <h3 className={`text-xl sm:text-2xl font-bold font-mono ${config.color}`}>
+                <h3 className={`text-2xl font-black font-mono tracking-tight ${config.color}`}>
                   {statCounts[status]}
                 </h3>
               </div>
@@ -746,6 +791,7 @@ export default function OrdersDashboard() {
             onChange={(e) => setSortOption(e.target.value)}
             className="w-full bg-[#18181b] border border-[#27272a] focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-xs font-bold tracking-wider uppercase text-white cursor-pointer focus:outline-none transition-all"
           >
+            <option value="Pending First (Oldest First)">Pending First (Oldest First)</option>
             <option value="Newest First">Newest First</option>
             <option value="Oldest First">Oldest First</option>
             <option value="Highest Amount">Highest Amount</option>
@@ -933,7 +979,7 @@ export default function OrdersDashboard() {
                             </>
                           )}
 
-                          {status === "Pending Verification" && (
+                          {(status === "Pending Review" || status === "Pending") && (
                             <>
                               <button
                                 type="button"
@@ -1203,10 +1249,33 @@ export default function OrdersDashboard() {
                       <button
                         type="button"
                         onClick={() => setReceiptModalOrder(selectedOrder)}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] uppercase tracking-widest font-bold px-3 py-2 rounded-lg transition-all w-full flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-emerald-950/40"
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] uppercase tracking-widest font-bold px-3 py-2 rounded-lg transition-all w-full flex justify-center items-center gap-2 cursor-pointer shadow-md shadow-emerald-950/40 mb-3"
                       >
                         <Icons.Eye /> Preview Receipt
                       </button>
+                    )}
+                    {selectedOrder.pending_checkout && (getDerivedStatus(selectedOrder) === "Pending Review" || getDerivedStatus(selectedOrder) === "Pending") && (
+                      <div className="flex gap-2 pt-3 border-t border-[#27272a]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejectReason("");
+                            setConfirmAction({ action: "rejectPayment", orderId: selectedOrder.order_id });
+                          }}
+                          className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-3 rounded-lg uppercase text-[9px] tracking-widest transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-red-950/40"
+                        >
+                          <Icons.Cross /> Reject Order
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmAction({ action: "approvePayment", orderId: selectedOrder.order_id });
+                          }}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-3 rounded-lg uppercase text-[9px] tracking-widest transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/40"
+                        >
+                          <Icons.Check /> Accept Order
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1320,69 +1389,137 @@ export default function OrdersDashboard() {
 
       {/* RECEIPT IMAGE MODAL */}
       {receiptModalOrder && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-          <div className="absolute top-6 right-6 z-10">
-            <button
-              type="button"
-              onClick={() => setReceiptModalOrder(null)}
-              className="text-white/70 hover:text-white transition-colors bg-white/10 p-2 rounded-full cursor-pointer"
-            >
-              <Icons.Close />
-            </button>
-          </div>
-          <div className="bg-[#09090b] p-2 rounded-xl border border-[#27272a] flex flex-col items-center shadow-2xl max-w-full">
-            <div className="w-[90vw] max-w-[450px] bg-[#141416] rounded-t-lg pt-4 px-6 border-b border-[#27272a] text-center">
-              <h3 className="text-white font-bold tracking-widest uppercase text-xs">
-                Receipt Preview
-              </h3>
-              <div className="text-[10px] text-[#8e8e93] font-mono mt-2 mb-4 grid grid-cols-2 gap-2 text-left">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fade-in">
+          <div className="relative bg-[#0c0c0e] border border-white/10 rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden my-auto">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-white/10 bg-[#121215] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <Icons.Receipt />
+                </div>
                 <div>
-                  <span className="text-[#555] uppercase tracking-wider">
-                    Method:
-                  </span>
-                  <p className="text-white mt-0.5">
-                    {receiptModalOrder.payment_method}
+                  <h3 className="text-white font-bold tracking-wider uppercase text-xs">
+                    Bank Transfer Receipt
+                  </h3>
+                  <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                    Order ID: <span className="text-zinc-200">{receiptModalOrder.order_id}</span>
                   </p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[#555] uppercase tracking-wider">
-                    Status:
-                  </span>
-                  <p className="text-white mt-0.5">
-                    {getDerivedStatus(receiptModalOrder)}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase border ${statusConfig[getDerivedStatus(receiptModalOrder)]?.bg} ${statusConfig[getDerivedStatus(receiptModalOrder)]?.color} ${statusConfig[getDerivedStatus(receiptModalOrder)]?.border}`}>
+                  {getDerivedStatus(receiptModalOrder)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setReceiptModalOrder(null)}
+                  className="text-zinc-400 hover:text-white hover:bg-white/10 transition-colors p-2 rounded-full cursor-pointer"
+                  aria-label="Close modal"
+                >
+                  <Icons.Close />
+                </button>
+              </div>
+            </div>
+
+            {/* Details Summary Bar */}
+            <div className="px-6 pt-4 pb-2 bg-[#0c0c0e]">
+              <div className="bg-[#141418] border border-white/5 rounded-xl p-3.5 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Customer</span>
+                  <p className="text-zinc-200 font-medium truncate mt-0.5">
+                    {receiptModalOrder.order_customer_details.first_name} {receiptModalOrder.order_customer_details.last_name}
                   </p>
                 </div>
-                <div className="col-span-2 border-t border-[#27272a] pt-2 mt-1">
-                  <span className="text-[#555] uppercase tracking-wider">
-                    Uploaded:
-                  </span>
-                  <p className="text-white mt-0.5 font-mono">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Total Amount</span>
+                  <p className="text-emerald-400 font-mono font-bold mt-0.5">
+                    {receiptModalOrder.total_amount.toLocaleString()} LKR
+                  </p>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Uploaded</span>
+                  <p className="text-zinc-300 font-mono text-[11px] mt-0.5">
                     {receiptModalOrder.payment_proofs?.uploaded_at
-                      ? new Date(
-                          receiptModalOrder.payment_proofs.uploaded_at
-                        ).toLocaleString()
-                      : new Date().toLocaleString()}
+                      ? new Date(receiptModalOrder.payment_proofs.uploaded_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                      : "Recently"}
                   </p>
                 </div>
               </div>
             </div>
-            <div className="w-[90vw] max-w-[450px] h-[60vh] max-h-[500px] rounded-b-lg bg-[#141416] flex items-center justify-center relative overflow-hidden p-2">
-              <object
-                data={receiptModalOrder.payment_proofs?.receipt_url}
-                type="image/*"
-                aria-label={`Payment receipt for ${receiptModalOrder.order_id}`}
-                className="relative z-10 w-full h-full object-contain rounded-lg"
-              >
-                <a
-                  href={receiptModalOrder.payment_proofs?.receipt_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="relative z-10 text-xs text-emerald-400 underline font-bold"
-                >
-                  Open receipt in a new tab
-                </a>
-              </object>
+
+            {/* Image Preview Window */}
+            <div className="p-6 pt-3">
+              <div className="relative bg-[#060608] border border-white/10 rounded-xl min-h-[280px] max-h-[460px] flex items-center justify-center p-3 overflow-hidden group">
+                {receiptModalOrder.payment_proofs?.receipt_url ? (
+                  <>
+                    <img
+                      src={receiptModalOrder.payment_proofs.receipt_url}
+                      alt={`Payment receipt for order ${receiptModalOrder.order_id}`}
+                      className="max-h-[420px] w-auto h-auto max-w-full object-contain rounded-lg shadow-lg"
+                      onError={(e) => {
+                        // Fallback if image fails to render inline
+                        const target = e.currentTarget;
+                        target.style.display = "none";
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector(".fallback-link")) {
+                          const fallback = document.createElement("div");
+                          fallback.className = "fallback-link text-center p-6 space-y-3";
+                          fallback.innerHTML = `
+                            <p class="text-zinc-400 text-xs">Receipt file format cannot be displayed inline.</p>
+                            <a href="${receiptModalOrder.payment_proofs?.receipt_url}" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold hover:bg-emerald-500/30 transition-colors">
+                              Open receipt file ↗
+                            </a>
+                          `;
+                          parent.appendChild(fallback);
+                        }
+                      }}
+                    />
+                    <a
+                      href={receiptModalOrder.payment_proofs.receipt_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="absolute top-3 right-3 opacity-90 group-hover:opacity-100 bg-black/75 hover:bg-black text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all shadow-md backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      Open Full Size ↗
+                    </a>
+                  </>
+                ) : (
+                  <div className="text-center p-8 text-zinc-500 space-y-2">
+                    <p className="text-sm font-medium">No receipt image uploaded</p>
+                    <p className="text-xs text-zinc-600">The customer has not attached a receipt file yet.</p>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Actions Footer */}
+            {receiptModalOrder.pending_checkout && (getDerivedStatus(receiptModalOrder) === "Pending Review" || getDerivedStatus(receiptModalOrder) === "Pending") && (
+              <div className="px-6 py-4 bg-[#121215] border-t border-white/10 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = receiptModalOrder.order_id;
+                    setReceiptModalOrder(null);
+                    setRejectReason("");
+                    setConfirmAction({ action: "rejectPayment", orderId: id });
+                  }}
+                  className="flex-1 bg-rose-600/90 hover:bg-rose-500 text-white font-bold py-3 px-4 rounded-xl uppercase text-[11px] tracking-wider transition-all shadow-lg shadow-rose-950/50 flex items-center justify-center gap-2 cursor-pointer border border-rose-500/30"
+                >
+                  <Icons.Cross /> Reject Order
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = receiptModalOrder.order_id;
+                    setReceiptModalOrder(null);
+                    setConfirmAction({ action: "approvePayment", orderId: id });
+                  }}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl uppercase text-[11px] tracking-wider transition-all shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/30"
+                >
+                  <Icons.Check /> Accept Order
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
