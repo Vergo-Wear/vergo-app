@@ -314,6 +314,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       ...checkout,
       ...totals,
       checkoutPayload: this.checkoutDto(checkout),
+      // Admins must be able to preview the uploaded receipt before approving
+      // a payment, so alias fileUrl -> receiptUrl the same way presentOrder
+      // does for already-approved orders.
+      paymentProof: checkout.paymentProof
+        ? { ...checkout.paymentProof, receiptUrl: checkout.paymentProof.fileUrl }
+        : checkout.paymentProof,
       receiptUrl: checkout.paymentProof?.fileUrl ?? null,
       receiptUploadedAt: checkout.paymentProof?.uploadedAt ?? null,
       // Compatibility alias: the checkout is now the reservation owner.
