@@ -632,8 +632,8 @@ function CollectionContent() {
       {/* Product Grid Area */}
       {filteredProducts.length > 0 ? (
         <section className="collection-products-grid">
-          {paginatedProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
+          {paginatedProducts.map((product, index) => (
+            <ProductCard key={product.id} product={product} priority={index < 4} />
           ))}
         </section>
       ) : (

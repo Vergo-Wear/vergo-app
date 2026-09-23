@@ -241,6 +241,7 @@ model Product {
   variants ProductVariant[]
   reviews  Review[]
 
+  @@index([status])
   @@index([createdAt])
   @@map("product")
   @@schema("public")
@@ -319,6 +320,7 @@ model Inventory {
   stockReservations StockReservation[]
   commitments       InventoryCommitment[]
 
+  @@index([variantId])
   @@index([employeeId])
   @@index([branchId])
   @@map("inventory")
@@ -334,6 +336,7 @@ model Images {
 
   variant ProductVariant @relation(fields: [variantId], references: [variantId], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([variantId])
   @@map("images")
   @@schema("public")
 }

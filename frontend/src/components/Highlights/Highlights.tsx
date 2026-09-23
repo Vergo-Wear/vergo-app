@@ -46,10 +46,11 @@ export default function Highlights() {
         {products
           .filter((product) => product.isAvailable)
           .slice(0, 4)
-          .map((product) => (
+          .map((product, index) => (
             <ProductCard
               key={product.id}
               product={product}
+              priority={index < 2}
             />
           ))}
       </div>
