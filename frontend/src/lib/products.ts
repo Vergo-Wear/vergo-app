@@ -27,51 +27,72 @@ function formatLkr(value: number) {
   return `LKR ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+export function mapCatalogueItemToProduct(item: CatalogueProduct): Product {
+  const allVariants = item.variants
+    .filter((v) => v.status === "show")
+    .map((v) => ({
+      variantId: v.variant_id,
+      sku: v.sku,
+      size: v.size,
+      color: v.colour,
+      price: v.price,
+      availableQuantity:
+        item.status === "hold"
+          ? 0
+          : Math.max(0, (v.inventory?.quantity ?? 0) - (v.inventory?.reserved_quantity ?? 0)),
+      images: v.images.map((img) => img.url),
+    }));
+
+  const allImages = [
+    ...item.images.map((i) => i.url),
+    ...allVariants.flatMap((v) => v.images),
+  ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
+
+  const prices = allVariants.map((v) => v.price);
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+
+  return {
+    id: item.product_id,
+    name: item.name,
+    price: formatLkr(minPrice),
+    lkrPrice: formatLkr(minPrice),
+    isAvailable: item.status === "live" && allVariants.some((v) => v.availableQuantity > 0),
+    image: allImages[0] || "/logo.png",
+    category: item.category?.name || "Apparel",
+    subTitle: item.category?.name || "ESSENTIALS",
+    description: item.description || undefined,
+    images: allImages.length > 0 ? allImages : ["/logo.png"],
+    sizes: sortSizes([...new Set(allVariants.map((v) => v.size))]),
+    colors: [...new Set(allVariants.map((v) => v.color))],
+    variants: allVariants,
+  };
+}
+
 export async function loadProducts(): Promise<Product[]> {
-  const response = await fetch(`${API_URL}/product-catalogue`, { cache: "no-store" });
+  const response = await fetch(`${API_URL}/product-catalogue`, {
+    next: { revalidate: 60 },
+  });
   if (!response.ok) throw new Error(`Unable to load products (${response.status}).`);
   const items = (await response.json()) as CatalogueProduct[];
 
-  return items.map((item) => {
-    const allVariants = item.variants
-      .filter((v) => v.status === "show")
-      .map((v) => ({
-        variantId: v.variant_id,
-        sku: v.sku,
-        size: v.size,
-        color: v.colour,
-        price: v.price,
-        availableQuantity:
-          item.status === "hold"
-            ? 0
-            : Math.max(0, (v.inventory?.quantity ?? 0) - (v.inventory?.reserved_quantity ?? 0)),
-        images: v.images.map((img) => img.url),
-      }));
+  return items.map(mapCatalogueItemToProduct);
+}
 
-    const allImages = [
-      ...item.images.map((i) => i.url),
-      ...allVariants.flatMap((v) => v.images),
-    ].filter((url, index, all) => Boolean(url) && all.indexOf(url) === index);
-
-    const prices = allVariants.map((v) => v.price);
-    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-
-    return {
-      id: item.product_id,
-      name: item.name,
-      price: formatLkr(minPrice),
-      lkrPrice: formatLkr(minPrice),
-      isAvailable: item.status === "live" && allVariants.some((v) => v.availableQuantity > 0),
-      image: allImages[0] || "/logo.png",
-      category: item.category?.name || "Apparel",
-      subTitle: item.category?.name || "ESSENTIALS",
-      description: item.description || undefined,
-      images: allImages.length > 0 ? allImages : ["/logo.png"],
-      sizes: sortSizes([...new Set(allVariants.map((v) => v.size))]),
-      colors: [...new Set(allVariants.map((v) => v.color))],
-      variants: allVariants,
-    };
-  });
+export async function loadProductById(productId: string): Promise<Product | null> {
+  try {
+    const response = await fetch(`${API_URL}/product-catalogue/${productId}`, {
+      next: { revalidate: 60 },
+    });
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error(`Unable to load product (${response.status}).`);
+    }
+    const item = (await response.json()) as CatalogueProduct;
+    return mapCatalogueItemToProduct(item);
+  } catch (err) {
+    console.error(`Failed to load product ${productId}:`, err);
+    return null;
+  }
 }
 
 const STANDARD_SIZE_ORDER: Record<string, number> = {
