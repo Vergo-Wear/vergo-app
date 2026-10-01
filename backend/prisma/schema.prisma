@@ -34,9 +34,9 @@ model Role {
 }
 
 model Profiles {
-  id         String    @id @db.Uuid
-  roleId     String    @map("role_id") @db.Uuid
-  username   String?   @unique
+  id                 String    @id @db.Uuid
+  roleId             String    @map("role_id") @db.Uuid
+  username           String?   @unique
   status             String?   @default("active")
   mustChangePassword Boolean   @default(false) @map("must_change_password")
   createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -142,12 +142,10 @@ model Employee {
   branch         Branch?              @relation(fields: [branchId], references: [branchId])
   assignedOrders Orders[]             @relation("OrderAssignedEmployee")
   attendance     Attendance[]
-  salaryRecords  SalaryRecord[]
   commissions    EmployeeCommission[]
-  purchaseOrders PurchaseOrder[]
 
-  submittedDeliveries Delivery[]              @relation("DeliverySubmittedBy")
-  requestedPickups    CourierPickupRequest[]  @relation("PickupRequestedBy")
+  submittedDeliveries Delivery[]             @relation("DeliverySubmittedBy")
+  requestedPickups    CourierPickupRequest[] @relation("PickupRequestedBy")
   inventory           Inventory[]
 
   @@map("employee")
@@ -211,16 +209,15 @@ model Size {
 }
 
 model Supplier {
-  supplierId     String          @id @default(dbgenerated("gen_random_uuid()")) @map("supplier_id") @db.Uuid
-  name           String
-  phone          String
-  email          String
-  address        String
-  status         String          @default("Active")
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  products       Product[]
-  purchaseOrders PurchaseOrder[]
+  supplierId String    @id @default(dbgenerated("gen_random_uuid()")) @map("supplier_id") @db.Uuid
+  name       String
+  phone      String
+  email      String    @unique
+  address    String
+  status     String    @default("Active")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  products   Product[]
 
   @@map("supplier")
   @@schema("public")
@@ -296,7 +293,6 @@ model ProductVariant {
   images               Images[]
   orderItems           OrderItem[]
   cartItems            CartItem[]
-  purchaseOrderItems   PurchaseOrderItem[]
   pendingCheckoutItems PendingCheckoutItem[]
 
   @@unique([productId, sizeId, colorId])
@@ -330,7 +326,6 @@ model Inventory {
 model Images {
   id        BigInt    @id @default(autoincrement())
   imageUrl  String    @map("image_url")
-  title     String?
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
   variantId String    @map("variant_id") @db.Uuid
 
@@ -388,27 +383,6 @@ model Attendance {
   employee Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Restrict)
 
   @@map("attendance")
-  @@schema("public")
-}
-
-model SalaryRecord {
-  salaryId        String    @id @default(dbgenerated("gen_random_uuid()")) @map("salary_id") @db.Uuid
-  employeeId      String    @map("employee_id") @db.Uuid
-  month           DateTime  @db.Date
-  basicSalary     Decimal   @map("basic_salary") @db.Decimal
-  commissionTotal Decimal   @default(0) @map("commission_total") @db.Decimal
-  bonus           Decimal   @default(0.00) @db.Decimal
-  deduction       Decimal   @default(0.00) @db.Decimal
-  netSalary       Decimal   @map("net_salary") @db.Decimal
-  paymentStatus   String    @default("Pending") @map("payment_status")
-  calculatedAt    DateTime  @default(now()) @map("calculated_at") @db.Timestamptz(6)
-  paidAt          DateTime? @map("paid_at") @db.Timestamptz(6)
-
-  employee    Employee             @relation(fields: [employeeId], references: [employeeId], onDelete: Restrict)
-  commissions EmployeeCommission[]
-
-  @@unique([employeeId, month])
-  @@map("salary_record")
   @@schema("public")
 }
 
@@ -517,26 +491,26 @@ model DeliveryTrackingEvent {
 }
 
 model CourierPickupRequest {
-  pickupRequestId             String   @id @default(dbgenerated("gen_random_uuid()")) @map("pickup_request_id") @db.Uuid
-  courierName                 String   @default("Citypak") @map("courier_name")
-  externalPickupId            Int?     @map("external_pickup_id")
-  requestedByEmployeeId       String?  @map("requested_by_employee_id") @db.Uuid
-  branchId                    String?  @map("branch_id") @db.Uuid
-  pickupAddressLine1          String   @map("pickup_address_line_1")
-  pickupAddressLine2          String?  @map("pickup_address_line_2")
-  pickupAddressLine3          String?  @map("pickup_address_line_3")
-  pickupAddressLine4City      String   @map("pickup_address_line_4_city")
-  pickupContactPerson         String   @map("pickup_contact_person")
-  pickupContactNumber1        String   @map("pickup_contact_number_1")
+  pickupRequestId            String   @id @default(dbgenerated("gen_random_uuid()")) @map("pickup_request_id") @db.Uuid
+  courierName                String   @default("Citypak") @map("courier_name")
+  externalPickupId           Int?     @map("external_pickup_id")
+  requestedByEmployeeId      String?  @map("requested_by_employee_id") @db.Uuid
+  branchId                   String?  @map("branch_id") @db.Uuid
+  pickupAddressLine1         String   @map("pickup_address_line_1")
+  pickupAddressLine2         String?  @map("pickup_address_line_2")
+  pickupAddressLine3         String?  @map("pickup_address_line_3")
+  pickupAddressLine4City     String   @map("pickup_address_line_4_city")
+  pickupContactPerson        String   @map("pickup_contact_person")
+  pickupContactNumber1       String   @map("pickup_contact_number_1")
   estimatedPickupWeightGrams Int      @map("estimated_pickup_weight_grams")
-  estimatedWaybillCount       Int      @map("estimated_waybill_count")
-  pickupFromDatetime          DateTime @map("pickup_from_datetime") @db.Timestamptz(6)
-  pickupToDatetime            DateTime @map("pickup_to_datetime") @db.Timestamptz(6)
-  status                      String   @default("Requested")
-  submittedAt                 DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
-  failureReason               String?  @map("failure_reason")
-  createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  estimatedWaybillCount      Int      @map("estimated_waybill_count")
+  pickupFromDatetime         DateTime @map("pickup_from_datetime") @db.Timestamptz(6)
+  pickupToDatetime           DateTime @map("pickup_to_datetime") @db.Timestamptz(6)
+  status                     String   @default("Requested")
+  submittedAt                DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  failureReason              String?  @map("failure_reason")
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   deliveries  CourierPickupDelivery[]
   requestedBy Employee?               @relation("PickupRequestedBy", fields: [requestedByEmployeeId], references: [employeeId], onDelete: SetNull)
@@ -556,37 +530,6 @@ model CourierPickupDelivery {
 
   @@id([pickupRequestId, deliveryId])
   @@map("courier_pickup_delivery")
-  @@schema("public")
-}
-
-model PurchaseOrder {
-  purchaseOrderId String    @id @default(dbgenerated("gen_random_uuid()")) @map("purchase_order_id") @db.Uuid
-  supplierId      String    @map("supplier_id") @db.Uuid
-  employeeId      String?   @map("employee_id") @db.Uuid
-  orderDate       DateTime? @default(now()) @map("order_date") @db.Timestamptz(6)
-  status          String?   @default("requested")
-  totalAmount     Decimal   @map("total_amount") @db.Decimal
-
-  supplier Supplier            @relation(fields: [supplierId], references: [supplierId], onDelete: Restrict)
-  employee Employee?           @relation(fields: [employeeId], references: [employeeId])
-  items    PurchaseOrderItem[]
-
-  @@map("purchase_order")
-  @@schema("public")
-}
-
-model PurchaseOrderItem {
-  poItemId        String  @id @default(dbgenerated("gen_random_uuid()")) @map("po_item_id") @db.Uuid
-  purchaseOrderId String  @map("purchase_order_id") @db.Uuid
-  variantId       String  @map("variant_id") @db.Uuid
-  quantity        Int
-  costPrice       Decimal @map("cost_price") @db.Decimal
-
-  purchaseOrder PurchaseOrder  @relation(fields: [purchaseOrderId], references: [purchaseOrderId], onDelete: Cascade)
-  variant       ProductVariant @relation(fields: [variantId], references: [variantId], onDelete: Restrict)
-
-  @@unique([purchaseOrderId, variantId])
-  @@map("purchase_order_item")
   @@schema("public")
 }
 
@@ -833,26 +776,12 @@ model EmployeeCommission {
   rateUsed         Decimal   @map("rate_used") @db.Decimal
   commissionAmount Decimal   @map("commission_amount") @db.Decimal
   status           String    @default("Approved")
-  salaryId         String?   @map("salary_id") @db.Uuid
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   paidAt           DateTime? @map("paid_at") @db.Timestamptz(6)
 
-  employee Employee      @relation(fields: [employeeId], references: [employeeId], onDelete: Restrict)
-  order    Orders        @relation(fields: [orderId], references: [orderId], onDelete: Restrict)
-  salary   SalaryRecord? @relation(fields: [salaryId], references: [salaryId], onDelete: SetNull)
+  employee Employee @relation(fields: [employeeId], references: [employeeId], onDelete: Restrict)
+  order    Orders   @relation(fields: [orderId], references: [orderId], onDelete: Restrict)
 
   @@map("employee_commission")
-  @@schema("public")
-}
-
-model ContactMessage {
-  messageId String   @id @default(dbgenerated("gen_random_uuid()")) @map("message_id") @db.Uuid
-  fullName  String   @map("full_name")
-  email     String
-  subject   String
-  message   String
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@map("contact_message")
   @@schema("public")
 }

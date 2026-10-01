@@ -17,18 +17,18 @@ before querying it via Prisma.
 - **`role`** — `role_id` (uuid, PK), `role_name` (text, unique)
 - **`branch`** — `branch_id` (uuid, PK), `name`, `address`, `phone` (all text, not null)
 - **`category`** — `category_id` (uuid, PK), `name` (text, unique), `description` (text, nullable)
-- **`supplier`** — `supplier_id` (uuid, PK), `name`, `phone`, `email`, `address` (all text, not null)
+- **`supplier`** — `supplier_id` (uuid, PK), `name`, `phone`, `email` (unique, not null), `address` (all text, not null)
 
 ## Identity / access
 
 - **`profiles`** — `id` (uuid, PK, FK → `auth.users.id`), `role_id` (FK → `role`), `username` (unique), `status` (default `'active'`), `created_at`
-- **`employee`** — `employee_id` (PK), `profile_id` (FK → `profiles`), `branch_id` (FK → `branch`), `first_name`, `last_name`, `phone`, `address`, `position`, `salary` (numeric), `hire_date`
-- **`customer`** — `customer_id` (PK), `profile_id` (FK → `profiles`), `first_name`, `last_name`, `phone`, `email` (unique, not null), `default_shipping_address`, `created_at`
+- **`employee`** — `employee_id` (PK), `profile_id` (FK → `profiles`, unique 1:1), `branch_id` (FK → `branch`), `first_name`, `last_name`, `phone`, `address`, `position`, `salary` (numeric), `hire_date`
+- **`customer`** — `customer_id` (PK), `profile_id` (FK → `profiles`, unique 1:1), `first_name`, `last_name`, `phone`, `email` (unique, not null), `default_shipping_address`, `created_at`
 
 ## HR
 
 - **`attendance`** — `attendance_id` (PK), `employee_id` (FK), `date`, `check_in`, `check_out`, `status`
-- **`salary_record`** — `salary_id` (PK), `employee_id` (FK), `month` (date), `basic_salary`, `bonus` (default 0), `deduction` (default 0), `net_salary`
+- **`employee_commission`** — `commission_id` (PK), `employee_id` (FK), `order_id` (FK, unique), `rate_used`, `commission_amount`, `status`, `paid_at`, `created_at`
 
 ## Product catalogue & inventory
 
@@ -37,8 +37,8 @@ before querying it via Prisma.
   - **Selling price = `product.base_price + product_variant.price_adjustment`** — there is no standalone price column on the variant.
 - **`inventory`** — `inventory_id` (PK), `variant_id` (FK → `product_variant`, nullable), `branch_id` (FK → `branch`, nullable), `quantity` (default 0, `>= 0`), `reorder_level` (default 10), `last_updated`, `reserved_quantity` (default 0, `>= 0`)
   - **One row per (variant, branch)** — a variant's total stock is the sum of `quantity` across all its branch rows, not a single row. Same for `reserved_quantity`.
-- **`images`** — `id` (bigint identity, PK), `image_url` (not null), `title` (nullable), `created_at`, `variant_id` (FK → `product_variant`, nullable)
-  - **Images belong to a variant, not directly to a product.** A product's image list = the union of its variants' images. There is no `product_id` column and no `display_order`.
+- **`images`** — `id` (bigint identity, PK), `image_url` (not null), `created_at`, `variant_id` (FK → `product_variant`, nullable)
+  - **Images belong to a variant, not directly to a product.** A product's image list = the union of its variants' images. There is no `product_id` column, no `title` column, and no `display_order`.
 
 ## Shopping & checkout
 
@@ -57,11 +57,6 @@ before querying it via Prisma.
   - Saved address book for **registered customers only** — guest checkout addresses are never inserted here. A partial unique index (`user_addresses_one_primary_per_customer`, see `user-addresses.sql`) enforces at most one `is_primary = true` row per customer.
 - **`notification`** — `notification_id` (PK), `customer_id` (FK, nullable), `order_id` (FK, nullable), `message`, `type`, `sent_at`, `status` (default `'sent'`)
 
-## Procurement
-
-- **`purchase_order`** — `purchase_order_id` (PK), `supplier_id` (FK), `employee_id` (FK), `order_date`, `status` (default `'requested'`), `total_amount`
-- **`purchase_order_item`** — `po_item_id` (PK), `purchase_order_id` (FK), `variant_id` (FK → `product_variant`), `quantity`, `cost_price`
-
 ## Relationship summary
 
 ```
@@ -70,7 +65,7 @@ supplier ──┼──< product ──< product_variant ──< inventory >─
            │                       │
            │                       └──< images
            │
-role ──< profiles ──< employee ──< attendance, salary_record, delivery(assigned)
+role ──< profiles ──< employee ──< attendance, employee_commission, delivery(assigned)
                   └──< customer ──< cart ──< cart_item >── product_variant
                                 └──< orders ──< order_item >── product_variant
                                             ├──1:1─ order_customer_details
@@ -79,8 +74,6 @@ role ──< profiles ──< employee ──< attendance, salary_record, delive
                                             ├──< delivery
                                             └──< notification
                                 └──< user_addresses
-
-supplier ──< purchase_order ──< purchase_order_item >── product_variant
 ```
 
 ## Gotchas for future work

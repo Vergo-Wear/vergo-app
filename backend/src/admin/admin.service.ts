@@ -664,9 +664,8 @@ export class AdminService {
               ...(imageList.length > 0
                 ? {
                     images: {
-                      create: imageList.map((url, idx) => ({
+                      create: imageList.map((url) => ({
                         imageUrl: url,
-                        title: idx === 0 ? 'Main' : `Gallery ${idx}`,
                       })),
                     },
                   }
@@ -811,10 +810,9 @@ export class AdminService {
             });
             if (imageList.length > 0) {
               await tx.images.createMany({
-                data: imageList.map((url, idx) => ({
+                data: imageList.map((url) => ({
                   variantId: existingVar.variantId,
                   imageUrl: url,
-                  title: idx === 0 ? 'Main' : `Gallery ${idx}`,
                 })),
               });
             }
@@ -838,9 +836,8 @@ export class AdminService {
                 ...(imageList.length > 0
                   ? {
                       images: {
-                        create: imageList.map((url, idx) => ({
+                        create: imageList.map((url) => ({
                           imageUrl: url,
-                          title: idx === 0 ? 'Main' : `Gallery ${idx}`,
                         })),
                       },
                     }
@@ -926,10 +923,9 @@ export class AdminService {
 
       if (imageUrls && imageUrls.length > 0) {
         await tx.images.createMany({
-          data: imageUrls.slice(0, 5).map((url, index) => ({
+          data: imageUrls.slice(0, 5).map((url) => ({
             variantId: variant.variantId,
             imageUrl: url,
-            title: index === 0 ? 'Main' : `Gallery ${index}`,
           })),
         });
       }
