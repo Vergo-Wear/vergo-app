@@ -4,7 +4,13 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import "./product-card.css";
 
-export default function ProductCard({ product }: any) {
+export default function ProductCard({
+  product,
+  priority = false,
+}: {
+  product: any;
+  priority?: boolean;
+}) {
   const router = useRouter();
 
   const handleCardClick = () => {
@@ -28,8 +34,9 @@ export default function ProductCard({ product }: any) {
           width={400}
           height={500}
           className="product-image"
-          loading="eager"
-          priority
+          loading={priority ? "eager" : "lazy"}
+          priority={priority}
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
         />
 
         {!product.isAvailable && (

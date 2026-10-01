@@ -4,7 +4,7 @@ import { useState, useEffect, use, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useProductsState } from "@/hooks/useProducts";
+import { useProduct, useProducts } from "@/hooks/useProducts";
 import { sortSizes } from "@/lib/products";
 import ProductFeedback from "@/components/ProductFeedback";
 import { useCart } from "@/context/CartContext";
@@ -14,17 +14,13 @@ interface PageProps {
 }
 
 export default function ProductDetailPage({ params }: PageProps) {
-  const { products, isLoading } = useProductsState();
   const resolvedParams = use(params);
   const productId = resolvedParams.id;
+  const { product, isLoading } = useProduct(productId);
+  const products = useProducts();
   const searchParams = useSearchParams();
   const autoOpenFeedback = searchParams ? searchParams.get("add-feedback") === "true" : false;
   const { addToCart } = useCart();
-
-  // Retrieve product from data
-  const product = useMemo(() => {
-    return products.find((p) => p.id === productId);
-  }, [products, productId]);
 
   // Gallery state
   const [activeImageIndex, setActiveImageIndex] = useState(0);
