@@ -4,10 +4,10 @@
 .hero-collection-container {
   background: linear-gradient(180deg, transparent 75%, #020202 100%),
     linear-gradient(90deg,
-      rgba(5, 5, 5, 0.95) 0%,
-      rgba(5, 5, 5, 0.65) 50%,
-      rgba(5, 5, 5, 0.2) 100%),
-    url("/images/hero-bg.jpg");
+      rgba(2, 2, 2, 0.94) 0%,
+      rgba(2, 2, 2, 0.70) 50%,
+      rgba(2, 2, 2, 0.35) 100%),
+    url("https://res.cloudinary.com/aql7sojg/image/upload/v1790879213/bg_h7fcwm.png");
   background-size: cover;
   background-position: top center;
   background-repeat: no-repeat;

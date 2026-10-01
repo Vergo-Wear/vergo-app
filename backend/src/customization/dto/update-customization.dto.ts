@@ -68,4 +68,11 @@ export class UpdateCustomizationDto {
   @IsString()
   @IsOptional()
   bankAccountNumber?: string;
+
+  @IsOptional()
+  ads?: any[];
+
+  @IsOptional()
+  featuredFeedbacks?: any[];
 }
+

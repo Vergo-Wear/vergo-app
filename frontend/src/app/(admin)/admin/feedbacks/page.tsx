@@ -37,14 +37,30 @@ export default function AdminFeedbacksPage() {
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Home Page Feedbacks Management State
+  const [customizationSettings, setCustomizationSettings] = useState<any>({});
+  const [homeFeedbacks, setHomeFeedbacks] = useState<any[]>([]);
+
   const fetchReviews = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await authenticatedFetch("/admin/reviews");
-      if (!res || !res.ok) throw new Error(`Unable to fetch reviews (${res?.status || "error"})`);
-      const data = (await res.json()) as AdminReview[];
+      const [resReviews, resCustomization] = await Promise.all([
+        authenticatedFetch("/admin/reviews"),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/customization`, { cache: "no-store" }),
+      ]);
+
+      if (!resReviews || !resReviews.ok) throw new Error(`Unable to fetch reviews (${resReviews?.status || "error"})`);
+      const data = (await resReviews.json()) as AdminReview[];
       setReviews(data);
+
+      if (resCustomization && resCustomization.ok) {
+        const custData = await resCustomization.json();
+        setCustomizationSettings(custData);
+        if (Array.isArray(custData.featuredFeedbacks)) {
+          setHomeFeedbacks(custData.featuredFeedbacks);
+        }
+      }
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Failed to load customer feedback.");
@@ -75,12 +91,13 @@ export default function AdminFeedbacksPage() {
       // Status filter
       const matchesStatus =
         statusFilter === "all" ||
+        (statusFilter === "home" && isReviewOnHome(r.id)) ||
         (statusFilter === "visible" && !r.isHidden) ||
         (statusFilter === "hidden" && r.isHidden);
 
       return matchesSearch && matchesRating && matchesStatus;
     });
-  }, [reviews, searchQuery, ratingFilter, statusFilter]);
+  }, [reviews, searchQuery, ratingFilter, statusFilter, homeFeedbacks]);
 
   // Calculated Metrics for Admin Analysis
   const metrics = useMemo(() => {
@@ -159,6 +176,60 @@ export default function AdminFeedbacksPage() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  // Check if review is visible on home page
+  const isReviewOnHome = (reviewId: string) => {
+    return homeFeedbacks.some((fb) => fb.id === reviewId && fb.showOnHome !== false);
+  };
+
+  // Toggle review appearance on the home page showcase
+  const handleToggleHomeShowcase = async (review: AdminReview) => {
+    let updatedFeedbacks: any[];
+    const existing = homeFeedbacks.find((fb) => fb.id === review.id);
+
+    if (existing) {
+      updatedFeedbacks = homeFeedbacks.map((fb) =>
+        fb.id === review.id ? { ...fb, showOnHome: !fb.showOnHome } : fb
+      );
+    } else {
+      const newEntry = {
+        id: review.id,
+        name: review.reviewerName || "Verified Buyer",
+        location: "Sri Lanka",
+        verified: true,
+        garment: review.productName || "Vergo Heavyweight Drop",
+        rating: review.rating || 5,
+        date: formatDate(review.date),
+        comment: review.comment,
+        showOnHome: true,
+      };
+      updatedFeedbacks = [...homeFeedbacks, newEntry];
+    }
+
+    setHomeFeedbacks(updatedFeedbacks);
+
+    try {
+      const token =
+        sessionStorage.getItem("vergo_access_token") ||
+        localStorage.getItem("vergo_access_token");
+      await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/customization`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ...customizationSettings,
+            featuredFeedbacks: updatedFeedbacks,
+          }),
+        }
+      );
+    } catch (err) {
+      console.error("Failed to update home feedbacks", err);
+    }
   };
 
   return (
@@ -259,6 +330,7 @@ export default function AdminFeedbacksPage() {
             className="bg-[#18181c] border border-white/10 text-white text-xs px-3 py-2.5 rounded-lg focus:outline-none focus:border-[#00FF9D]/50"
           >
             <option value="all">All Statuses</option>
+            <option value="home">Featured on Home Only</option>
             <option value="visible">Visible Only</option>
             <option value="hidden">Hidden Only</option>
           </select>
@@ -315,7 +387,7 @@ export default function AdminFeedbacksPage() {
                 </div>
 
                 {/* Rating & Status */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   <div className="text-right">
                     <div className="flex text-[#00FF9D] text-sm justify-end">
                       {"★".repeat(review.rating)}
@@ -323,6 +395,12 @@ export default function AdminFeedbacksPage() {
                     </div>
                     <span className="text-[10px] text-gray-500">{formatDate(review.date)}</span>
                   </div>
+
+                  {isReviewOnHome(review.id) && (
+                    <span className="text-[10px] font-black px-2.5 py-1 rounded tracking-wider uppercase bg-[#50C878]/20 text-[#50C878] border border-[#50C878]/30">
+                      ★ ON HOME
+                    </span>
+                  )}
 
                   <span
                     className={`text-[10px] font-black px-2.5 py-1 rounded tracking-wider uppercase ${
@@ -362,6 +440,21 @@ export default function AdminFeedbacksPage() {
 
               {/* Admin Moderation Actions */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => handleToggleHomeShowcase(review)}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                    isReviewOnHome(review.id)
+                      ? "bg-[#50C878] text-black font-extrabold hover:bg-[#43a864]"
+                      : "bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10"
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill={isReviewOnHome(review.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                  {isReviewOnHome(review.id) ? "VISIBLE ON HOME" : "SHOW ON HOME"}
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleToggleVisibility(review.id)}

@@ -476,42 +476,19 @@ export class AuthService {
   async googleSignin(accessToken: string) {
     let user;
     try {
-      if (accessToken.startsWith('mock-')) {
-        user = {
-          id: 'mock-google-user-id',
-          email: 'google-customer@example.com',
-        };
-      } else {
-        const {
-          data: { user: supabaseUser },
-          error,
-        } = await this.supabaseService.client.auth.getUser(accessToken);
-        if (error || !supabaseUser)
-          throw error || new Error('No user returned');
-        user = supabaseUser;
-      }
+      const {
+        data: { user: supabaseUser },
+        error,
+      } = await this.supabaseService.client.auth.getUser(accessToken);
+      if (error || !supabaseUser)
+        throw error || new Error('No user returned');
+      user = supabaseUser;
     } catch (err: any) {
       const errMsg = err.message || '';
-      const isNetworkError =
-        errMsg.includes('fetch') ||
-        errMsg.includes('connect') ||
-        errMsg.includes('timeout') ||
-        errMsg.includes('network') ||
-        errMsg.includes('Failed to fetch');
-      if (isNetworkError || accessToken.startsWith('mock-')) {
-        this.logger.warn(
-          `Supabase auth getUser failed due to network. Falling back to mock verified user.`,
-        );
-        user = {
-          id: 'mock-google-user-id',
-          email: 'google-customer@example.com',
-        };
-      } else {
-        this.logger.warn(`Google signin token validation failed: ${errMsg}`);
-        throw new UnauthorizedException(
-          'Invalid or expired Google access token.',
-        );
-      }
+      this.logger.warn(`Google signin token validation failed: ${errMsg}`);
+      throw new UnauthorizedException(
+        'Invalid or expired Google access token.',
+      );
     }
 
     const userId = user.id;
@@ -636,11 +613,13 @@ export class AuthService {
         username: profile?.username || user.email.split('@')[0],
         status: profile?.status || 'active',
       },
-      customer: {
-        customerId: customer?.customerId || 'mock-customer-uuid-1234',
-        firstName: customer?.firstName || 'Google',
-        lastName: customer?.lastName || 'Customer',
-      },
+      customer: customer
+        ? {
+            customerId: customer.customerId,
+            firstName: customer.firstName,
+            lastName: customer.lastName,
+          }
+        : null,
     };
   }
 
@@ -662,44 +641,21 @@ export class AuthService {
 
     let user;
     try {
-      if (accessToken.startsWith('mock-')) {
-        user = {
-          id: 'mock-google-user-id',
-          email: 'google-customer@example.com',
-        };
-      } else {
-        const {
-          data: { user: supabaseUser },
-          error,
-        } = await this.supabaseService.client.auth.getUser(accessToken);
-        if (error || !supabaseUser)
-          throw error || new Error('No user returned');
-        user = supabaseUser;
-      }
+      const {
+        data: { user: supabaseUser },
+        error,
+      } = await this.supabaseService.client.auth.getUser(accessToken);
+      if (error || !supabaseUser)
+        throw error || new Error('No user returned');
+      user = supabaseUser;
     } catch (err: any) {
       const errMsg = err.message || '';
-      const isNetworkError =
-        errMsg.includes('fetch') ||
-        errMsg.includes('connect') ||
-        errMsg.includes('timeout') ||
-        errMsg.includes('network') ||
-        errMsg.includes('Failed to fetch');
-      if (isNetworkError || accessToken.startsWith('mock-')) {
-        this.logger.warn(
-          `Supabase auth getUser failed due to network. Falling back to mock verified user.`,
-        );
-        user = {
-          id: 'mock-google-user-id',
-          email: 'google-customer@example.com',
-        };
-      } else {
-        this.logger.warn(
-          `googleCompleteProfile: token validation failed: ${errMsg}`,
-        );
-        throw new UnauthorizedException(
-          'Invalid or expired Google access token.',
-        );
-      }
+      this.logger.warn(
+        `googleCompleteProfile: token validation failed: ${errMsg}`,
+      );
+      throw new UnauthorizedException(
+        'Invalid or expired Google access token.',
+      );
     }
 
     const userId = user.id;
@@ -789,8 +745,9 @@ export class AuthService {
     }
 
     if (!customerRole) {
-      // Fallback Customer Role definition if database is down
-      customerRole = { roleId: 'mock-customer-role-uuid' };
+      throw new BadRequestException(
+        'Customer role not configured in the database.',
+      );
     }
 
     // 6. Create profile and customer in a single transaction
@@ -856,39 +813,10 @@ export class AuthService {
         },
       };
     } catch (dbErr: any) {
-      const errMsg = dbErr.message || '';
-      if (
-        errMsg.includes('reach database') ||
-        dbErr.code === 'P1001' ||
-        dbErr.code === 'P2021' ||
-        errMsg.includes('PrismaClientInitializationError') ||
-        errMsg.includes('connect')
-      ) {
-        this.logger.warn(
-          `Database connection failed in googleCompleteProfile transaction. Processing in offline mock mode.`,
-        );
-
-        return {
-          message: 'Profile created successfully (Offline simulation)',
-          user: {
-            id: userId,
-            email,
-            role: 'Customer',
-          },
-          profile: {
-            id: userId,
-            username: resolvedUsername,
-            status: 'active',
-          },
-          customer: {
-            customerId: 'mock-customer-uuid-1234',
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            email,
-            phone: resolvedPhone || '0771234567',
-          },
-        };
-      }
+      this.logger.error(
+        `Database operations failed in googleCompleteProfile:`,
+        dbErr,
+      );
       throw dbErr;
     }
   }

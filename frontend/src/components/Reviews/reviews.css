@@ -1,0 +1,222 @@
+/* ========================================================================= */
+/* REVIEWS / SOCIAL PROOF SECTION                                            */
+/* ========================================================================= */
+
+.reviews-section {
+  position: relative;
+  width: 100%;
+  background: #050507;
+  padding: 100px 48px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.reviews-container {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.reviews-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 50px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 24px;
+  gap: 24px;
+}
+
+.reviews-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.reviews-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: #50C878;
+  text-transform: uppercase;
+}
+
+.reviews-title {
+  font-size: 2.8rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.reviews-subtitle {
+  font-size: 0.95rem;
+  color: #8e8e93;
+  margin: 0;
+}
+
+.reviews-aggregate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 20px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.aggregate-score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aggregate-stars {
+  color: #fbbf24;
+  letter-spacing: 2px;
+  font-size: 1rem;
+}
+
+.aggregate-score {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.aggregate-count {
+  font-size: 0.65rem;
+  color: #8e8e93;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* 3 Review Cards */
+.reviews-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.review-card {
+  background: #09090b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+  text-align: left;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.review-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+.review-card-stars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #fbbf24;
+  font-size: 0.9rem;
+}
+
+.review-comment {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: #d4d4d8;
+  font-weight: 400;
+  margin: 0;
+  flex: 1;
+}
+
+.review-author-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.review-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #18181b;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.review-author-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-name {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.review-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #50C878;
+  background: rgba(80, 200, 120, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.review-garment {
+  font-size: 0.68rem;
+  color: #71717a;
+  font-weight: 500;
+}
+
+/* Responsive */
+@media screen and (max-width: 1024px) {
+  .reviews-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .reviews-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .reviews-aggregate-card {
+    align-items: flex-start;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .reviews-section {
+    padding: 70px 20px;
+  }
+
+  .reviews-title {
+    font-size: 2.1rem;
+  }
+}

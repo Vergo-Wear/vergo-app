@@ -270,20 +270,24 @@ export default function InventoryDashboard() {
       description: `Are you sure you want to permanently delete "${name}"? This action cannot be undone and will remove all ${variantCount > 0 ? `${variantCount} variant(s)` : "variants"} and associated inventory stock from the catalog.`,
       onConfirm: async () => {
         setIsDeleting(true);
+        console.log(`[Frontend] Sending DELETE request for product: ${productId} (${name})`);
         try {
           const res = await authenticatedFetch(`/admin/products/${productId}`, {
             method: "DELETE",
           });
           if (res && res.ok) {
+            console.log(`[Frontend] Product ${productId} deleted successfully.`);
             showToast("Product deleted successfully", "success");
             setIsProductModalOpen(false);
             setDeleteModal(null);
             await fetchAllData();
           } else {
             const msg = res ? await responseMessage(res, "Failed to delete product") : "Request failed";
+            console.error(`[Frontend Delete Error] Status: ${res?.status} ${res?.statusText}, Message:`, msg, res);
             showToast(msg, "error");
           }
         } catch (err: any) {
+          console.error("[Frontend Delete Exception]", err);
           showToast(err.message || "Failed to delete product", "error");
         } finally {
           setIsDeleting(false);

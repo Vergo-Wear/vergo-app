@@ -25,14 +25,14 @@ export class AdminReviewsController {
 
   @Patch(':reviewId/toggle-visibility')
   toggleVisibility(
-    @Param('reviewId') reviewId: string,
+    @Param('reviewId', new ParseUUIDPipe({ version: '4' })) reviewId: string,
   ) {
     return this.reviewsService.toggleVisibility(reviewId);
   }
 
   @Delete(':reviewId')
   remove(
-    @Param('reviewId') reviewId: string,
+    @Param('reviewId', new ParseUUIDPipe({ version: '4' })) reviewId: string,
   ) {
     return this.reviewsService.deleteByAdmin(reviewId);
   }

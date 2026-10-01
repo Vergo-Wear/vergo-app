@@ -1,97 +1,1143 @@
-/* Hero Styling */
-.hero {
+/* ========================================================================= */
+/* CARNAGE-STYLE IMMERSIVE FULL-BLEED HERO CAMPAIGN                          */
+/* ========================================================================= */
+
+.carnage-hero-section {
   position: relative;
   width: 100%;
-  height: calc(100vh - 80px);
-  min-height: 650px;
-  max-height: 900px;
-  background: transparent;
+  height: calc(100vh - 72px);
+  min-height: 600px;
+  max-height: 940px;
+  overflow: hidden;
   display: flex;
-  align-items: center;
-  padding: 0 80px;
+  align-items: flex-end;
+  justify-content: flex-start;
+  background-color: #050505;
+  box-sizing: border-box;
 }
 
-.hero-overlay {
-  max-width: 650px;
+.carnage-hero-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.carnage-hero-video,
+.carnage-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 30%;
+  display: block;
+}
+
+.carnage-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.05) 40%, rgba(0, 0, 0, 0.45) 80%, rgba(0, 0, 0, 0.8) 100%),
+              linear-gradient(90deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.2) 45%, transparent 100%);
+  pointer-events: none;
+}
+
+.carnage-hero-content-wrap {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 48px 60px 48px;
+  box-sizing: border-box;
+}
+
+.carnage-hero-content {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 28px;
+  max-width: 760px;
 }
 
-.available {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  color: #000000;
-  background: var(--accent);
-  padding: 6px 14px;
-  border-radius: 2px;
+.carnage-hero-headline {
+  font-family: inherit;
+  font-size: clamp(2.8rem, 6vw, 4.6rem);
+  font-weight: 900;
+  font-style: italic;
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  color: #ffffff;
   text-transform: uppercase;
+  margin: 0 0 10px 0;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
-.hero-overlay h1 {
-  font-size: 5rem;
+.carnage-hero-subtitle {
+  font-size: clamp(1rem, 1.35vw, 1.25rem);
+  font-weight: 500;
+  color: #ffffff;
+  margin: 0 0 24px 0;
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.carnage-hero-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.carnage-hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15px 34px;
+  font-size: 0.82rem;
   font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  color: var(--accent);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* Primary Action - Luxury White with Emerald Hover Accent */
+.vergo-hero-btn-primary {
+  background: #FFFFFF;
+  color: #020202;
+  border: 1px solid #FFFFFF;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}
+
+.vergo-hero-btn-primary:hover {
+  background: #50C878;
+  border-color: #50C878;
+  color: #020202;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 26px rgba(80, 200, 120, 0.4);
+}
+
+.vergo-hero-btn-primary:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Secondary Action - Translucent Dark Glass with Emerald Glow */
+.vergo-hero-btn-secondary {
+  background: rgba(10, 10, 12, 0.72);
+  backdrop-filter: blur(10px);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+}
+
+.vergo-hero-btn-secondary:hover {
+  border-color: #50C878;
+  color: #50C878;
+  background: rgba(80, 200, 120, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(80, 200, 120, 0.2);
+}
+
+.vergo-hero-btn-secondary:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Multi-slide Layer Transition */
+.carnage-slide-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.85s cubic-bezier(0.16, 1, 0.3, 1), transform 5s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.carnage-slide-layer.active {
+  opacity: 1;
+  z-index: 2;
+  transform: scale(1);
+}
+
+.carnage-slide-layer.inactive {
+  opacity: 0;
+  z-index: 1;
+  transform: scale(1.03);
+  pointer-events: none;
+}
+
+/* Slideshow Indicators (Bottom Center) */
+.hero-slide-indicators {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+.hero-slide-dot {
+  width: 20px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-slide-dot:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.hero-slide-dot.active {
+  background: #50C878;
+  width: 38px;
+  box-shadow: 0 0 10px rgba(80, 200, 120, 0.6);
+}
+
+/* Controls on Right (Arrows + Video) */
+.hero-slide-controls-right {
+  position: absolute;
+  bottom: 28px;
+  right: 48px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hero-slide-nav-arrows {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-slide-arrow-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(10, 10, 12, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+  font-size: 1.25rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(6px);
+  padding: 0;
+  user-select: none;
+}
+
+.hero-slide-arrow-btn:hover {
+  background: #FFFFFF;
+  color: #020202;
+  border-color: #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.hero-slide-arrow-btn:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.hero-video-ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.carnage-ctrl-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+  padding: 0;
+}
+
+.carnage-ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: #ffffff;
+  transform: scale(1.08);
+}
+
+@media screen and (max-width: 768px) {
+  .carnage-hero-section {
+    height: 72vh;
+    min-height: 480px;
+  }
+
+  .carnage-hero-content-wrap {
+    padding: 0 24px 36px 24px;
+  }
+
+  .carnage-hero-headline {
+    font-size: clamp(2rem, 8.5vw, 2.8rem);
+  }
+
+  .carnage-hero-subtitle {
+    font-size: 0.95rem;
+    margin-bottom: 18px;
+  }
+
+  .carnage-hero-btn {
+    padding: 12px 24px;
+    font-size: 0.72rem;
+  }
+
+  .carnage-hero-controls {
+    bottom: 20px;
+    right: 20px;
+  }
+}
+
+/* ========================================================================= */
+/* VERGO HERO PRODUCT SLIDESHOW - LUXURY STREETWEAR EDITION                  */
+/* ========================================================================= */
+
+.hero-slideshow-section {
+  position: relative;
+  width: 100%;
+  min-height: calc(100vh - 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 60px 40px 60px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Background overlay with subtle vignetting */
+.hero-slideshow-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 65% 50%, rgba(2, 2, 2, 0.20) 0%, rgba(2, 2, 2, 0.85) 70%, #020202 100%),
+              linear-gradient(90deg, rgba(2, 2, 2, 0.96) 0%, rgba(2, 2, 2, 0.72) 48%, rgba(2, 2, 2, 0.25) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Main Container Grid */
+.hero-slideshow-container {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: center;
+  gap: 56px;
+}
+
+/* ------------------------------------------------------------------------- */
+/* LEFT: EDITORIAL & PRODUCT INFORMATION                                     */
+/* ------------------------------------------------------------------------- */
+
+.hero-editorial-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  max-width: 680px;
+}
+
+/* Badge Group & Social Proof */
+.hero-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero-brand-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 6px 14px;
+  border-radius: 9999px;
   text-transform: uppercase;
 }
 
-.hero-overlay p {
-  font-size: 1.15rem;
-  font-weight: 300;
-  line-height: 1.6;
-  color: var(--accent-muted);
-  max-width: 480px;
+.hero-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #50C878;
+  box-shadow: 0 0 8px #50C878;
+  animation: pulseDot 2s infinite;
 }
 
-.hero-overlay button {
-  background: var(--accent);
-  color: #050505;
-  border: 1px solid var(--accent);
-  padding: 16px 36px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+@keyframes pulseDot {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.4); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.hero-inventory-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #50C878;
+  background: rgba(80, 200, 120, 0.1);
+  border: 1px solid rgba(80, 200, 120, 0.3);
+  padding: 6px 14px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.hero-db-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #50C878;
+  box-shadow: 0 0 6px #50C878;
+}
+
+.hero-product-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hero-category-label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: #8e8e93;
+  text-transform: uppercase;
+}
+
+.hero-colors-count {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #50C878;
+  background: rgba(80, 200, 120, 0.08);
+  border: 1px solid rgba(80, 200, 120, 0.2);
+  padding: 2px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.hero-sizes-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.hero-sizes-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #666;
+}
+
+.hero-sizes-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hero-size-chip {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+/* Grand Headline */
+.hero-editorial-headline {
+  font-size: 4.5rem;
+  font-weight: 900;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  color: #FFFFFF;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.hero-welcome-description {
+  font-size: 1.05rem;
+  font-weight: 400;
+  line-height: 1.65;
+  color: #d1d5db;
+  margin: 0;
+  max-width: 560px;
+}
+
+.hero-headline-gradient {
+  background: linear-gradient(135deg, #FFFFFF 30%, #8e8e93 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Quality & Cut Spec Pills */
+.hero-spec-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hero-spec-pill {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #a1a1aa;
+  background: #111113;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 4px 10px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+/* Animated Synchronized Text Block */
+.hero-product-info-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 4px;
+  width: 100%;
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hero-product-info-block.entering {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hero-product-info-block.exiting {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+
+/* Clickable Product Title */
+.hero-product-title-link {
+  text-decoration: none;
+  color: inherit;
+  display: inline-block;
+}
+
+.hero-product-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #FFFFFF;
+  text-transform: uppercase;
+  margin: 0;
+  transition: color 0.25s ease;
+  line-height: 1.3;
+}
+
+.hero-product-title-link:hover .hero-product-title {
+  color: #50C878;
+}
+
+/* Price & Status Row */
+.hero-price-status-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.hero-product-price {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #FFFFFF;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.hero-product-availability {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #50C878;
+  background: rgba(80, 200, 120, 0.12);
+  border: 1px solid rgba(80, 200, 120, 0.35);
+  padding: 6px 14px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-product-availability::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #50C878;
+  box-shadow: 0 0 8px #50C878;
+}
+
+.hero-product-availability.sold-out {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.hero-product-availability.sold-out::before {
+  background-color: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+/* Action Buttons Container */
+.hero-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* Primary CTA Button: [ VIEW PRODUCT ] */
+.hero-view-product-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #FFFFFF;
+  color: #020202;
+  border: 1px solid #FFFFFF;
+  padding: 16px 42px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-decoration: none;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.hero-view-product-btn:hover {
+  background: #50C878;
+  border-color: #50C878;
+  color: #020202;
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(80, 200, 120, 0.3);
+}
+
+.hero-view-product-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Secondary CTA Button */
+.hero-explore-collection-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 16px 28px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.hero-explore-collection-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #FFFFFF;
+  transform: translateY(-2px);
+}
+
+/* Fast Trust Indicators Row */
+.hero-trust-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.hero-trust-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------------------- */
+/* RIGHT: PRODUCT IMAGE STAGE & THUMBNAILS                                   */
+/* ------------------------------------------------------------------------- */
+
+.hero-visual-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+/* Frame around product photo */
+.hero-image-frame {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  aspect-ratio: 4 / 5;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #080809;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.85),
+              0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
+
+/* Floating badge on top of photo */
+.hero-image-floating-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 10;
+  background: rgba(2, 2, 2, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 6px 14px;
+  border-radius: 9999px;
+}
+
+.hero-image-badge-text {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: #FFFFFF;
   text-transform: uppercase;
 }
 
-.hero-overlay button:hover {
-  background: transparent;
-  color: var(--accent);
+.hero-image-link {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+/* Individual Slide Image Layer */
+.hero-slide-img-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transition: opacity 0.85s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.hero-slide-img-layer.active {
+  opacity: 1;
+  transform: scale(1);
+  z-index: 2;
+}
+
+.hero-slide-img-layer.inactive {
+  opacity: 0;
+  transform: scale(1.03);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Hover magnification on image */
+.hero-image-link:hover .hero-slide-img-layer.active {
+  transform: scale(1.025);
+}
+
+/* ------------------------------------------------------------------------- */
+/* INTERACTIVE 8-PHOTO THUMBNAIL RIBBON                                      */
+/* ------------------------------------------------------------------------- */
+
+.hero-thumbnails-ribbon {
+  width: 100%;
+  max-width: 520px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.hero-thumbnail-item {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #111113;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0.55;
+}
+
+.hero-thumbnail-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-thumbnail-item:hover {
+  opacity: 0.9;
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
-/* Tablet Screens (1024px and below) */
+.hero-thumbnail-item.active {
+  opacity: 1;
+  border-color: #50C878;
+  box-shadow: 0 0 10px rgba(80, 200, 120, 0.45);
+  transform: scale(1.05);
+}
+
+/* ------------------------------------------------------------------------- */
+/* CONTROLS BAR: COUNTER, PROGRESS, BUTTONS                                  */
+/* ------------------------------------------------------------------------- */
+
+.hero-controls-bar {
+  width: 100%;
+  max-width: 520px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* Counter 01 / 08 */
+.hero-progress-counter {
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: #FFFFFF;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-progress-counter .current-num {
+  color: #FFFFFF;
+}
+
+.hero-progress-counter .divider {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.hero-progress-counter .total-num {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Linear Progress Segments */
+.hero-progress-segments {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  max-width: 220px;
+}
+
+.hero-progress-dash {
+  height: 3px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.20);
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.hero-progress-dash.active {
+  background: #50C878;
+  box-shadow: 0 0 8px rgba(80, 200, 120, 0.6);
+}
+
+/* Arrow Controls (← →) */
+.hero-nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-nav-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(8, 8, 9, 0.7);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+  backdrop-filter: blur(8px);
+}
+
+.hero-nav-btn:hover {
+  background: #FFFFFF;
+  color: #020202;
+  border-color: #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.hero-nav-btn:active {
+  transform: scale(0.92);
+}
+
+/* ------------------------------------------------------------------------- */
+/* CONTINUOUS STREETWEAR MARQUEE TICKER                                      */
+/* ------------------------------------------------------------------------- */
+
+.hero-marquee-wrapper {
+  width: 100%;
+  overflow: hidden;
+  background: #020202;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 14px 0;
+  position: relative;
+  z-index: 20;
+}
+
+.hero-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marqueeScroll 28s linear infinite;
+}
+
+.hero-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+.hero-marquee-content {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding-right: 28px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+}
+
+.marquee-dot {
+  color: #50C878;
+  font-size: 0.9rem;
+}
+
+@keyframes marqueeScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ------------------------------------------------------------------------- */
+/* CINEMATIC INTRO OVERLAY                                                   */
+/* ------------------------------------------------------------------------- */
+
+.vergo-cinematic-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #020202;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1),
+              visibility 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.vergo-cinematic-overlay.reveal {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.vergo-intro-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.vergo-intro-icon {
+  width: 56px;
+  height: 56px;
+  color: #FFFFFF;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vergo-intro-icon.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.vergo-intro-logo {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vergo-intro-logo.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.vergo-intro-skip-hint {
+  position: absolute;
+  bottom: 32px;
+  font-size: 0.65rem;
+  letter-spacing: 0.25em;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------------------- */
+/* RESPONSIVE DESIGN (TABLETS & PHONES)                                      */
+/* ------------------------------------------------------------------------- */
+
 @media screen and (max-width: 1024px) {
-  .hero {
-    padding: 0 48px;
+  .hero-slideshow-section {
+    padding: 30px 32px 40px 32px;
+    min-height: auto;
   }
 
-  .hero-overlay h1 {
-    font-size: 4rem;
+  .hero-slideshow-container {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .hero-visual-stage {
+    order: -1;
+    width: 100%;
+  }
+
+  .hero-editorial-panel {
+    max-width: 100%;
+    align-items: center;
+    text-align: center;
+  }
+
+  .hero-editorial-headline {
+    font-size: 3.25rem;
+  }
+
+  .hero-product-info-block {
+    align-items: center;
+  }
+
+  .hero-badge-group,
+  .hero-spec-pills,
+  .hero-price-status-row,
+  .hero-action-buttons,
+  .hero-trust-row {
+    justify-content: center;
   }
 }
 
-/* Mobile Screens (768px and below) */
 @media screen and (max-width: 768px) {
-  .hero {
-    height: 550px;
-    min-height: auto;
-    padding: 0 24px;
+  .hero-slideshow-section {
+    padding: 24px 20px 32px 20px;
   }
 
-  .hero-overlay h1 {
-    font-size: 2.75rem;
+  .hero-image-frame {
+    max-width: 340px;
+    border-radius: 12px;
   }
 
-  .hero-overlay p {
-    font-size: 1rem;
+  .hero-thumbnails-ribbon {
+    max-width: 340px;
+    gap: 6px;
+  }
+
+  .hero-editorial-headline {
+    font-size: 2.35rem;
+  }
+
+  .hero-product-title {
+    font-size: 1.1rem;
+  }
+
+  .hero-product-price {
+    font-size: 1.5rem;
+  }
+
+  .hero-view-product-btn {
+    width: 100%;
+    padding: 14px 24px;
+    font-size: 0.8rem;
+  }
+
+  .hero-explore-collection-btn {
+    width: 100%;
+  }
+
+  .hero-controls-bar {
+    max-width: 340px;
+  }
+
+  .hero-progress-segments {
+    max-width: 130px;
   }
 }
