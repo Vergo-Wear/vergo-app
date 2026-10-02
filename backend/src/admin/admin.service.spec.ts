@@ -67,7 +67,8 @@ describe('AdminService analytics overview', () => {
       },
     ]);
 
-    const result = await new AdminService(prisma as never).overview();
+    const mockCloudinary = { deleteByUrl: jest.fn(), deleteAsset: jest.fn(), uploadBuffer: jest.fn() };
+    const result = await new AdminService(prisma as never, mockCloudinary as never).overview();
 
     expect(result.analytics.customerSummary).toEqual({
       totalCustomers: 2,
@@ -111,7 +112,8 @@ describe('AdminService supplier management', () => {
     create: jest.fn(),
     update: jest.fn(),
   };
-  const service = new AdminService({ supplier } as never);
+  const mockCloudinary = { deleteByUrl: jest.fn(), deleteAsset: jest.fn(), uploadBuffer: jest.fn() };
+  const service = new AdminService({ supplier } as never, mockCloudinary as never);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -187,7 +189,8 @@ describe('AdminService branch management', () => {
     create: jest.fn(),
     update: jest.fn(),
   };
-  const service = new AdminService({ branch } as never);
+  const mockCloudinary = { deleteByUrl: jest.fn(), deleteAsset: jest.fn(), uploadBuffer: jest.fn() };
+  const service = new AdminService({ branch } as never, mockCloudinary as never);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -306,18 +309,22 @@ describe('AdminService database-backed inventory', () => {
       $queryRawUnsafe: queryRawUnsafe,
     }),
   );
-  const service = new AdminService({
-    category,
-    supplier,
-    branch,
-    color,
-    size,
-    product,
-    productVariant,
-    inventory,
-    $queryRawUnsafe: queryRawUnsafe,
-    $transaction: transaction,
-  } as never);
+  const mockCloudinary = { deleteByUrl: jest.fn(), deleteAsset: jest.fn(), uploadBuffer: jest.fn() };
+  const service = new AdminService(
+    {
+      category,
+      supplier,
+      branch,
+      color,
+      size,
+      product,
+      productVariant,
+      inventory,
+      $queryRawUnsafe: queryRawUnsafe,
+      $transaction: transaction,
+    } as never,
+    mockCloudinary as never,
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();

@@ -127,6 +127,17 @@ export default function InventoryDashboard() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  // -- State: Delete Confirmation Modal --
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    itemName: string;
+    itemType: "product" | "collection" | "color";
+    description: string;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // ================= DATA FETCHING =================
   const fetchAllData = useCallback(async () => {
     setLoading(true);
@@ -245,28 +256,44 @@ export default function InventoryDashboard() {
     });
   }, [productCards, search, colFilter, colorFilter, visibilityFilter]);
 
-  const handleDeleteProduct = async (productId: string, e?: React.MouseEvent) => {
+  const handleDeleteProduct = (productId: string, e?: React.MouseEvent, productName?: string) => {
     if (e) e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this product and all its variants from inventory?")) return;
-    setLoading(true);
+    const product = productCards.find((p) => p.productId === productId);
+    const name = productName || product?.name || (editingProductId === productId ? productForm.name : "") || "this product";
+    const variantCount = product ? product.variants.length : 0;
 
-    try {
-      const res = await authenticatedFetch(`/admin/products/${productId}`, {
-        method: "DELETE",
-      });
-      if (res && res.ok) {
-        showToast("Product deleted successfully", "success");
-        setIsProductModalOpen(false);
-        await fetchAllData();
-      } else {
-        const msg = res ? await responseMessage(res, "Failed to delete product") : "Request failed";
-        showToast(msg, "error");
-      }
-    } catch (err: any) {
-      showToast(err.message || "Failed to delete product", "error");
-    } finally {
-      setLoading(false);
-    }
+    setDeleteModal({
+      isOpen: true,
+      title: "DELETE PRODUCT",
+      itemName: name,
+      itemType: "product",
+      description: `Are you sure you want to permanently delete "${name}"? This action cannot be undone and will remove all ${variantCount > 0 ? `${variantCount} variant(s)` : "variants"} and associated inventory stock from the catalog.`,
+      onConfirm: async () => {
+        setIsDeleting(true);
+        console.log(`[Frontend] Sending DELETE request for product: ${productId} (${name})`);
+        try {
+          const res = await authenticatedFetch(`/admin/products/${productId}`, {
+            method: "DELETE",
+          });
+          if (res && res.ok) {
+            console.log(`[Frontend] Product ${productId} deleted successfully.`);
+            showToast("Product deleted successfully", "success");
+            setIsProductModalOpen(false);
+            setDeleteModal(null);
+            await fetchAllData();
+          } else {
+            const msg = res ? await responseMessage(res, "Failed to delete product") : "Request failed";
+            console.error(`[Frontend Delete Error] Status: ${res?.status} ${res?.statusText}, Message:`, msg, res);
+            showToast(msg, "error");
+          }
+        } catch (err: any) {
+          console.error("[Frontend Delete Exception]", err);
+          showToast(err.message || "Failed to delete product", "error");
+        } finally {
+          setIsDeleting(false);
+        }
+      },
+    });
   };
 
   const handleToggleProductVisibility = async (productId: string, currentStatus: string, e?: React.MouseEvent) => {
@@ -333,26 +360,37 @@ export default function InventoryDashboard() {
   };
 
   const deleteCollection = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this collection?")) return;
-    setLoading(true);
+    const col = categories.find((c) => c.categoryId === id);
+    const name = col?.name || "this collection";
 
-    try {
-      const res = await authenticatedFetch(`/admin/categories/${id}`, {
-        method: "DELETE",
-      });
+    setDeleteModal({
+      isOpen: true,
+      title: "DELETE COLLECTION",
+      itemName: name,
+      itemType: "collection",
+      description: `Are you sure you want to delete the collection "${name}"? Garments linked to this collection will have their collection unassigned.`,
+      onConfirm: async () => {
+        setIsDeleting(true);
+        try {
+          const res = await authenticatedFetch(`/admin/categories/${id}`, {
+            method: "DELETE",
+          });
 
-      if (res && res.ok) {
-        showToast("Collection deleted", "success");
-        await fetchAllData();
-      } else {
-        const msg = res ? await responseMessage(res, "Failed to delete collection") : "Request failed";
-        showToast(msg, "error");
-      }
-    } catch (err: any) {
-      showToast(err.message || "Failed to delete collection", "error");
-    } finally {
-      setLoading(false);
-    }
+          if (res && res.ok) {
+            showToast("Collection deleted", "success");
+            setDeleteModal(null);
+            await fetchAllData();
+          } else {
+            const msg = res ? await responseMessage(res, "Failed to delete collection") : "Request failed";
+            showToast(msg, "error");
+          }
+        } catch (err: any) {
+          showToast(err.message || "Failed to delete collection", "error");
+        } finally {
+          setIsDeleting(false);
+        }
+      },
+    });
   };
 
   // ================= TAB 3: COLOR PALETTE =================
@@ -403,26 +441,37 @@ export default function InventoryDashboard() {
   };
 
   const deleteColor = async (colorId: string) => {
-    if (!confirm("Delete this color from palette?")) return;
-    setLoading(true);
+    const col = colors.find((c) => c.colorId === colorId);
+    const name = col?.name || "this color";
 
-    try {
-      const res = await authenticatedFetch(`/admin/colors/${colorId}`, {
-        method: "DELETE",
-      });
+    setDeleteModal({
+      isOpen: true,
+      title: "DELETE COLOR",
+      itemName: name,
+      itemType: "color",
+      description: `Are you sure you want to delete "${name}" from the color palette? Existing variants referencing this color may be affected.`,
+      onConfirm: async () => {
+        setIsDeleting(true);
+        try {
+          const res = await authenticatedFetch(`/admin/colors/${colorId}`, {
+            method: "DELETE",
+          });
 
-      if (res && res.ok) {
-        showToast("Color deleted", "success");
-        await fetchAllData();
-      } else {
-        const msg = res ? await responseMessage(res, "Failed to delete color") : "Request failed";
-        showToast(msg, "error");
-      }
-    } catch (err: any) {
-      showToast(err.message || "Failed to delete color", "error");
-    } finally {
-      setLoading(false);
-    }
+          if (res && res.ok) {
+            showToast("Color deleted", "success");
+            setDeleteModal(null);
+            await fetchAllData();
+          } else {
+            const msg = res ? await responseMessage(res, "Failed to delete color") : "Request failed";
+            showToast(msg, "error");
+          }
+        } catch (err: any) {
+          showToast(err.message || "Failed to delete color", "error");
+        } finally {
+          setIsDeleting(false);
+        }
+      },
+    });
   };
 
   // ================= IMAGE UPLOAD HELPER =================
@@ -1028,7 +1077,7 @@ export default function InventoryDashboard() {
                     </button>
                     <button
                       type="button"
-                      onClick={(e) => handleDeleteProduct(card.productId, e)}
+                      onClick={(e) => handleDeleteProduct(card.productId, e, card.name)}
                       title="Delete Product"
                       className="bg-red-950/30 text-[#ef4444] hover:bg-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] p-2 rounded transition-all cursor-pointer"
                     >
@@ -1809,7 +1858,7 @@ export default function InventoryDashboard() {
                 {modalMode === "edit" && editingProductId && (
                   <button
                     type="button"
-                    onClick={() => handleDeleteProduct(editingProductId)}
+                    onClick={() => handleDeleteProduct(editingProductId, undefined, productForm.name)}
                     className="bg-red-950/30 text-[#ef4444] hover:bg-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] font-bold text-xs tracking-widest px-4 py-2 rounded-lg uppercase cursor-pointer transition-all mr-auto sm:mr-2"
                   >
                     DELETE
@@ -1848,6 +1897,102 @@ export default function InventoryDashboard() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ======= DELETE / CANCEL CONFIRMATION POPUP MODAL ======================== */}
+      {/* ========================================================================= */}
+      {deleteModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 select-none animate-fadeIn"
+          onClick={() => {
+            if (!isDeleting) setDeleteModal(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-[#0d0d0f] border border-red-500/20 rounded-2xl shadow-2xl p-6 relative overflow-hidden flex flex-col gap-4 animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Ambient Background Red Glow */}
+            <div className="absolute -top-12 -right-12 w-36 h-36 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-12 -left-12 w-36 h-36 bg-red-600/5 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Top row: Trash Icon badge & Close button */}
+            <div className="flex items-start justify-between relative z-10">
+              <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 shadow-inner">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteModal(null)}
+                className="text-[#8e8e93] hover:text-white transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-white/5 disabled:opacity-50"
+                title="Cancel and close"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Title & Description */}
+            <div className="relative z-10 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold tracking-widest uppercase text-white">
+                  {deleteModal.title}
+                </h3>
+                <span className="text-[9px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-mono font-bold tracking-wider">
+                  IRREVERSIBLE
+                </span>
+              </div>
+              <p className="text-xs text-[#a1a1aa] leading-relaxed font-medium">
+                {deleteModal.description}
+              </p>
+            </div>
+
+            {/* Target Item Name Pill */}
+            <div className="relative z-10 px-3.5 py-2.5 rounded-lg bg-[#141416] border border-[rgba(255,255,255,0.08)] flex items-center gap-2.5">
+              <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 animate-ping" />
+              <span className="text-xs font-bold text-white uppercase truncate tracking-wide font-mono">
+                {deleteModal.itemName}
+              </span>
+            </div>
+
+            {/* Action Buttons: Cancel and Delete */}
+            <div className="relative z-10 flex items-center justify-end gap-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteModal(null)}
+                className="px-4 py-2.5 rounded-lg border border-[rgba(255,255,255,0.12)] text-[#8e8e93] hover:text-white hover:bg-white/5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => void deleteModal.onConfirm()}
+                className="px-5 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 active:scale-95 text-white text-xs font-extrabold uppercase tracking-wider transition-all shadow-lg shadow-red-950/50 cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>DELETING...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>DELETE</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

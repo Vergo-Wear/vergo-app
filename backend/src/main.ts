@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 // Polyfill BigInt to support JSON serialization in NestJS/Express responses
@@ -11,8 +12,10 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.use(json({ limit: '15mb' }));
-  app.use(urlencoded({ limit: '15mb', extended: true }));
+  app.use(helmet());
+
+  app.use(json({ limit: '2mb' }));
+  app.use(urlencoded({ limit: '2mb', extended: true }));
 
   // Normalize leading double slashes in incoming request URLs (e.g., //product-catalogue -> /product-catalogue)
   app.use((req: any, res: any, next: () => void) => {
@@ -38,7 +41,7 @@ async function bootstrap() {
       if (!origin || origin.replace(/\/+$/, '') === cleanFrontendUrl) {
         callback(null, true);
       } else {
-        callback(null, true); // Alternatively allow clean match or allow all allowed origins
+        callback(new Error(`Origin ${origin} is not allowed by CORS`));
       }
     },
     credentials: true,

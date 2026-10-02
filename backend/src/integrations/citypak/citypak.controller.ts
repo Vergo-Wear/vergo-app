@@ -133,6 +133,8 @@ export class CitypakController {
   }
 
   @Get('sync-status')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Employee', 'Admin')
   getSyncStatus() {
     return this.citypakService.getLastSyncTimestamp();
   }

@@ -20,7 +20,9 @@ export default function Footer() {
       if (rawUser) {
         try {
           storedUser = JSON.parse(rawUser);
-        } catch (e) {}
+        } catch {
+          // ignore parsing error
+        }
       }
       if (isRequired || Boolean(storedUser?.mustChangePassword)) {
         setHideFooter(true);
@@ -36,8 +38,8 @@ export default function Footer() {
     subject: "General Inquiry",
     message: "",
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
-  const [contactSuccess, setContactSuccess] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
@@ -63,12 +65,27 @@ export default function Footer() {
 
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFormValid) return;
+    if (!isFormValid || isSubmitting) return;
 
+    setIsSubmitting(true);
     setContactError(null);
-    setContactSuccess(null);
+
+    const googleFormUrl =
+      process.env.NEXT_PUBLIC_GOOGLE_FORM_RESPONSE_URL ||
+      "https://docs.google.com/forms/u/0/d/e/1FAIpQLScQm8fXIOkrtj5nlmwMWzneAcll5u4PudqJjCw9LhNn0aSfOg/formResponse";
+    const entryName = process.env.NEXT_PUBLIC_GOOGLE_FORM_ENTRY_NAME || "entry.1897634418";
+    const entryEmail = process.env.NEXT_PUBLIC_GOOGLE_FORM_ENTRY_EMAIL || "entry.457820340";
+    const entrySubject = process.env.NEXT_PUBLIC_GOOGLE_FORM_ENTRY_SUBJECT || "entry.2108323";
+    const entryMessage = process.env.GOOGLE_FORM_ENTRY_MESSAGE || "entry.197243906";
+
+    const formParams = new URLSearchParams();
+    formParams.append(entryName, formData.fullName.trim());
+    formParams.append(entryEmail, formData.email.trim());
+    formParams.append(entrySubject, formData.subject.trim());
+    formParams.append(entryMessage, formData.message.trim());
 
     try {
+      // 1. Submit through backend proxy which forwards directly to Google Form
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const response = await fetch(`${apiUrl}/contact`, {
         method: "POST",
@@ -76,7 +93,38 @@ export default function Footer() {
         body: JSON.stringify(formData),
       });
 
-      if (response.ok) {
+      if (!response.ok) {
+        // Fallback: Submit directly to Google Form with mode 'no-cors'
+        await fetch(googleFormUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: formParams.toString(),
+        });
+      }
+
+      setToast({ message: "Your message has been sent successfully!", type: "success" });
+      setFormData({
+        fullName: "",
+        email: "",
+        subject: "General Inquiry",
+        message: "",
+      });
+      setActiveModal(null);
+    } catch {
+      // 2. Direct client-side submission to Google Form (prevents any failure if backend is offline)
+      try {
+        await fetch(googleFormUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: formParams.toString(),
+        });
+
         setToast({ message: "Your message has been sent successfully!", type: "success" });
         setFormData({
           fullName: "",
@@ -85,11 +133,12 @@ export default function Footer() {
           message: "",
         });
         setActiveModal(null);
-      } else {
-        setToast({ message: "Unable to send your message. Please try again.", type: "error" });
+      } catch {
+        setToast({ message: "Failed to send message. Please try again.", type: "error" });
+        setContactError("Unable to submit. Please check your connection and try again.");
       }
-    } catch (err) {
-      setToast({ message: "Failed to send message. Connection error.", type: "error" });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -148,7 +197,7 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* Modal Popup overlay */}
+      {/* Modal Popup overlay (Privacy Policy & Terms) */}
       {activeModal && activeModal !== "contact" && (
         <div className="modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -185,7 +234,7 @@ export default function Footer() {
         </div>
       )}
 
-      {/* Contact Us Modal overlay */}
+      {/* Contact Us Popup Modal overlay */}
       {activeModal === "contact" && (
         <div className="modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="modal-content contact-modal" onClick={(e) => e.stopPropagation()}>
@@ -207,7 +256,6 @@ export default function Footer() {
                   Whether you're looking for order updates, exclusive collaborations, or private styling, our concierge team is on standby.
                 </p>
                 <form onSubmit={handleContactSubmit} className="contact-form">
-                  {contactSuccess && <p className="success-message">{contactSuccess}</p>}
                   {contactError && <p className="error-message">{contactError}</p>}
                   <div className="form-group">
                     <label htmlFor="fullName">FULL NAME</label>
@@ -280,12 +328,12 @@ export default function Footer() {
                   </div>
                   <button
                     type="submit"
-                    disabled={!isFormValid}
+                    disabled={!isFormValid || isSubmitting}
                     className={`contact-submit-btn transition-all ${
-                      !isFormValid ? "opacity-40 cursor-not-allowed pointer-events-none" : "hover:opacity-90"
+                      !isFormValid || isSubmitting ? "opacity-40 cursor-not-allowed pointer-events-none" : "hover:opacity-90"
                     }`}
                   >
-                    SEND MESSAGE
+                    {isSubmitting ? "SENDING..." : "SEND MESSAGE"}
                   </button>
                 </form>
               </div>

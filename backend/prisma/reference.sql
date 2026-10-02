@@ -23,7 +23,7 @@ CREATE TABLE public.supplier (
   supplier_id uuid NOT NULL DEFAULT gen_random_uuid(),
   name text NOT NULL,
   phone text NOT NULL,
-  email text NOT NULL,
+  email text NOT NULL UNIQUE,
   address text NOT NULL,
   CONSTRAINT supplier_pkey PRIMARY KEY (supplier_id)
 );
@@ -39,7 +39,7 @@ CREATE TABLE public.profiles (
 );
 CREATE TABLE public.employee (
   employee_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  profile_id uuid,
+  profile_id uuid UNIQUE,
   branch_id uuid,
   first_name text NOT NULL,
   last_name text NOT NULL,
@@ -54,7 +54,7 @@ CREATE TABLE public.employee (
 );
 CREATE TABLE public.customer (
   customer_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  profile_id uuid,
+  profile_id uuid UNIQUE,
   first_name text NOT NULL,
   last_name text NOT NULL,
   phone text,
@@ -73,17 +73,6 @@ CREATE TABLE public.attendance (
   status text,
   CONSTRAINT attendance_pkey PRIMARY KEY (attendance_id),
   CONSTRAINT attendance_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employee(employee_id)
-);
-CREATE TABLE public.salary_record (
-  salary_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  employee_id uuid,
-  month date NOT NULL,
-  basic_salary numeric NOT NULL,
-  bonus numeric DEFAULT 0.00,
-  deduction numeric DEFAULT 0.00,
-  net_salary numeric NOT NULL,
-  CONSTRAINT salary_record_pkey PRIMARY KEY (salary_id),
-  CONSTRAINT salary_record_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employee(employee_id)
 );
 CREATE TABLE public.product (
   product_id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -193,31 +182,9 @@ CREATE TABLE public.notification (
   CONSTRAINT notification_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customer(customer_id),
   CONSTRAINT notification_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id)
 );
-CREATE TABLE public.purchase_order (
-  purchase_order_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  supplier_id uuid,
-  employee_id uuid,
-  order_date timestamp with time zone DEFAULT now(),
-  status text DEFAULT 'requested'::text,
-  total_amount numeric NOT NULL,
-  CONSTRAINT purchase_order_pkey PRIMARY KEY (purchase_order_id),
-  CONSTRAINT purchase_order_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.supplier(supplier_id),
-  CONSTRAINT purchase_order_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.employee(employee_id)
-);
-CREATE TABLE public.purchase_order_item (
-  po_item_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  purchase_order_id uuid,
-  variant_id uuid,
-  quantity integer NOT NULL,
-  cost_price numeric NOT NULL,
-  CONSTRAINT purchase_order_item_pkey PRIMARY KEY (po_item_id),
-  CONSTRAINT purchase_order_item_purchase_order_id_fkey FOREIGN KEY (purchase_order_id) REFERENCES public.purchase_order(purchase_order_id),
-  CONSTRAINT purchase_order_item_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.product_variant(variant_id)
-);
 CREATE TABLE public.images (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   image_url text NOT NULL,
-  title text,
   created_at timestamp without time zone DEFAULT now(),
   variant_id uuid,
   CONSTRAINT images_pkey PRIMARY KEY (id),

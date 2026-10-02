@@ -26,6 +26,56 @@ export class CustomizationService {
     bankName: "VERGO SL - CENTRAL BANK",
     bankBranch: "Main Branch",
     bankAccountNumber: "1234 - 5678 - 9012",
+    ads: [
+      {
+        id: "ad-1",
+        title: "SEASON ARCHIVE DROP",
+        badge: "FEATURED CAMPAIGN",
+        description: "Explore the new architectural silhouettes engineered with 280 GSM heavyweight cotton.",
+        type: "image",
+        mediaUrl: "https://res.cloudinary.com/aql7sojg/image/upload/v1788961916/products/k5cwxe5syiy2nxfncbls.jpg",
+        destinationUrl: "/collection",
+        ctaText: "EXPLORE COLLECTION",
+        isActive: true,
+        placement: "home_spotlight",
+        createdAt: "2026-10-01T00:00:00.000Z"
+      }
+    ],
+    featuredFeedbacks: [
+      {
+        id: "737443d1-51c6-436a-81d5-aa640068e786",
+        name: "Pamuda U.",
+        location: "Colombo",
+        verified: true,
+        garment: "Vergo Heavyweight Tee (Jet Black - Size L)",
+        rating: 5,
+        date: "Verified Drop",
+        comment: "The drape on this 280 GSM tee is genuinely unmatched in Sri Lanka. It holds its boxy structure throughout the day without clinging or stretching at the collar. Best streetwear purchase this year.",
+        showOnHome: true
+      },
+      {
+        id: "fb-2",
+        name: "Aakash R.",
+        location: "Kandy",
+        verified: true,
+        garment: "Vergo Heavyweight Tee (Crimson Red - Size XL)",
+        rating: 5,
+        date: "Verified Drop",
+        comment: "Delivery via Citypak arrived in less than 36 hours. The packaging and unboxing feel like a luxury boutique drop. The high-density branding and heavy cotton weight are 10/10.",
+        showOnHome: true
+      },
+      {
+        id: "fb-3",
+        name: "Dinuka M.",
+        location: "Galle",
+        verified: true,
+        garment: "Vergo Archival Tee (Desert Sage - Size M)",
+        rating: 5,
+        date: "Verified Drop",
+        comment: "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
+        showOnHome: true
+      }
+    ]
   };
 
   getCustomization() {

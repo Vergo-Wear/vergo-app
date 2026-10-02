@@ -13,8 +13,8 @@ These tables represent core physical or structural truths about the business. Th
   * *Business Value:* If a store moves, the address is updated here once. Every employee and inventory record linked to this branch updates automatically via their relationship.
 * **`category`:** Organizes the catalog (e.g., "Winter Wear", "Accessories").
   * *Business Value:* Powers the frontend UI navigation and allows for highly efficient product filtering.
-* **`supplier`:** Stores vendor contact info for restocking.
-  * *Business Value:* Isolates external B2B contacts from internal employee or customer data.
+* **`supplier`:** Stores vendor contact info for restocking. `email` is enforced UNIQUE at both application and database levels (`supplier_email_key`).
+  * *Business Value:* Isolates external B2B contacts from internal employee or customer data while guaranteeing no duplicate supplier accounts.
 
 ---
 
@@ -23,7 +23,7 @@ This section bridges the gap between secure authentication and public user data.
 
 * **`profiles`:** The master bridge table. It links securely to the authentication provider's hidden system (Supabase `auth.users`) via the `id` column.
   * *Business Value:* Keeps passwords and core security logic completely isolated from general business data, preventing accidental data leaks.
-* **`employee` & `customer`:** These link back to `profiles` via a nullable `profile_id` foreign key. Note: the database does **not** enforce this as 1-to-1 (no unique constraint on `profile_id`) — treat it as app-level convention, not a DB guarantee.
+* **`employee` & `customer`:** These link back to `profiles` via a `profile_id` foreign key. The database strictly enforces this as a 1-to-1 relationship via `@unique` and database UNIQUE constraints (`customer_profile_id_key` and `employee_profile_id_key`), ensuring a profile cannot create multiple customer or employee records.
   * *Business Value:* Separates operational logic. Customers require shipping addresses; employees require salaries and branch assignments. Splitting them avoids a massive, messy "Users" table filled with NULL columns.
 
 ---
@@ -31,10 +31,10 @@ This section bridges the gap between secure authentication and public user data.
 ## 3. HR Operations (Internal Management)
 These tables track workforce logistics, ensuring the administrative backend is fully integrated with the commerce platform.
 
-* **`attendance`:** Links to `employee` to log daily shifts (`check_in`, `check_out`).
-  * *Business Value:* Automates time-tracking for payroll processing.
-* **`salary_record`:** Links to `employee` to store monthly pay stubs.
-  * *Business Value:* Creates a permanent financial audit trail for business expenses, calculating bonuses and deductions dynamically on a per-month basis.
+* **`attendance`:** Links to `employee` to log daily shifts (`check_in`, `check_out`) and availability transitions.
+  * *Business Value:* Automates time-tracking and availability for order fulfillment. Preserved as an active operational shift record.
+* **`employee_commission`:** Links an `employee` to an `orders` record to track earned fulfillment commission per parcel.
+  * *Business Value:* Incentivizes order preparation and maintains an immutable audit trail of payouts per processed order.
 
 ---
 
@@ -45,7 +45,7 @@ This is the most critical logic for a clothing retailer. It distinctly separates
 * **`product_variant`:** Links to `product`. Holds the specific SKU, Size, and Color, plus a `price_adjustment` (default `0.00`) applied on top of the product's `base_price`.
   * *Design Justification:* A "Graphic T-Shirt" is one product, but it comes in 3 sizes and 3 colors (9 variants). If this wasn't split, the product description would have to be typed 9 separate times. This architecture is highly optimized for apparel.
   * *Pricing:* the customer-facing **selling price is `product.base_price + product_variant.price_adjustment`** — there is no standalone price column on the variant itself.
-* **`images`:** Links to `variant_id` (not `product_id`). Columns: `id` (bigint identity), `image_url`, `title`, `created_at`, `variant_id`.
+* **`images`:** Links to `variant_id` (not `product_id`). Columns: `id` (bigint identity), `image_url`, `created_at`, `variant_id` (the unused `title` column was dropped).
   * *Business Value:* A 1-to-many relationship allowing a single colored shirt to have multiple photos (front, back, lifestyle). Note: there is **no `display_order` column** in the live schema — ordering, if needed, must be handled another way (e.g. `created_at` or `id`).
   * *Correction:* this table was previously documented here as `product_image` with a `display_order` column; neither matches the live database. A product's full image list is the union of all its variants' images, since images are not linked to `product` directly.
 * **`inventory`:** The bridge between `product_variant` and `branch`. Columns: `quantity` (default 0), `reorder_level` (default 10), `reserved_quantity` (default 0), `last_updated`.
@@ -77,8 +77,13 @@ This structure handles the transition from a temporary shopping session to a per
 ## 6. Fulfillment & Supply Chain (Logistics)
 These tables handle what happens *after* a transaction occurs, both on the customer side and the B2B side.
 
-* **`delivery`:** Links an `order_id` to an `employee_id` to track physical drop-offs.
-* **`notification`:** A centralized system linking messages to specific customers and orders.
-  * *Business Value:* Powers an internal inbox or automated event triggers (e.g., dispatching "Your order has shipped" emails).
-* **`purchase_order` & `purchase_order_item`:** Links an Employee to a Supplier to buy more stock.
-  * *Business Value:* Mirrors the customer ordering system, but for B2B restocks. It tracks exactly how much the business spent acquiring inventory, allowing for accurate profit margin calculations in the analytics dashboard.
+* **`delivery`:** Links an `order_id` to track physical fulfillment, carrier integrations (e.g. Citypak), and waybill status.
+* **`notification`:** A centralized system linking messages to specific customers, checkouts, and orders.
+  * *Business Value:* Powers an internal inbox or automated event triggers (e.g., dispatching order status and delivery updates).
+
+---
+
+## 7. External Integrations & Infrastructure
+
+* **Contact Us Workflow:** Storefront customer inquiries are routed directly to an external Google Form (`NEXT_PUBLIC_GOOGLE_CONTACT_FORM_URL`). The obsolete database table `contact_message` and its Prisma model have been decommissioned. No message submission records are stored in the transactional PostgreSQL database.
+* **Prisma Migration History (`_prisma_migrations`):** Engine-level metadata table tracking applied migrations and checksums. Maintained strictly for Prisma schema evolution and deliberately omitted from the commercial business ER diagram.

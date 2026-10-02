@@ -19,6 +19,7 @@ import { UpdateSizeDto } from './dto/update-size.dto';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { DistributeStockDto } from './dto/distribute-stock.dto';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 const ACTIVE_ORDER_STATUSES = new Set(['cancelled', 'rejected']);
 
@@ -30,7 +31,10 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) { }
 
   private async resolveVariantReferences(
     tx: Prisma.TransactionClient,
@@ -664,9 +668,8 @@ export class AdminService {
               ...(imageList.length > 0
                 ? {
                     images: {
-                      create: imageList.map((url, idx) => ({
+                      create: imageList.map((url) => ({
                         imageUrl: url,
-                        title: idx === 0 ? 'Main' : `Gallery ${idx}`,
                       })),
                     },
                   }
@@ -811,10 +814,9 @@ export class AdminService {
             });
             if (imageList.length > 0) {
               await tx.images.createMany({
-                data: imageList.map((url, idx) => ({
+                data: imageList.map((url) => ({
                   variantId: existingVar.variantId,
                   imageUrl: url,
-                  title: idx === 0 ? 'Main' : `Gallery ${idx}`,
                 })),
               });
             }
@@ -838,9 +840,8 @@ export class AdminService {
                 ...(imageList.length > 0
                   ? {
                       images: {
-                        create: imageList.map((url, idx) => ({
+                        create: imageList.map((url) => ({
                           imageUrl: url,
-                          title: idx === 0 ? 'Main' : `Gallery ${idx}`,
                         })),
                       },
                     }
@@ -926,10 +927,9 @@ export class AdminService {
 
       if (imageUrls && imageUrls.length > 0) {
         await tx.images.createMany({
-          data: imageUrls.slice(0, 5).map((url, index) => ({
+          data: imageUrls.slice(0, 5).map((url) => ({
             variantId: variant.variantId,
             imageUrl: url,
-            title: index === 0 ? 'Main' : `Gallery ${index}`,
           })),
         });
       }
@@ -939,50 +939,204 @@ export class AdminService {
 
   async deleteProduct(productId: string) {
     try {
-      await this.prisma.$transaction(async (tx) => {
-        const variants = await tx.productVariant.findMany({
-          where: { productId },
-          select: { variantId: true },
-        });
+      // 1. Gather all associated image URLs before deleting DB records
+      const product = await this.prisma.product.findUnique({
+        where: { productId },
+        include: {
+          variants: {
+            include: {
+              images: true,
+            },
+          },
+          reviews: {
+            include: {
+              images: true,
+            },
+          },
+        },
+      });
 
-        const variantIds = variants.map((v) => v.variantId);
+      if (!product) {
+        throw new NotFoundException('Product not found.');
+      }
 
-        if (variantIds.length > 0) {
-          await tx.cartItem.deleteMany({
-            where: { variantId: { in: variantIds } },
-          });
-          await tx.pendingCheckoutItem.deleteMany({
-            where: { variantId: { in: variantIds } },
-          });
-          await tx.inventoryCommitment.deleteMany({
-            where: { inventory: { variantId: { in: variantIds } } },
-          });
-          await tx.stockReservation.deleteMany({
-            where: { inventory: { variantId: { in: variantIds } } },
-          });
-          await tx.images.deleteMany({
-            where: { variantId: { in: variantIds } },
-          });
+      const imageUrlsToDelete = new Set<string>();
 
-          await tx.inventory.deleteMany({
-            where: { variantId: { in: variantIds } },
-          });
-
-          await tx.productVariant.deleteMany({
-            where: { productId },
-          });
-        }
-
-        await tx.product.delete({
-          where: { productId },
+      // Collect all variant images
+      product.variants.forEach((v) => {
+        v.images.forEach((img) => {
+          if (img.imageUrl) imageUrlsToDelete.add(img.imageUrl);
         });
       });
+
+      // Collect all review images
+      product.reviews.forEach((r) => {
+        r.images.forEach((rImg) => {
+          if (rImg.imageUrl) imageUrlsToDelete.add(rImg.imageUrl);
+        });
+      });
+
+      const variantIds = product.variants.map((v) => v.variantId);
+      const reviewIds = product.reviews.map((r) => r.reviewId);
+
+      console.log(`[deleteProduct] Initiating deletion for product ID: ${productId}`);
+      console.log(`[deleteProduct] Found ${variantIds.length} variants and ${imageUrlsToDelete.size} Cloudinary images to purge.`);
+
+      // 2. Perform Database Cascade Deletion in Transaction
+      await this.prisma.$transaction(
+        async (tx) => {
+          // Find all order items referencing the product's variants
+          const orderItems =
+            variantIds.length > 0
+              ? await tx.orderItem.findMany({
+                  where: { variantId: { in: variantIds } },
+                  select: { orderItemId: true, orderId: true },
+                })
+              : [];
+          const orderItemIds = orderItems.map((oi) => oi.orderItemId);
+          const affectedOrderIds = Array.from(
+            new Set(orderItems.map((oi) => oi.orderId)),
+          );
+
+          // 2a. Delete inventory commitments linked to these order items or variant inventories
+          if (orderItemIds.length > 0 || variantIds.length > 0) {
+            await tx.inventoryCommitment.deleteMany({
+              where: {
+                OR: [
+                  ...(orderItemIds.length > 0
+                    ? [{ orderItemId: { in: orderItemIds } }]
+                    : []),
+                  ...(variantIds.length > 0
+                    ? [{ inventory: { variantId: { in: variantIds } } }]
+                    : []),
+                ],
+              },
+            });
+          }
+
+          // 2b. Delete reviews & review images associated with product or order items
+          await tx.reviewImage.deleteMany({
+            where: {
+              OR: [
+                { review: { productId } },
+                ...(orderItemIds.length > 0
+                  ? [{ review: { orderItemId: { in: orderItemIds } } }]
+                  : []),
+              ],
+            },
+          });
+
+          await tx.review.deleteMany({
+            where: {
+              OR: [
+                { productId },
+                ...(orderItemIds.length > 0
+                  ? [{ orderItemId: { in: orderItemIds } }]
+                  : []),
+              ],
+            },
+          });
+
+          if (variantIds.length > 0) {
+            // 2c. Delete stock reservations, cart items, checkout items
+            await tx.stockReservation.deleteMany({
+              where: { inventory: { variantId: { in: variantIds } } },
+            });
+
+            await tx.cartItem.deleteMany({
+              where: { variantId: { in: variantIds } },
+            });
+
+            await tx.pendingCheckoutItem.deleteMany({
+              where: { variantId: { in: variantIds } },
+            });
+
+            // 2d. Delete order items for these variants and purge associated test orders
+            if (orderItemIds.length > 0) {
+              await tx.orderItem.deleteMany({
+                where: { variantId: { in: variantIds } },
+              });
+
+              if (affectedOrderIds.length > 0) {
+                const deliveries = await tx.delivery.findMany({
+                  where: { orderId: { in: affectedOrderIds } },
+                  select: { deliveryId: true },
+                });
+                const deliveryIds = deliveries.map((d) => d.deliveryId);
+                if (deliveryIds.length > 0) {
+                  await tx.deliveryTrackingEvent.deleteMany({
+                    where: { deliveryId: { in: deliveryIds } },
+                  });
+                  await tx.courierPickupDelivery.deleteMany({
+                    where: { deliveryId: { in: deliveryIds } },
+                  });
+                  await tx.deliveryWaybill.deleteMany({
+                    where: { deliveryId: { in: deliveryIds } },
+                  });
+                }
+
+                await tx.orderCustomerDetails.deleteMany({
+                  where: { orderId: { in: affectedOrderIds } },
+                });
+                await tx.orderShippingDetails.deleteMany({
+                  where: { orderId: { in: affectedOrderIds } },
+                });
+                await tx.notification.deleteMany({
+                  where: { orderId: { in: affectedOrderIds } },
+                });
+                await tx.delivery.deleteMany({
+                  where: { orderId: { in: affectedOrderIds } },
+                });
+                await tx.employeeCommission.deleteMany({
+                  where: { orderId: { in: affectedOrderIds } },
+                });
+                await tx.orders.deleteMany({
+                  where: { orderId: { in: affectedOrderIds } },
+                });
+              }
+            }
+
+            // 2e. Delete variant images, inventory records (including employee assigned stocks), and variants
+            await tx.images.deleteMany({
+              where: { variantId: { in: variantIds } },
+            });
+
+            await tx.inventory.deleteMany({
+              where: { variantId: { in: variantIds } },
+            });
+
+            await tx.productVariant.deleteMany({
+              where: { productId },
+            });
+          }
+
+          // 2f. Delete the product itself
+          await tx.product.delete({
+            where: { productId },
+          });
+        },
+        {
+          timeout: 25000,
+          maxWait: 10000,
+        },
+      );
+
+      // 3. Remove all media assets from Cloudinary
+      if (imageUrlsToDelete.size > 0) {
+        console.log(`[deleteProduct] Deleting ${imageUrlsToDelete.size} images from Cloudinary`);
+        await Promise.allSettled(
+          Array.from(imageUrlsToDelete).map((url) =>
+            this.cloudinaryService.deleteByUrl(url),
+          ),
+        );
+      }
+
+      console.log(`[deleteProduct] Successfully deleted product ${productId}`);
       return { success: true };
     } catch (error: any) {
-      if (error.code === 'P2003') {
-        throw new ConflictException(
-          'Cannot delete this product because it is tied to historical customer orders or active inventory commitments.',
-        );
+      console.error('[deleteProduct Error]:', error);
+      if (error instanceof NotFoundException) {
+        throw error;
       }
       throw error;
     }
@@ -1103,7 +1257,11 @@ export class AdminService {
 
   async deleteColor(colorId: string) {
     try {
+      const color = await this.prisma.color.findUnique({ where: { colorId } });
       await this.prisma.color.delete({ where: { colorId } });
+      if (color?.imageUrl) {
+        await this.cloudinaryService.deleteByUrl(color.imageUrl);
+      }
       return { success: true };
     } catch (error: any) {
       if (error.code === 'P2003') {

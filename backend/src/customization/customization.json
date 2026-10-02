@@ -1,12 +1,12 @@
 {
-  "heroBadge": "AVAILABLE NOWs",
-  "heroTitle": "FALL /\nWINTER\nDROP 01",
-  "heroSubtitle": "Decentralized inventory. Proof of authenticity for every thread.",
-  "heroButtonText": "Shop Latest Drop",
+  "heroBadge": "NEW ARRIVAL",
+  "heroTitle": "SIGNATURE\nALL-SEASON\nDROP 01",
+  "heroSubtitle": "280 GSM dense combed cotton tees, shirts & hoodies. Engineered for tropical comfort and structured drape across Sri Lanka.",
+  "heroButtonText": "Shop Collection",
   "highlightsTitle": "Newly Released",
   "highlightsSubtitle": "Explore our latest limited edition pieces.",
   "newsletterTitle": "Stay in the loop",
-  "newsletterSubtitle": "Join our decentralized mailing list. Get early access to drops and real-time inventory verification alerts.",
+  "newsletterSubtitle": "Join our newsletter for early access to limited clothing drops, restocks, and exclusive islandwide offers.",
   "aboutHeroBadge": "Our Philosophy",
   "aboutHeroTitle": "Defining Modern Luxury",
   "aboutHeroSubtitle": "We craft premium streetwear with provenance and purpose — responsibly built, intentionally designed, and verifiably authentic.",
@@ -15,5 +15,81 @@
   "brandStatementDescription": "Since day one we've been rethinking how clothing is made and owned: from design and material sourcing to transparent supply chains and authenticated ownership. Every piece is engineered to last and to tell a story.",
   "bankName": "VERGO SL - CENTRAL BANK",
   "bankBranch": "Main Branch",
-  "bankAccountNumber": "1234 - 5678 - 9012"
+  "bankAccountNumber": "1234 - 5678 - 9012",
+  "ads": [
+    {
+      "id": "ad-1",
+      "title": "SIGNATURE ALL-SEASON DROP 01",
+      "badge": "NEW ARRIVAL",
+      "description": "280 GSM dense combed cotton tees, shirts & hoodies. Engineered for tropical comfort and structured drape across Sri Lanka.",
+      "type": "image",
+      "mediaUrl": "https://res.cloudinary.com/aql7sojg/image/upload/v1788961916/products/k5cwxe5syiy2nxfncbls.jpg",
+      "destinationUrl": "/collection",
+      "ctaText": "SHOP COLLECTION",
+      "isActive": true,
+      "placement": "home_spotlight",
+      "createdAt": "2026-10-01T00:00:00.000Z"
+    },
+    {
+      "id": "ad-2",
+      "title": "HEAVYWEIGHT ARCHITECTURAL FIT",
+      "badge": "280 GSM COTTON",
+      "description": "Boxy oversized cut that retains its structure throughout the day. Islandwide express delivery across Sri Lanka.",
+      "type": "image",
+      "mediaUrl": "https://res.cloudinary.com/aql7sojg/image/upload/v1788961897/products/lcut7pw9spodo8eqc4ow.jpg",
+      "destinationUrl": "/collection",
+      "ctaText": "EXPLORE TEES",
+      "isActive": true,
+      "placement": "home_spotlight",
+      "createdAt": "2026-10-01T01:00:00.000Z"
+    },
+    {
+      "id": "ad-3",
+      "title": "TIMELESS ATELIER SILHOUETTE",
+      "badge": "LIMITED DROP",
+      "description": "Designed in Colombo with high-density ribbed collar and dropped shoulders for effortless tropical luxury.",
+      "type": "image",
+      "mediaUrl": "https://res.cloudinary.com/aql7sojg/image/upload/v1788961605/products/rjapb6vhg3wedif6jwbz.jpg",
+      "destinationUrl": "/collection",
+      "ctaText": "SHOP APPAREL",
+      "isActive": true,
+      "placement": "home_spotlight",
+      "createdAt": "2026-10-01T02:00:00.000Z"
+    }
+  ],
+  "featuredFeedbacks": [
+    {
+      "id": "737443d1-51c6-436a-81d5-aa640068e786",
+      "name": "Pamuda U.",
+      "location": "Colombo",
+      "verified": true,
+      "garment": "Vergo Heavyweight Tee (Jet Black - Size L)",
+      "rating": 5,
+      "date": "Verified Drop",
+      "comment": "The drape on this 280 GSM tee is genuinely unmatched in Sri Lanka. It holds its boxy structure throughout the day without clinging or stretching at the collar. Best streetwear purchase this year.",
+      "showOnHome": true
+    },
+    {
+      "id": "fb-2",
+      "name": "Aakash R.",
+      "location": "Kandy",
+      "verified": true,
+      "garment": "Vergo Heavyweight Tee (Crimson Red - Size XL)",
+      "rating": 5,
+      "date": "Verified Drop",
+      "comment": "Delivery via Citypak arrived in less than 36 hours. The packaging and unboxing feel like a luxury boutique drop. The high-density branding and heavy cotton weight are 10/10.",
+      "showOnHome": true
+    },
+    {
+      "id": "fb-3",
+      "name": "Dinuka M.",
+      "location": "Galle",
+      "verified": true,
+      "garment": "Vergo Archival Tee (Desert Sage - Size M)",
+      "rating": 5,
+      "date": "Verified Drop",
+      "comment": "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
+      "showOnHome": true
+    }
+  ]
 }

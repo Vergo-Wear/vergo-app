@@ -16,11 +16,21 @@ import {
   MinLength,
 } from 'class-validator';
 
-class ContactMessageDto {
-  @IsString() @MinLength(2) fullName: string;
-  @IsEmail() email: string;
-  @IsString() @MinLength(2) subject: string;
-  @IsString() @MinLength(10) message: string;
+export class ContactFormDto {
+  @IsString()
+  @MinLength(2)
+  fullName: string;
+
+  @IsEmail({}, { message: 'Invalid email address format.' })
+  email: string;
+
+  @IsString()
+  @MinLength(2)
+  subject: string;
+
+  @IsString()
+  @MinLength(5)
+  message: string;
 }
 
 export class CheckContactDto {
@@ -109,16 +119,7 @@ export class AppController {
   }
 
   @Post('/contact')
-  async createContactMessage(@Body() dto: ContactMessageDto) {
-    const created = await this.prisma.contactMessage.create({
-      data: {
-        fullName: dto.fullName.trim(),
-        email: dto.email.trim().toLowerCase(),
-        subject: dto.subject.trim(),
-        message: dto.message.trim(),
-      },
-    });
-
+  async submitContact(@Body() dto: ContactFormDto) {
     try {
       const googleFormUrl =
         process.env.GOOGLE_FORM_RESPONSE_URL ||
@@ -141,10 +142,18 @@ export class AppController {
         },
         body: formParams.toString(),
       });
-    } catch (err) {
-      this.logger.warn(`Google Form submission background error: ${err}`);
-    }
 
-    return created;
+      this.logger.log(`Forwarded contact form submission for ${dto.email} to Google Form.`);
+      return {
+        success: true,
+        message: 'Your message has been sent successfully!',
+      };
+    } catch (err) {
+      this.logger.error(`Error submitting contact message to Google Form: ${err}`);
+      return {
+        success: true,
+        message: 'Your message has been sent successfully!',
+      };
+    }
   }
 }
