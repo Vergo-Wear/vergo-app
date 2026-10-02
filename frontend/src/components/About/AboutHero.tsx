@@ -15,18 +15,31 @@ export default function AboutHero() {
   );
 
   useEffect(() => {
-    fetch(`${API_URL}/customization`)
-      .then((res) => {
-        if (res.ok) return res.json();
-      })
-      .then((data) => {
-        if (data) {
-          if (data.aboutHeroBadge) setBadge(data.aboutHeroBadge.toUpperCase());
-          if (data.aboutHeroTitle) setTitle(data.aboutHeroTitle.toUpperCase());
-          if (data.aboutHeroSubtitle) setSubtitle(data.aboutHeroSubtitle);
-        }
-      })
-      .catch(() => undefined);
+    const loadData = () => {
+      fetch(`${API_URL}/customization?t=${Date.now()}`, { cache: "no-store" })
+        .then((res) => {
+          if (res.ok) return res.json();
+        })
+        .then((data) => {
+          if (data) {
+            if (data.aboutHeroBadge) setBadge(data.aboutHeroBadge.toUpperCase());
+            if (data.aboutHeroTitle) setTitle(data.aboutHeroTitle.toUpperCase());
+            if (data.aboutHeroSubtitle) setSubtitle(data.aboutHeroSubtitle);
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    loadData();
+
+    const handleUpdate = () => loadData();
+    window.addEventListener("vergo_customization_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    return () => {
+      window.removeEventListener("vergo_customization_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
   }, []);
 
   return (

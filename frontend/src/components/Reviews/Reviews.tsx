@@ -52,24 +52,51 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export default function Reviews() {
   const [reviews, setReviews] = useState<ReviewItem[]>(DEFAULT_REVIEWS);
+  const [headerInfo, setHeaderInfo] = useState({
+    feedbackBadge: "VERIFIED COMMUNITY",
+    feedbackTitle: "TESTED ON THE STREETS.",
+    feedbackSubtitle: "Authentic feedback from verified collectors across the island.",
+  });
 
   useEffect(() => {
-    fetch(`${API_URL}/customization`, { cache: "no-store" })
-      .then((res) => {
-        if (!res.ok) return null;
-        return res.json();
-      })
-      .then((data) => {
-        if (data && Array.isArray(data.featuredFeedbacks)) {
-          const visible = data.featuredFeedbacks.filter(
-            (fb: ReviewItem) => fb.showOnHome !== false
-          );
-          if (visible.length > 0) {
-            setReviews(visible);
+    const loadReviews = () => {
+      fetch(`${API_URL}/customization?t=${Date.now()}`, { cache: "no-store" })
+        .then((res) => {
+          if (!res.ok) return null;
+          return res.json();
+        })
+        .then((data) => {
+          if (data) {
+            if (data.feedbackBadge || data.feedbackTitle || data.feedbackSubtitle) {
+              setHeaderInfo((prev) => ({
+                feedbackBadge: data.feedbackBadge || prev.feedbackBadge,
+                feedbackTitle: data.feedbackTitle || prev.feedbackTitle,
+                feedbackSubtitle: data.feedbackSubtitle || prev.feedbackSubtitle,
+              }));
+            }
+            if (Array.isArray(data.featuredFeedbacks)) {
+              const visible = data.featuredFeedbacks.filter(
+                (fb: ReviewItem) => fb.showOnHome !== false
+              );
+              if (visible.length > 0) {
+                setReviews(visible);
+              }
+            }
           }
-        }
-      })
-      .catch(() => undefined);
+        })
+        .catch(() => undefined);
+    };
+
+    loadReviews();
+
+    const handleUpdate = () => loadReviews();
+    window.addEventListener("vergo_customization_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    return () => {
+      window.removeEventListener("vergo_customization_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
   }, []);
 
   // Compute aggregate stats dynamically
@@ -87,10 +114,10 @@ export default function Reviews() {
         {/* Section Header */}
         <div className="reviews-header">
           <div className="reviews-title-area">
-            <span className="reviews-eyebrow">VERIFIED COMMUNITY</span>
-            <h2 className="reviews-title">TESTED ON THE STREETS.</h2>
+            <span className="reviews-eyebrow">{headerInfo.feedbackBadge}</span>
+            <h2 className="reviews-title">{headerInfo.feedbackTitle}</h2>
             <p className="reviews-subtitle">
-              Authentic feedback from verified collectors across the island.
+              {headerInfo.feedbackSubtitle}
             </p>
           </div>
 

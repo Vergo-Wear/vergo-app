@@ -136,9 +136,10 @@ export class CreateOrderDto {
   })
   paymentMethod: string;
 
+  @IsOptional()
   @IsNumber({}, { message: 'Delivery fee must be a number.' })
   @Min(0, { message: 'Delivery fee cannot be negative.' })
-  deliveryFee: number;
+  deliveryFee?: number;
 
   @ValidateNested()
   @Type(() => ContactDetailsDto)

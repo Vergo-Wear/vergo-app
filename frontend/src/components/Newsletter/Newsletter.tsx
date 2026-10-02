@@ -17,12 +17,10 @@ export default function Newsletter() {
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-
     const loadCustomization = async () => {
       try {
-        const response = await fetch(`${API_URL}/customization`, {
-          signal: controller.signal,
+        const response = await fetch(`${API_URL}/customization?t=${Date.now()}`, {
+          cache: "no-store",
         });
 
         if (!response.ok) return;
@@ -37,7 +35,14 @@ export default function Newsletter() {
 
     void loadCustomization();
 
-    return () => controller.abort();
+    const handleUpdate = () => void loadCustomization();
+    window.addEventListener("vergo_customization_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    return () => {
+      window.removeEventListener("vergo_customization_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
   }, []);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

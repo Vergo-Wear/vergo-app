@@ -1286,12 +1286,14 @@ interface BankTransferFlowProps {
 interface BankDetails {
   bankName: string;
   bankBranch: string;
+  bankAccountName: string;
   bankAccountNumber: string;
 }
 
 const defaultBankDetails: BankDetails = {
   bankName: "VERGO SL - CENTRAL BANK",
   bankBranch: "Main Branch",
+  bankAccountName: "VERGO ATELIER PVT LTD",
   bankAccountNumber: "1234 - 5678 - 9012",
 };
 
@@ -1388,6 +1390,9 @@ function BankTransferFlow({
         setBankDetails({
           bankName: customization.bankName || defaultBankDetails.bankName,
           bankBranch: customization.bankBranch || defaultBankDetails.bankBranch,
+          bankAccountName:
+            customization.bankAccountName ||
+            defaultBankDetails.bankAccountName,
           bankAccountNumber:
             customization.bankAccountNumber ||
             defaultBankDetails.bankAccountNumber,
@@ -2047,6 +2052,50 @@ function BankTransferFlow({
                 </span>
               </div>
               <div className="bt-detail-row">
+                <span className="bt-detail-label">Account Name</span>
+                <span className="bt-detail-value">
+                  {bankDetails.bankAccountName}
+                  <button
+                    className="bt-copy-btn"
+                    onClick={() =>
+                      copyToClipboard(bankDetails.bankAccountName, "name")
+                    }
+                    title="Copy Account Name"
+                  >
+                    {copiedField === "name" ? (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#00FF9D"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                </span>
+              </div>
+              <div className="bt-detail-row">
                 <span className="bt-detail-label">Account No.</span>
                 <span className="bt-detail-value">
                   {bankDetails.bankAccountNumber}
@@ -2205,7 +2254,7 @@ function BankTransferFlow({
                 }}
                 onClick={() => {
                   copyToClipboard(
-                    `Bank: ${bankDetails.bankName}\nBranch: ${bankDetails.bankBranch}\nAccount: ${bankDetails.bankAccountNumber}\nReference: ${orderId}`,
+                    `Bank: ${bankDetails.bankName}\nBranch: ${bankDetails.bankBranch}\nAccount Name: ${bankDetails.bankAccountName}\nAccount: ${bankDetails.bankAccountNumber}\nReference: ${orderId}`,
                     "all",
                   );
                 }}
@@ -2530,6 +2579,50 @@ function BankTransferFlow({
                 <span className="bt-detail-label">Branch</span>
                 <span className="bt-detail-value">
                   {bankDetails.bankBranch}
+                </span>
+              </div>
+              <div className="bt-detail-row">
+                <span className="bt-detail-label">Account Name</span>
+                <span className="bt-detail-value">
+                  {bankDetails.bankAccountName}
+                  <button
+                    className="bt-copy-btn"
+                    onClick={() =>
+                      copyToClipboard(bankDetails.bankAccountName, "name")
+                    }
+                    title="Copy Account Name"
+                  >
+                    {copiedField === "name" ? (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#00FF9D"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
                 </span>
               </div>
               <div className="bt-detail-row">

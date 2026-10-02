@@ -6,11 +6,13 @@ describe('ReviewsService purchased-product rule', () => {
   const productId = '47ca0439-d09e-4418-a16a-d2c2d4a2aaaa';
   const customer = { findFirst: jest.fn() };
   const orders = { findFirst: jest.fn() };
-  const review = { findUnique: jest.fn(), create: jest.fn() };
+  const review = { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() };
+  const reviewImage = { deleteMany: jest.fn() };
   const prisma: any = {
     customer,
     orders,
     review,
+    reviewImage,
     $transaction: jest.fn((callback: (tx: any) => unknown) => callback(prisma)),
   };
   let service: ReviewsService;
@@ -35,7 +37,7 @@ describe('ReviewsService purchased-product rule', () => {
     expect(orders.findFirst).toHaveBeenCalledWith({
       where: {
         customerId,
-        orderStatus: { in: ['Delivered', 'Completed'] },
+        orderStatus: { in: ['Delivered', 'Completed', 'delivered', 'completed', 'DELIVERED', 'COMPLETED'] },
         orderItems: { some: { variant: { productId } } },
       },
       orderBy: { orderDate: 'desc' },
@@ -61,22 +63,25 @@ describe('ReviewsService purchased-product rule', () => {
     await expect(
       service.save('profile-1', productId, {
         rating: 4,
-        comment: 'Too early',
+        comment: 'Too early review comment',
         images: [],
       }),
     ).rejects.toThrow(ForbiddenException);
     expect(review.create).not.toHaveBeenCalled();
   });
 
-  it('rejects a second review for the same customer and product', async () => {
+  it('updates an existing review for the same customer and product', async () => {
     review.findUnique.mockResolvedValue({ reviewId: 'existing-review' });
-    await expect(
-      service.save('profile-1', productId, {
-        rating: 4,
-        comment: 'Again',
-        images: [],
-      }),
-    ).rejects.toThrow(ConflictException);
-    expect(review.create).not.toHaveBeenCalled();
+    review.update.mockResolvedValue({ reviewId: 'existing-review', rating: 4 });
+    reviewImage.deleteMany.mockResolvedValue({ count: 1 });
+
+    const result = await service.save('profile-1', productId, {
+      rating: 4,
+      comment: 'Updated review comment here',
+      images: [],
+    });
+
+    expect(review.update).toHaveBeenCalled();
+    expect(result).toEqual({ reviewId: 'existing-review', rating: 4 });
   });
 });

@@ -11,6 +11,8 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
   const orderId = '4be0cbd5-2f43-45ff-9f2c-1f0ce8ab4444';
   const orderItemId = '8ce20d49-4e37-4ab0-b80f-bc262b597777';
 
+  let service: OrdersService;
+
   const customer = { findUnique: jest.fn() };
   const productVariant = { findUnique: jest.fn() };
   const pendingCheckout = {
@@ -48,8 +50,8 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     upsert: jest.fn(),
     updateMany: jest.fn(),
   };
-  const stockReservation = { aggregate: jest.fn() };
-  const inventory = { findFirst: jest.fn() };
+  const stockReservation = { aggregate: jest.fn(), findMany: jest.fn().mockResolvedValue([]) };
+  const inventory = { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]) };
   const userAddress = {
     findFirst: jest.fn(),
     create: jest.fn(),

@@ -556,9 +556,8 @@ export default function StockManagement() {
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <span
-                      className={`emp-badge ${
-                        req.status === "APPROVED" ? "green" : "orange"
-                      }`}
+                      className={`emp-badge ${req.status === "APPROVED" ? "green" : "orange"
+                        }`}
                       style={{
                         fontSize: "9.5px",
                         fontWeight: "700",

@@ -68,7 +68,7 @@ export default function Navbar({
       if (rawUser) {
         try {
           storedUser = JSON.parse(rawUser);
-        } catch (e) {}
+        } catch (e) { }
       }
       if (isRequired || Boolean(storedUser?.mustChangePassword)) {
         setHideNavbar(true);
@@ -143,7 +143,7 @@ export default function Navbar({
         .then((data: { count: number } | null) => {
           if (!cancelled && data) setUnreadCount(data.count);
         })
-        .catch(() => {});
+        .catch(() => { });
     };
 
     loadUnreadCount();
@@ -172,10 +172,8 @@ export default function Navbar({
 
   const navLinks = links || defaultLinks;
 
-  if (hideNavbar) return null;
-
   return (
-    <nav className="navbar">
+    <nav className={`navbar ${hideNavbar ? "navbar-hidden" : ""}`}>
       <div className="navbar-container">
         <div className="logo">
           <Link href="/">
@@ -343,91 +341,86 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
-      <div className={`mobile-menu ${isOpen ? "active" : ""}`}>
-        <button
-          className="mobile-menu-close"
-          onClick={() => setIsOpen(false)}
-          aria-label="Close menu"
-        >
-          &times;
-        </button>
-        <ul>
-          {navLinks.map((link) => (
-            <li key={link.label}>
-              <Link href={link.href} onClick={() => setIsOpen(false)}>
-                {link.label}
-              </Link>
-            </li>
-          ))}
-          {loggedInState ? (
-            <>
-              {isCustomer && (
+      {/* Mobile Drawer Menu - Only rendered/shown when user clicks menu button */}
+      {isOpen && (
+        <div className="mobile-menu active">
+          <ul>
+            {navLinks.map((link) => (
+              <li key={link.label}>
+                <Link href={link.href} onClick={() => setIsOpen(false)}>
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+            {loggedInState ? (
+              <>
+                {isCustomer && (
+                  <li>
+                    <Link
+                      href="/profile/notifications"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      NOTIFICATIONS{unreadCount > 0 ? ` (${unreadCount})` : ""}
+                    </Link>
+                  </li>
+                )}
                 <li>
-                  <Link
-                    href="/profile/notifications"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    NOTIFICATIONS{unreadCount > 0 ? ` (${unreadCount})` : ""}
+                  <Link href="/profile" onClick={() => setIsOpen(false)}>
+                    MY ACCOUNT
                   </Link>
                 </li>
-              )}
-              <li>
-                <Link href="/profile" onClick={() => setIsOpen(false)}>
-                  MY ACCOUNT
-                </Link>
-              </li>
-              <li>
-                <Link href="/profile/orders" onClick={() => setIsOpen(false)}>
-                  ORDER HISTORY
-                </Link>
-              </li>
-              <li>
-                <button
-                  className="mobile-logout-btn"
-                  onClick={async () => {
-                    setIsOpen(false);
-                    const client = createSupabaseClient();
-                    if (client) {
-                      await client.auth.signOut().catch(console.error);
-                    }
-                    if (onLogoutClick) {
-                      onLogoutClick();
-                    } else {
-                      sessionStorage.clear();
-                      window.dispatchEvent(new Event("vergo-auth-change"));
-                      router.push("/");
-                    }
-                  }}
-                >
-                  Logout
-                </button>
-              </li>
-            </>
-          ) : (
-            <>
-              <li>
-                <Link
-                  href="/auth/login"
-                  className="mobile-login-btn"
-                  onClick={() => setIsOpen(false)}
-                >
-                  Login
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/auth/register"
-                  className="mobile-register-btn"
-                  onClick={() => setIsOpen(false)}
-                >
-                  Register
-                </Link>
-              </li>
-            </>
-          )}
-        </ul>
-      </div>
+                <li>
+                  <Link href="/profile/orders" onClick={() => setIsOpen(false)}>
+                    ORDER HISTORY
+                  </Link>
+                </li>
+                <li>
+                  <button
+                    className="mobile-logout-btn"
+                    onClick={async () => {
+                      setIsOpen(false);
+                      const client = createSupabaseClient();
+                      if (client) {
+                        await client.auth.signOut().catch(console.error);
+                      }
+                      if (onLogoutClick) {
+                        onLogoutClick();
+                      } else {
+                        sessionStorage.clear();
+                        window.dispatchEvent(new Event("vergo-auth-change"));
+                        router.push("/");
+                      }
+                    }}
+                  >
+                    Logout
+                  </button>
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  <Link
+                    href="/auth/login"
+                    className="mobile-login-btn"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Login
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/auth/register"
+                    className="mobile-register-btn"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Register
+                  </Link>
+                </li>
+              </>
+            )}
+          </ul>
+        </div>
+      )}
     </nav>
   );
 }

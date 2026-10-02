@@ -92,3 +92,80 @@
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* ========================================================
+   Admin Mobile Compatibility & Responsive Sidebar (<= 768px)
+   ======================================================== */
+.admin-dashboard-container {
+  width: 100%;
+  max-width: 100vw;
+  min-width: 375px;
+  overflow-x: hidden;
+}
+
+@media screen and (max-width: 768px) {
+  /* Admin Sidebar Drawer on Mobile - completely taken out of document flow */
+  .admin-sidebar {
+    position: fixed !important;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 280px !important;
+    max-width: 85vw !important;
+    height: 100vh !important;
+    z-index: 100 !important;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: none;
+    flex-shrink: 0;
+  }
+
+  .admin-sidebar.sidebar-open {
+    transform: translateX(0);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.85);
+  }
+
+  /* Backdrop Overlay */
+  .admin-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .admin-sidebar-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Header Spacing and layout on Mobile */
+  .admin-header {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    gap: 8px;
+  }
+
+  /* Compact padding for main content */
+  .admin-main-content {
+    padding: 12px !important;
+  }
+}
+
+/* Extra small mobile adjustments (375px to 480px) */
+@media screen and (max-width: 480px) {
+  .admin-header {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    height: 3.5rem !important; /* 56px compact header */
+  }
+
+  .admin-header-title {
+    font-size: 0.75rem !important;
+    letter-spacing: 0.1em !important;
+  }
+}

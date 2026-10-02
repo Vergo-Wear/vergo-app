@@ -11,9 +11,9 @@ import "@/styles/employee.css";
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { notifications, logoutEmployee, isEmployeeAvailable, availabilityLastNotified, toggleAvailability, searchQuery, setSearchQuery } = useEmployee();
-  
+
   const isSearchHidden = pathname === "/employee" || pathname === "/employee/delivery-prep";
-  
+
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const unreadNotifCount = notifications.length;
 
@@ -178,7 +178,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                 <span style={{ fontSize: "14px", fontWeight: 900, color: "var(--emp-neon-green)", letterSpacing: "0.5px" }}>VERGO-EMP</span>
                 <span style={{ fontSize: "8px", color: "var(--emp-text-muted)", letterSpacing: "1px", textTransform: "uppercase" }}>Staff Portal</span>
               </div>
-              
+
               <div className="flex items-center gap-2">
                 {/* Mobile availability toggle status */}
                 <button
@@ -224,10 +224,10 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                     pathname.includes("/product-prep")
                       ? "Search product prep queue..."
                       : pathname.includes("/orders")
-                      ? "Search orders, customers..."
-                      : pathname.includes("/ready-orders")
-                      ? "Search ready orders..."
-                      : "Search..."
+                        ? "Search orders, customers..."
+                        : pathname.includes("/ready-orders")
+                          ? "Search ready orders..."
+                          : "Search..."
                   }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -319,21 +319,21 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                     zIndex: 200
                   }}>
                     <Link
-                       href="/employee/profile"
-                       onClick={() => setShowProfileMenu(false)}
-                       style={{
-                         display: "flex",
-                         alignItems: "center",
-                         gap: "8px",
-                         width: "100%",
-                         padding: "10px 16px",
-                         textAlign: "left",
-                         color: "#ffffff",
-                         fontSize: "13px",
-                         textDecoration: "none",
-                         borderBottom: "1px solid var(--emp-border)",
-                         transition: "background 0.2s"
-                       }}
+                      href="/employee/profile"
+                      onClick={() => setShowProfileMenu(false)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        padding: "10px 16px",
+                        textAlign: "left",
+                        color: "#ffffff",
+                        fontSize: "13px",
+                        textDecoration: "none",
+                        borderBottom: "1px solid var(--emp-border)",
+                        transition: "background 0.2s"
+                      }}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 16, height: 16, color: "var(--emp-neon-green)" }}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -419,7 +419,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           </svg>
           <span>Dashboard</span>
         </Link>
-        
+
         <Link href="/employee/orders" className={`flex flex-col items-center gap-1 text-[10px] font-bold ${pathname.includes("/orders") ? "text-[#00ff9d]" : "text-gray-400"}`}>
           <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />

@@ -7,6 +7,39 @@ import "./highlights.css";
 
 export default function Highlights() {
   const products = useProducts();
+  const [headerInfo, setHeaderInfo] = React.useState({
+    highlightsTitle: "Newly Released",
+    highlightsSubtitle: "Explore our latest limited edition pieces.",
+  });
+
+  React.useEffect(() => {
+    const loadHeader = () => {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/customization?t=${Date.now()}`, {
+        cache: "no-store",
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) {
+            setHeaderInfo((prev) => ({
+              highlightsTitle: data.highlightsTitle || prev.highlightsTitle,
+              highlightsSubtitle: data.highlightsSubtitle || prev.highlightsSubtitle,
+            }));
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    loadHeader();
+
+    const handleUpdate = () => loadHeader();
+    window.addEventListener("vergo_customization_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    return () => {
+      window.removeEventListener("vergo_customization_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
 
   // Filter only active available products (or all products from the database)
   const dbProducts = products.filter((p) => p.isAvailable);
@@ -17,8 +50,8 @@ export default function Highlights() {
         {/* Section Header matching exact UI from reference */}
         <div className="newly-released-header">
           <div className="newly-title-area">
-            <h2 className="newly-title">Newly Released</h2>
-            <p className="newly-subtitle">Explore our latest limited edition pieces.</p>
+            <h2 className="newly-title">{headerInfo.highlightsTitle}</h2>
+            <p className="newly-subtitle">{headerInfo.highlightsSubtitle}</p>
           </div>
 
           <div className="newly-inventory-status">
