@@ -11,7 +11,13 @@
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--glass-border);
   z-index: 100;
-  transition: background-color 0.3s ease, border-color 0.3s ease;
+  transition: opacity 0.25s ease, background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.navbar.navbar-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .navbar-container {
@@ -256,6 +262,7 @@
 .logout-btn-item {
   color: #ff4d4d;
 }
+
 .logout-btn-item:hover {
   color: #ff3333;
 }
@@ -275,12 +282,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
   z-index: 105;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .mobile-menu.active {
   right: 0;
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
 }
 
 .mobile-menu ul {
@@ -338,6 +351,7 @@
   text-decoration: none;
   width: 100%;
 }
+
 .mobile-register-btn:hover {
   background: rgba(255, 255, 255, 0.05);
 }
@@ -355,6 +369,7 @@
   transition: opacity 0.2s ease;
   width: 100%;
 }
+
 .mobile-logout-btn:hover {
   opacity: 0.9;
 }
@@ -438,3 +453,51 @@
     transform: translateY(-7px) rotate(-45deg);
   }
 }
+
+/* Extra Small Screens / Customer Header Collapse (425px and below) */
+@media screen and (max-width: 425px) {
+  .navbar {
+    height: 60px;
+  }
+
+  .navbar-container {
+    padding: 0 16px;
+  }
+
+  .logo img {
+    max-width: 92px !important;
+    height: auto !important;
+  }
+
+  .nav-actions {
+    gap: 12px;
+  }
+
+  .icon-btn {
+    padding: 6px;
+  }
+
+  .icon-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .cart-badge {
+    top: 2px;
+    right: 2px;
+    font-size: 0.6rem;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+  }
+
+  .hamburger {
+    width: 22px;
+    height: 15px;
+  }
+
+  .hamburger .bar {
+    width: 22px;
+    height: 1.5px;
+  }
+}

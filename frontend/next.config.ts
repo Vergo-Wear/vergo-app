@@ -14,6 +14,18 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: "/sourceMap/:path*",
+        destination: "/api/empty",
+      },
+      {
+        source: "/api/backend/:path*",
+        destination: "http://localhost:3001/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

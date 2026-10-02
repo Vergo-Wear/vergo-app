@@ -68,29 +68,58 @@ export default function Hero() {
   const [isHovered, setIsHovered] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [heroCustomization, setHeroCustomization] = useState<{
+    heroBadge?: string;
+    heroTitle?: string;
+    heroSubtitle?: string;
+    heroButtonText?: string;
+  }>({});
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
 
-  // Fetch active ads from the Admin Ads page / backend customization
+  // Fetch active ads and hero banner settings from backend customization
   useEffect(() => {
-    fetch(`${API_URL}/customization`, { cache: "no-store" })
-      .then((res) => {
-        if (!res.ok) return null;
-        return res.json();
-      })
-      .then((data) => {
-        if (data && Array.isArray(data.ads)) {
-          const activeAds = data.ads.filter(
-            (ad: AdCampaign) =>
-              ad.isActive &&
-              ad.mediaUrl &&
-              !ad.title?.toUpperCase().includes("WINTER")
-          );
-          if (activeAds.length > 0) {
-            setSlides(activeAds);
+    const loadHeroData = () => {
+      fetch(`${API_URL}/customization?t=${Date.now()}`, { cache: "no-store" })
+        .then((res) => {
+          if (!res.ok) return null;
+          return res.json();
+        })
+        .then((data) => {
+          if (data) {
+            if (data.heroBadge || data.heroTitle || data.heroSubtitle || data.heroButtonText) {
+              setHeroCustomization({
+                heroBadge: data.heroBadge,
+                heroTitle: data.heroTitle,
+                heroSubtitle: data.heroSubtitle,
+                heroButtonText: data.heroButtonText,
+              });
+            }
+            if (Array.isArray(data.ads)) {
+              const activeAds = data.ads.filter(
+                (ad: AdCampaign) =>
+                  ad.isActive &&
+                  ad.mediaUrl &&
+                  !ad.title?.toUpperCase().includes("WINTER")
+              );
+              if (activeAds.length > 0) {
+                setSlides(activeAds);
+              }
+            }
           }
-        }
-      })
-      .catch(() => undefined);
+        })
+        .catch(() => undefined);
+    };
+
+    loadHeroData();
+
+    const handleUpdate = () => loadHeroData();
+    window.addEventListener("vergo_customization_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    return () => {
+      window.removeEventListener("vergo_customization_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
   }, []);
 
   // Automated Slideshow Timer
@@ -112,18 +141,26 @@ export default function Hero() {
 
   const currentSlide = slides[currentIndex] || slides[0] || DEFAULT_SLIDES[0];
 
+  // If customized heroTitle is set and user is on slide 0, honor customization; otherwise slide title
   const headline =
-    currentSlide.title && !currentSlide.title.toUpperCase().includes("WINTER")
-      ? currentSlide.title.toUpperCase()
-      : "SIGNATURE ALL-SEASON DROP 01";
+    (currentIndex === 0 && heroCustomization.heroTitle)
+      ? heroCustomization.heroTitle.toUpperCase()
+      : currentSlide.title && !currentSlide.title.toUpperCase().includes("WINTER")
+        ? currentSlide.title.toUpperCase()
+        : "SIGNATURE ALL-SEASON DROP 01";
 
   const subtitle =
-    currentSlide.description &&
-    !currentSlide.description.toLowerCase().includes("decentralized")
-      ? currentSlide.description
-      : "280 GSM dense combed cotton tees, shirts & hoodies. Engineered for tropical comfort and structured drape across Sri Lanka.";
+    (currentIndex === 0 && heroCustomization.heroSubtitle)
+      ? heroCustomization.heroSubtitle
+      : currentSlide.description &&
+        !currentSlide.description.toLowerCase().includes("decentralized")
+        ? currentSlide.description
+        : "280 GSM dense combed cotton tees, shirts & hoodies. Engineered for tropical comfort and structured drape across Sri Lanka.";
 
-  const ctaText = currentSlide.ctaText || "SHOP COLLECTION";
+  const ctaText =
+    (currentIndex === 0 && heroCustomization.heroButtonText)
+      ? heroCustomization.heroButtonText.toUpperCase()
+      : currentSlide.ctaText || "SHOP COLLECTION";
   const targetLink = currentSlide.destinationUrl || "/collection";
 
   const toggleSound = () => {
@@ -196,15 +233,21 @@ export default function Hero() {
       {/* Hero Bottom-Left Content */}
       <div className="carnage-hero-content-wrap">
         <div className="carnage-hero-content" key={currentIndex}>
-          <h1 className="carnage-hero-headline">{headline}</h1>
-          <p className="carnage-hero-subtitle">{subtitle}</p>
+          {heroCustomization.heroBadge && (
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#50C878] border border-[#50C878] shadow-[0_0_15px_rgba(80,200,120,0.4)] mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-black shadow-[0_0_4px_rgba(0,0,0,0.5)]" />
+              <span className="text-[11px] font-black tracking-[0.25em] text-black uppercase">
+                {heroCustomization.heroBadge}
+              </span>
+            </div>
+          )}
+
+          <h1 className="carnage-hero-headline whitespace-pre-line">{headline}</h1>
+          <p className="carnage-hero-subtitle whitespace-pre-line">{subtitle}</p>
 
           <div className="carnage-hero-btn-row">
             <Link href={targetLink} className="carnage-hero-btn vergo-hero-btn-primary">
               {ctaText}
-            </Link>
-            <Link href="/collection" className="carnage-hero-btn vergo-hero-btn-secondary">
-              EXPLORE ARCHIVE
             </Link>
           </div>
         </div>

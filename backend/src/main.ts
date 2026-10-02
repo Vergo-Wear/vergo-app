@@ -12,7 +12,12 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    }),
+  );
 
   app.use(json({ limit: '2mb' }));
   app.use(urlencoded({ limit: '2mb', extended: true }));
@@ -35,14 +40,32 @@ async function bootstrap() {
   const rawFrontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
   const cleanFrontendUrl = rawFrontendUrl.replace(/\/+$/, '');
 
+  const isLocalDevOrigin = (origin: string): boolean => {
+    try {
+      const url = new URL(origin);
+      return (
+        url.hostname === 'localhost' ||
+        url.hostname === '127.0.0.1' ||
+        url.hostname.startsWith('192.168.') ||
+        url.hostname.startsWith('10.') ||
+        url.hostname.startsWith('172.')
+      );
+    } catch {
+      return false;
+    }
+  };
+
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, postman) or matching frontend URL
-      if (!origin || origin.replace(/\/+$/, '') === cleanFrontendUrl) {
-        callback(null, true);
-      } else {
-        callback(new Error(`Origin ${origin} is not allowed by CORS`));
+      // Allow requests with no origin (like mobile apps, curl, server-to-server)
+      if (!origin) {
+        return callback(null, true);
       }
+      const cleanOrigin = origin.replace(/\/+$/, '');
+      if (cleanOrigin === cleanFrontendUrl || isLocalDevOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
     },
     credentials: true,
   });

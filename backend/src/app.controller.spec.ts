@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
@@ -11,6 +12,13 @@ describe('AppController', () => {
       controllers: [AppController],
       providers: [
         AppService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => (key === 'SUPABASE_URL' ? 'https://example.supabase.co' : 'mock-key')),
+            getOrThrow: jest.fn((key: string) => (key === 'SUPABASE_URL' ? 'https://example.supabase.co' : 'mock-key')),
+          },
+        },
         {
           provide: PrismaService,
           useValue: {

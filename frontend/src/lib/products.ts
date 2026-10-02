@@ -21,7 +21,16 @@ interface CatalogueProduct {
   variants: CatalogueVariant[];
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+function getApiUrl(): string {
+  if (typeof window !== "undefined") {
+    // When running in the browser, using relative /api/backend proxies through Next.js directly
+    // to backend:3001, eliminating CORS, port, or mixed content / firewall blocking.
+    return "/api/backend";
+  }
+  return RAW_API_URL;
+}
 
 function formatLkr(value: number) {
   return `LKR ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -69,7 +78,8 @@ export function mapCatalogueItemToProduct(item: CatalogueProduct): Product {
 }
 
 export async function loadProducts(): Promise<Product[]> {
-  const response = await fetch(`${API_URL}/product-catalogue`, {
+  const apiUrl = getApiUrl();
+  const response = await fetch(`${apiUrl}/product-catalogue`, {
     next: { revalidate: 60 },
   });
   if (!response.ok) throw new Error(`Unable to load products (${response.status}).`);
@@ -80,7 +90,8 @@ export async function loadProducts(): Promise<Product[]> {
 
 export async function loadProductById(productId: string): Promise<Product | null> {
   try {
-    const response = await fetch(`${API_URL}/product-catalogue/${productId}`, {
+    const apiUrl = getApiUrl();
+    const response = await fetch(`${apiUrl}/product-catalogue/${productId}`, {
       next: { revalidate: 60 },
     });
     if (!response.ok) {

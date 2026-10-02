@@ -23,8 +23,21 @@ export class CustomizationService {
     brandStatementBadge: "Brand Statement",
     brandStatementTitle: "A new standard in streetwear",
     brandStatementDescription: "Since day one we've been rethinking how clothing is made and owned: from design and material sourcing to transparent supply chains and authenticated ownership. Every piece is engineered to last and to tell a story.",
+    brandFoundingYear: "2024",
+    brandOrigin: "Colombo, Sri Lanka",
+    brandMissionTitle: "OUR ATELIER MISSION",
+    brandMissionDescription: "VERGO was established with a singular obsession: to eliminate disposable fashion culture. Every silhouette is designed from scratch, custom knitted with heavy 280 GSM combed cotton yarn, and verified individually so collectors know exactly what they hold.",
+    ownerBadge: "CREATIVE DIRECTION & LEADERSHIP",
+    ownerTitle: "THE VISION BEHIND VERGO",
+    ownerSubtitle: "Bridging architectural brutalism with elevated Sri Lankan textile craftsmanship.",
+    ownerName: "FOUNDER & ATELIER LEAD",
+    ownerRole: "Creative Director & Founder",
+    ownerBio: "Founded in Colombo, VERGO began as an experimental textile studio committed to producing uncompromising streetwear. Rejecting fast production and generic blanks, our creative direction prioritizes heavy draping, archival durability, and transparent small-batch production that elevates South Asian streetwear on the global stage.",
+    ownerQuote: "\"Streetwear is not merely graphic application on fabric; it is structural architecture you live inside. We build garments that outlive seasonal hype.\"",
+    ownerImageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80",
     bankName: "VERGO SL - CENTRAL BANK",
     bankBranch: "Main Branch",
+    bankAccountName: "VERGO ATELIER PVT LTD",
     bankAccountNumber: "1234 - 5678 - 9012",
     ads: [
       {
@@ -75,7 +88,65 @@ export class CustomizationService {
         comment: "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
         showOnHome: true
       }
-    ]
+    ],
+    standardBadge: "THE VERGO STANDARD",
+    standardTitle: "ENGINEERED FOR LONGEVITY.",
+    standardSubtitle: "Heavyweight construction, reinforced tension points, and authentic materials.",
+    standardFeatures: [
+      {
+        number: "01",
+        tag: "CUSTOM DENSE WEAVE",
+        title: "280 GSM Luxury Combed Cotton",
+        description: "Structured heavyweight drape that holds shape wash after wash."
+      },
+      {
+        number: "02",
+        tag: "ARCHIVAL TAILORING",
+        title: "Reinforced Micro-Rib Collar",
+        description: "Double-needle neckband binding for zero collar stretching."
+      },
+      {
+        number: "03",
+        tag: "DECENTRALIZED PROOF",
+        title: "100% Verified Authenticity",
+        description: "Cryptographic ledger verification on every individual SKU."
+      },
+      {
+        number: "04",
+        tag: "CITYPAK LOGISTICS",
+        title: "Express Nationwide Dispatch",
+        description: "24–48h courier delivery via Citypak with live SMS tracking."
+      }
+    ],
+    feedbackBadge: "VERIFIED COMMUNITY",
+    feedbackTitle: "TESTED ON THE STREETS.",
+    feedbackSubtitle: "Authentic feedback from verified collectors across the island.",
+    aboutCollectionsBadge: "CURATED DISCIPLINES",
+    aboutCollectionsTitle: "SIGNATURE COLLECTIONS",
+    aboutCollections: [
+      {
+        label: "DROP 01 — SIGNATURE",
+        title: "Heavyweight Oversized",
+        subtitle: "280 GSM luxury combed cotton with architectural boxy drape.",
+        image: "https://res.cloudinary.com/aql7sojg/image/upload/v1788961897/products/lcut7pw9spodo8eqc4ow.jpg",
+        link: "/collection"
+      },
+      {
+        label: "ESSENTIAL ARCHIVE",
+        title: "Minimalist Monochrome",
+        subtitle: "Deep black pigment dye with reinforced anti-stretch ribbing.",
+        image: "https://res.cloudinary.com/aql7sojg/image/upload/v1788961605/products/rjapb6vhg3wedif6jwbz.jpg",
+        link: "/collection"
+      },
+      {
+        label: "LABS SERIES",
+        title: "Decentralized Originals",
+        subtitle: "Cryptographically logged serial verification on every garment.",
+        image: "https://res.cloudinary.com/aql7sojg/image/upload/v1788961916/products/k5cwxe5syiy2nxfncbls.jpg",
+        link: "/collection"
+      }
+    ],
+    whatsappNumber: "+94771234567"
   };
 
   getCustomization() {

@@ -1,0 +1,205 @@
+/* Floating Actions: WhatsApp & Go-To-Top for Customer Pages */
+.vergo-floating-actions {
+  position: fixed;
+  bottom: 30px;
+  right: 28px;
+  z-index: 99;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  pointer-events: none;
+}
+
+.vergo-floating-btn {
+  pointer-events: auto;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  position: relative;
+  text-decoration: none;
+}
+
+.vergo-floating-svg {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.25s ease;
+}
+
+/* Scroll To Top Button */
+.vergo-scroll-top-btn {
+  background: rgba(14, 14, 16, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #FFFFFF;
+  opacity: 0;
+  transform: translateY(15px) scale(0.9);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.vergo-scroll-top-btn.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.vergo-scroll-top-btn:hover {
+  background: #FFFFFF;
+  color: #000000;
+  border-color: #FFFFFF;
+  box-shadow: 0 10px 28px rgba(255, 255, 255, 0.2);
+  transform: translateY(-3px) scale(1.04);
+}
+
+.vergo-scroll-top-btn:hover .vergo-floating-svg {
+  transform: translateY(-2px);
+}
+
+/* WhatsApp Floating Button - Scaled up for prominence */
+.vergo-whatsapp-btn {
+  width: 68px;
+  height: 68px;
+  background: #25D366;
+  color: #FFFFFF;
+  border-color: rgba(37, 211, 102, 0.5);
+  box-shadow: 0 12px 32px rgba(37, 211, 102, 0.45);
+}
+
+.vergo-whatsapp-btn .whatsapp-svg {
+  width: 36px;
+  height: 36px;
+}
+
+/* Tooltip Badge: 'GET LIVE ASSISTANCE' */
+.vergo-whatsapp-tooltip {
+  position: absolute;
+  right: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%) translateX(8px);
+  background: rgba(10, 10, 12, 0.95);
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  padding: 8px 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(37, 211, 102, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 16px rgba(37, 211, 102, 0.2);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vergo-whatsapp-tooltip::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #25D366;
+  box-shadow: 0 0 8px #25D366;
+}
+
+.vergo-whatsapp-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -5px;
+  transform: translateY(-50%) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: rgba(10, 10, 12, 0.95);
+  border-right: 1px solid rgba(37, 211, 102, 0.4);
+  border-top: 1px solid rgba(37, 211, 102, 0.4);
+}
+
+.vergo-whatsapp-btn:hover {
+  background: #20bd5a;
+  box-shadow: 0 16px 40px rgba(37, 211, 102, 0.65);
+  transform: translateY(-3px) scale(1.05);
+}
+
+.vergo-whatsapp-btn:hover .vergo-whatsapp-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0);
+}
+
+.vergo-whatsapp-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.vergo-scroll-top-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+/* Subtle Pulsing Beacon for WhatsApp */
+.vergo-whatsapp-pulse {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid #25D366;
+  opacity: 0;
+  animation: vergo-pulse-anim 2.5s infinite;
+  pointer-events: none;
+}
+
+@keyframes vergo-pulse-anim {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+/* Mobile Responsiveness */
+@media screen and (max-width: 768px) {
+  .vergo-floating-actions {
+    bottom: 22px;
+    right: 20px;
+    gap: 12px;
+  }
+
+  .vergo-floating-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .vergo-floating-svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .vergo-whatsapp-btn {
+    width: 54px;
+    height: 54px;
+  }
+
+  .vergo-whatsapp-btn .whatsapp-svg {
+    width: 28px;
+    height: 28px;
+  }
+}

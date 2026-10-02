@@ -69,10 +69,10 @@ export default function EmployeeDashboard() {
 
   const joinedDate = profileData?.hireDate
     ? new Date(profileData.hireDate).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
     : "Active Staff Member";
 
   const commissionText = profileData?.commissionPerParcel && Number(profileData.commissionPerParcel) > 0
@@ -95,16 +95,16 @@ export default function EmployeeDashboard() {
 
   const leaderboardToDisplay = dbLeaderboard.length > 0
     ? dbLeaderboard.map((item) => ({
-        rank: item.rank,
-        name: item.profileId === profileData?.profileId ? `${item.name} (You)` : item.name,
-        role: item.position || "Fulfillment Specialist",
-        items: item.items || 0,
-        isMe: item.profileId === profileData?.profileId,
-        initials: item.initials || "EM",
-      }))
+      rank: item.rank,
+      name: item.profileId === profileData?.profileId ? `${item.name} (You)` : item.name,
+      role: item.position || "Fulfillment Specialist",
+      items: item.items || 0,
+      isMe: item.profileId === profileData?.profileId,
+      initials: item.initials || "EM",
+    }))
     : [
-        { rank: 1, name: `${employeeName} (You)`, role: employeeRole, items: dailyTotal, isMe: true, initials: userInitials },
-      ];
+      { rank: 1, name: `${employeeName} (You)`, role: employeeRole, items: dailyTotal, isMe: true, initials: userInitials },
+    ];
 
   const lowStockAlerts = stockLevels.filter((s) => s.qty <= (s.lowStockLimit || 10));
 
@@ -120,8 +120,8 @@ export default function EmployeeDashboard() {
   };
 
   // Filter orders worked on by this employee
-  const myWorkOrders = orders.filter(o => 
-    o.claimedBy !== null && 
+  const myWorkOrders = orders.filter(o =>
+    o.claimedBy !== null &&
     (o.claimedBy.includes("Mark V.") || o.claimedBy.includes("You"))
   );
 
@@ -576,7 +576,7 @@ export default function EmployeeDashboard() {
                 <span>Stock Alerts Summary</span>
               </h2>
             </div>
-            
+
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
               {lowStockAlerts.length === 0 ? (
                 <div style={{ color: "var(--emp-neon-green)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", padding: "10px 0" }}>
@@ -617,7 +617,7 @@ export default function EmployeeDashboard() {
                 ))
               )}
             </div>
-            
+
             <div style={{ marginTop: "16px", textAlign: "right" }}>
               <Link href="/employee/stock" style={{ color: "var(--emp-neon-green)", fontSize: "11.5px", fontWeight: 700, textDecoration: "underline" }}>
                 Manage Inventory &rarr;

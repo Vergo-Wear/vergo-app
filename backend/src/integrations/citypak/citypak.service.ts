@@ -15,6 +15,7 @@ import { UpdateShipperProfileDto } from './dto/update-shipper-profile.dto';
 import { Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import axios from 'axios';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class CitypakService {
@@ -876,17 +877,29 @@ export class CitypakService {
    */
   async processWebhook(headers: Record<string, string>, payload: any) {
     const webhookSecret = this.getWebhookSecret();
-    if (webhookSecret) {
-      const incomingKey =
-        headers['x-vergo-citypak-webhook-key'] ||
-        headers['X-Vergo-Citypak-Webhook-Key'] ||
-        headers['authorization'] ||
-        headers['Authorization'];
+    if (!webhookSecret) {
+      this.logger.error('Citypak webhook rejected: CITYPAK_WEBHOOK_SECRET is not configured.');
+      throw new UnauthorizedException('Webhook verification unavailable.');
+    }
 
-      if (!incomingKey || incomingKey.replace(/^Bearer\s+/i, '').trim() !== webhookSecret) {
-        this.logger.warn('Unauthorized Citypak webhook attempt rejected.');
-        throw new UnauthorizedException('Invalid webhook secret key.');
-      }
+    const incomingKey =
+      headers['x-vergo-citypak-webhook-key'] ||
+      headers['X-Vergo-Citypak-Webhook-Key'] ||
+      headers['authorization'] ||
+      headers['Authorization'];
+
+    const cleanIncoming = incomingKey ? incomingKey.replace(/^Bearer\s+/i, '').trim() : '';
+
+    const secretBuf = Buffer.from(webhookSecret, 'utf8');
+    const incomingBuf = Buffer.from(cleanIncoming, 'utf8');
+
+    const isValid =
+      secretBuf.length === incomingBuf.length &&
+      crypto.timingSafeEqual(secretBuf, incomingBuf);
+
+    if (!isValid) {
+      this.logger.warn('Unauthorized Citypak webhook attempt rejected.');
+      throw new UnauthorizedException('Invalid webhook secret key.');
     }
 
     const trackingNumber = payload.tracking_number;

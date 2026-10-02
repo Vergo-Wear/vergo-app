@@ -59,11 +59,63 @@ export class UpdateCustomizationDto {
 
   @IsString()
   @IsOptional()
+  brandFoundingYear?: string;
+
+  @IsString()
+  @IsOptional()
+  brandOrigin?: string;
+
+  @IsString()
+  @IsOptional()
+  brandMissionTitle?: string;
+
+  @IsString()
+  @IsOptional()
+  brandMissionDescription?: string;
+
+  @IsString()
+  @IsOptional()
+  ownerBadge?: string;
+
+  @IsString()
+  @IsOptional()
+  ownerTitle?: string;
+
+  @IsString()
+  @IsOptional()
+  ownerSubtitle?: string;
+
+  @IsString()
+  @IsOptional()
+  ownerName?: string;
+
+  @IsString()
+  @IsOptional()
+  ownerRole?: string;
+
+  @IsString()
+  @IsOptional()
+  ownerBio?: string;
+
+  @IsString()
+  @IsOptional()
+  ownerQuote?: string;
+
+  @IsString()
+  @IsOptional()
+  ownerImageUrl?: string;
+
+  @IsString()
+  @IsOptional()
   bankName?: string;
 
   @IsString()
   @IsOptional()
   bankBranch?: string;
+
+  @IsString()
+  @IsOptional()
+  bankAccountName?: string;
 
   @IsString()
   @IsOptional()
@@ -74,5 +126,47 @@ export class UpdateCustomizationDto {
 
   @IsOptional()
   featuredFeedbacks?: any[];
+
+  @IsString()
+  @IsOptional()
+  standardBadge?: string;
+
+  @IsString()
+  @IsOptional()
+  standardTitle?: string;
+
+  @IsString()
+  @IsOptional()
+  standardSubtitle?: string;
+
+  @IsOptional()
+  standardFeatures?: any[];
+
+  @IsString()
+  @IsOptional()
+  feedbackBadge?: string;
+
+  @IsString()
+  @IsOptional()
+  feedbackTitle?: string;
+
+  @IsString()
+  @IsOptional()
+  feedbackSubtitle?: string;
+
+  @IsString()
+  @IsOptional()
+  aboutCollectionsBadge?: string;
+
+  @IsString()
+  @IsOptional()
+  aboutCollectionsTitle?: string;
+
+  @IsOptional()
+  aboutCollections?: any[];
+
+  @IsString()
+  @IsOptional()
+  whatsappNumber?: string;
 }
 

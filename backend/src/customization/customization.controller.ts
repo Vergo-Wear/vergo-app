@@ -5,6 +5,8 @@ import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
+import { SubscribeNewsletterDto } from './dto/subscribe-newsletter.dto';
+
 @Controller('customization')
 export class CustomizationController {
   constructor(private readonly customizationService: CustomizationService) {}
@@ -22,7 +24,7 @@ export class CustomizationController {
   }
 
   @Post('newsletter/subscribe')
-  subscribeNewsletter(@Body('email') email: string) {
-    return this.customizationService.subscribeNewsletter(email);
+  subscribeNewsletter(@Body() dto: SubscribeNewsletterDto) {
+    return this.customizationService.subscribeNewsletter(dto.email);
   }
 }

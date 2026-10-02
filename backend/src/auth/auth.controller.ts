@@ -11,6 +11,7 @@ import { CustomerSignupDto } from './dto/customer-signup.dto';
 import { SigninDto } from './dto/signin.dto';
 import { GoogleCompleteProfileDto } from './dto/google-complete-profile.dto';
 import { RefreshSessionDto } from './dto/refresh-session.dto';
+import { ResetTempPasswordDto } from './dto/reset-temp-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -50,15 +51,7 @@ export class AuthController {
 
   @Post('employee/reset-temp-password')
   @HttpCode(HttpStatus.OK)
-  async employeeResetTempPassword(
-    @Body()
-    dto: {
-      email: string;
-      currentPassword?: string;
-      newPassword?: string;
-      tempPassword?: string;
-    },
-  ) {
+  async employeeResetTempPassword(@Body() dto: ResetTempPasswordDto) {
     return this.authService.resetTempPassword(dto);
   }
 

@@ -5,9 +5,13 @@ import {
   InternalServerErrorException,
   Logger,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
+import { SupabaseAuthGuard } from './auth/guards/supabase-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
+import { Roles } from './auth/decorators/roles.decorator';
 import {
   IsEmail,
   IsOptional,
@@ -69,6 +73,8 @@ export class AppController {
   }
 
   @Get('/db-test')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin')
   async dbTest() {
     try {
       const result = await this.prisma.$queryRaw`SELECT 1 as test`;

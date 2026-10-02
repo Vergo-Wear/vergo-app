@@ -32,10 +32,21 @@ body {
 .emp-layout-container {
   display: flex;
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  min-width: 375px;
   background-color: var(--emp-bg);
   padding: 16px;
   box-sizing: border-box;
   gap: 16px;
+  overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+  .emp-layout-container {
+    padding: 10px;
+    gap: 10px;
+  }
 }
 
 /* Sidebar Styling */
@@ -665,7 +676,8 @@ body {
   box-shadow: 0 4px 10px rgba(0, 255, 157, 0.25);
 }
 
-.emp-btn-claim:disabled, .emp-btn-claim.disabled {
+.emp-btn-claim:disabled,
+.emp-btn-claim.disabled {
   background-color: rgba(255, 255, 255, 0.03);
   color: var(--emp-text-muted);
   cursor: not-allowed;
@@ -1606,10 +1618,21 @@ body {
   flex-shrink: 0;
 }
 
-.emp-notif-circle.success { background-color: var(--emp-neon-green); }
-.emp-notif-circle.warning { background-color: var(--emp-warning-yellow); }
-.emp-notif-circle.error { background-color: var(--emp-danger-red); }
-.emp-notif-circle.info { background-color: var(--emp-info-blue); }
+.emp-notif-circle.success {
+  background-color: var(--emp-neon-green);
+}
+
+.emp-notif-circle.warning {
+  background-color: var(--emp-warning-yellow);
+}
+
+.emp-notif-circle.error {
+  background-color: var(--emp-danger-red);
+}
+
+.emp-notif-circle.info {
+  background-color: var(--emp-info-blue);
+}
 
 .emp-notif-body {
   flex: 1;
@@ -1686,7 +1709,7 @@ body {
   width: 440px;
   max-width: 90%;
   padding: 24px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
 .emp-modal-header {
@@ -1790,8 +1813,13 @@ body {
 
 /* Micro-animations */
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .emp-spinner {
@@ -1805,15 +1833,20 @@ body {
 
 /* Responsive Overrides */
 @media screen and (max-width: 1024px) {
-  .emp-stats-grid, .emp-stats-grid.four-col {
+
+  .emp-stats-grid,
+  .emp-stats-grid.four-col {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .emp-grid-2col {
     grid-template-columns: 1fr;
   }
+
   .emp-delivery-layout {
     grid-template-columns: 1fr;
   }
+
   .emp-protocol-row {
     grid-template-columns: 1fr;
   }
@@ -1825,22 +1858,32 @@ body {
     padding: 20px 8px;
     align-items: center;
   }
-  .emp-logo-sub, .emp-profile-info, .emp-nav-item span, .emp-sidebar-btn {
+
+  .emp-logo-sub,
+  .emp-profile-info,
+  .emp-nav-item span,
+  .emp-sidebar-btn {
     display: none;
   }
+
   .emp-nav-item {
     padding: 12px;
     justify-content: center;
   }
+
   .emp-nav-icon {
     margin-right: 0;
   }
+
   .emp-search-container {
     width: 180px;
   }
-  .emp-stats-grid, .emp-stats-grid.four-col {
+
+  .emp-stats-grid,
+  .emp-stats-grid.four-col {
     grid-template-columns: 1fr;
   }
+
   .emp-prep-mid {
     grid-template-columns: 1fr;
     gap: 12px;
@@ -1860,7 +1903,8 @@ select,
   font-size: 13px;
   outline: none;
   cursor: pointer;
-  appearance: none; /* remove default OS arrow */
+  appearance: none;
+  /* remove default OS arrow */
   background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
@@ -1884,15 +1928,15 @@ select option {
   .emp-sidebar {
     display: none !important;
   }
-  
+
   .emp-grid-2col {
     grid-template-columns: 1fr !important;
   }
-  
+
   .emp-stats-grid {
     grid-template-columns: 1fr !important;
   }
-  
+
   .emp-stats-grid.four-col {
     grid-template-columns: 1fr !important;
   }
@@ -1900,7 +1944,7 @@ select option {
   .emp-content-area {
     padding-bottom: 80px !important;
   }
-  
+
   .emp-header {
     height: auto !important;
     padding: 12px 16px !important;
@@ -1945,13 +1989,13 @@ select option {
     align-items: stretch !important;
     gap: 12px !important;
   }
-  
+
   .emp-filters-left {
     flex-direction: column !important;
     align-items: stretch !important;
     gap: 10px !important;
   }
-  
+
   .emp-filter-group {
     width: 100% !important;
     display: flex !important;
@@ -1963,7 +2007,7 @@ select option {
     width: 70% !important;
   }
 
-  .emp-table th, 
+  .emp-table th,
   .emp-table td {
     padding: 8px 6px !important;
     font-size: 11.5px !important;
@@ -1972,6 +2016,7 @@ select option {
 
   /* Hide customer detail/wide columns on mobile viewport to prevent horizontal scroll */
   @media (max-width: 600px) {
+
     .emp-table th:nth-child(2),
     .emp-table td:nth-child(2),
     .emp-table th:nth-child(3),
@@ -1980,8 +2025,8 @@ select option {
     .emp-table td:nth-child(4) {
       display: none !important;
     }
-    
-    .emp-table th, 
+
+    .emp-table th,
     .emp-table td {
       font-size: 10.5px !important;
       padding: 6px 4px !important;
@@ -2000,8 +2045,8 @@ select option {
     gap: 16px !important;
     text-align: left !important;
   }
-  
-  .emp-delivery-summary-header > div:last-child {
+
+  .emp-delivery-summary-header>div:last-child {
     text-align: left !important;
     max-width: 100% !important;
     margin-top: 10px !important;
@@ -2024,12 +2069,12 @@ select option {
     gap: 16px !important;
     padding: 16px !important;
   }
-  
+
   .emp-prep-left {
     align-items: flex-start !important;
     gap: 12px !important;
   }
-  
+
   .emp-prep-mid {
     grid-template-columns: 1fr 1fr !important;
     gap: 12px !important;
@@ -2037,14 +2082,14 @@ select option {
     border-bottom: 1px solid var(--emp-border-light) !important;
     padding: 12px 0 !important;
   }
-  
+
   .emp-prep-action {
     display: flex !important;
     justify-content: stretch !important;
     width: 100% !important;
   }
-  
-  .emp-prep-btn-start, 
+
+  .emp-prep-btn-start,
   .emp-prep-btn-secondary {
     width: 100% !important;
     justify-content: center !important;
@@ -2052,19 +2097,19 @@ select option {
     padding: 8px 12px !important;
   }
 
-  .emp-api-input, 
+  .emp-api-input,
   .emp-api-select {
     font-size: 11.5px !important;
     height: 34px !important;
     padding: 0 8px !important;
   }
-  
-  .emp-api-btn-primary, 
+
+  .emp-api-btn-primary,
   .emp-api-btn-solid {
     font-size: 11.5px !important;
     padding: 10px !important;
   }
-  
+
   .emp-waybill-preview-text {
     font-size: 11px !important;
   }
@@ -2074,7 +2119,7 @@ select option {
     max-width: 100% !important;
     overflow-x: auto !important;
   }
-  
+
   .emp-card {
     padding: 16px !important;
     max-width: 100% !important;
@@ -2082,30 +2127,51 @@ select option {
   }
 }
 
-/* Global Mobile Viewport Width Constraints */
+/* Global Mobile Viewport Width Constraints & 375px Min-Width Enforcement */
+.emp-layout-container {
+  min-width: 375px !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  box-sizing: border-box !important;
+}
+
 @media screen and (max-width: 768px) {
-  html, body {
-    max-width: 100vw !important;
-    width: 100vw !important;
+
+  html,
+  body {
+    min-width: 375px !important;
+    max-width: 100% !important;
+    width: 100% !important;
     overflow-x: hidden !important;
   }
-  
+
   .emp-layout-container {
-    max-width: 100vw !important;
-    width: 100vw !important;
+    min-width: 375px !important;
+    width: 100% !important;
+    max-width: 100% !important;
     overflow-x: hidden !important;
+    padding: 10px !important;
   }
-  
+
   .emp-content-area {
-    max-width: 100vw !important;
-    width: 100vw !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
     overflow-x: hidden !important;
   }
-  
+
+  .emp-page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .emp-stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+    gap: 10px !important;
+  }
+
   .emp-api-dim-grid {
     gap: 6px !important;
   }
 }
-
-
-

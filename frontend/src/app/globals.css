@@ -22,6 +22,7 @@
 html {
   scroll-behavior: smooth;
   background-color: var(--background);
+  min-width: 320px;
 }
 
 body {
@@ -30,6 +31,7 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   overflow-x: hidden;
   min-height: 100vh;
+  min-width: 320px;
   display: flex;
   flex-direction: column;
 }

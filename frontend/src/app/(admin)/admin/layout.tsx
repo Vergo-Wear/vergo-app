@@ -20,6 +20,18 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     setSearchQuery,
   } = useAdmin();
 
+  // Mobile sidebar collapsible drawer state (<= 768px)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Mobile search toggle for small screens (< 640px)
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+
+  // Auto-close sidebar on mobile when navigating
+  useEffect(() => {
+    setIsSidebarOpen(false);
+    setIsMobileSearchOpen(false);
+  }, [pathname]);
+
   // Real-time unread notification count directly from public.notification table
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
@@ -422,24 +434,55 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#050505] text-[#f5f5f7] antialiased">
-      {/* SIDEBAR (Left) - Absolute Black Background */}
-      <aside className="flex flex-col w-64 bg-[#000000] border-r border-[rgba(255,255,255,0.06)] h-full select-none">
+    <div className="admin-dashboard-container flex min-h-screen w-full min-w-[375px] bg-[#050505] text-[#f5f5f7] antialiased">
+      {/* Mobile Backdrop Overlay */}
+      <div
+        className={`admin-sidebar-backdrop ${isSidebarOpen ? "active" : ""}`}
+        onClick={() => setIsSidebarOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* SIDEBAR (Left) - Collapsible on <= 768px, sticky h-screen on desktop */}
+      <aside
+        className={`admin-sidebar flex-col md:w-64 bg-[#000000] border-r border-[rgba(255,255,255,0.06)] md:sticky md:top-0 md:h-screen select-none ${
+          isSidebarOpen ? "flex sidebar-open" : "hidden md:flex"
+        }`}
+      >
         {/* Brand Area */}
-        <div className="flex flex-col gap-2 p-6 border-b border-[rgba(255,255,255,0.06)]">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/images/wlogo.png"
-              alt="Vergo Logo"
-              width={110}
-              height={32}
-              priority
-              style={{ objectFit: "contain", width: "auto", height: "auto" }}
-            />
+        <div className="flex items-center justify-between p-6 border-b border-[rgba(255,255,255,0.06)]">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <Image
+                src="/images/wlogo.png"
+                alt="Vergo Logo"
+                width={110}
+                height={32}
+                priority
+                style={{ objectFit: "contain", width: "auto", height: "auto" }}
+              />
+            </div>
+            <div className="text-[9px] font-bold tracking-[0.25em] text-[#8e8e93] uppercase ml-1">
+              ADMIN V1.0
+            </div>
           </div>
-          <div className="text-[9px] font-bold tracking-[0.25em] text-[#8e8e93] uppercase ml-1">
-            ADMIN V1.0
-          </div>
+
+          {/* Close Sidebar button visible on mobile */}
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(false)}
+            className="md:hidden p-1.5 text-[#8e8e93] hover:text-white rounded-md hover:bg-white/5 cursor-pointer"
+            aria-label="Close sidebar"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         {/* Navigation Items */}
@@ -573,17 +616,42 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* MAIN CONTAINER */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d0d0d]">
-        {/* HEADER (Top Bar) - Charcoal border-bottom */}
-        <header className="h-16 border-b border-[rgba(255,255,255,0.06)] bg-[#050505] flex items-center justify-between px-8 select-none">
-          {/* Dashboard Section Title */}
-          <h1 className="text-sm font-bold tracking-[0.2em] text-white uppercase">
-            COMMAND CENTER
-          </h1>
+      {/* MAIN CONTAINER - Natural non-fixed height */}
+      <div className="flex-1 flex flex-col min-h-screen min-w-0 bg-[#0d0d0d]">
+        {/* HEADER (Top Bar) - Sticky responsive charcoal border-bottom */}
+        <header className="admin-header sticky top-0 z-40 h-14 sm:h-16 border-b border-[rgba(255,255,255,0.06)] bg-[#050505]/95 backdrop-blur-md flex items-center justify-between px-3 sm:px-6 lg:px-8 select-none transition-all">
+          {/* Left section: Hamburger (mobile) + Section Title */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Mobile Hamburger Toggle (<= 768px) */}
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-2 -ml-1 text-[#8e8e93] hover:text-white rounded-lg hover:bg-white/5 cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
+              aria-label="Open sidebar menu"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+                />
+              </svg>
+            </button>
 
-          {/* Search bar inside header */}
-          <div className="relative w-80">
+            {/* Dashboard Section Title */}
+            <h1 className="admin-header-title text-xs sm:text-sm font-bold tracking-[0.15em] sm:tracking-[0.2em] text-white uppercase truncate">
+              COMMAND CENTER
+            </h1>
+          </div>
+
+          {/* Center search bar - desktop and tablet (>= 640px) */}
+          <div className="relative hidden sm:block w-48 md:w-64 lg:w-80 transition-all">
             <span className="absolute inset-y-0 left-3 flex items-center text-[#8e8e93]">
               <svg
                 className="w-4 h-4"
@@ -613,8 +681,30 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Right Header Area */}
-          <div className="flex items-center gap-4 sm:gap-6">
-            {/* Notification Bell Icon beside time */}
+          <div className="flex items-center gap-2 sm:gap-4 lg:gap-6 flex-shrink-0">
+            {/* Mobile Search Toggle Icon (< 640px) */}
+            <button
+              type="button"
+              onClick={() => setIsMobileSearchOpen(!isMobileSearchOpen)}
+              className="sm:hidden p-2 bg-[#121212] border border-[rgba(255,255,255,0.08)] hover:border-white/20 rounded-lg text-[#8e8e93] hover:text-white transition-all cursor-pointer flex items-center justify-center"
+              aria-label="Toggle mobile search"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </button>
+
+            {/* Notification Bell Icon */}
             <Link
               href="/admin/notifications"
               title="Notifications"
@@ -622,7 +712,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               className="relative p-2 bg-[#121212] border border-[rgba(255,255,255,0.08)] hover:border-emerald-500/40 rounded-lg text-[#8e8e93] hover:text-white transition-all cursor-pointer flex items-center justify-center group"
             >
               <svg
-                className="w-5 h-5 transition-transform group-hover:scale-110"
+                className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -641,8 +731,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               )}
             </Link>
 
-            {/* Live Sri Lanka Local Clock */}
-            <div className="text-right">
+            {/* Live Sri Lanka Local Clock (hidden on mobile < 640px) */}
+            <div className="text-right hidden sm:block">
               <div className="text-[9px] font-bold text-[#8e8e93] tracking-[0.15em] uppercase">
                 LOCAL TIME
               </div>
@@ -656,7 +746,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
             {pathname === "/admin/orders" ? (
               <button
                 onClick={() => window.location.reload()}
-                className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] font-bold text-xs tracking-[0.15em] px-4 py-2 rounded-md transition-all shadow-md shadow-white/5 uppercase flex items-center gap-2 cursor-pointer"
+                className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] font-bold text-xs tracking-[0.15em] px-2.5 sm:px-4 py-2 rounded-md transition-all shadow-md shadow-white/5 uppercase flex items-center gap-2 cursor-pointer"
+                title="Refresh Data"
               >
                 <svg
                   className="w-4 h-4"
@@ -671,14 +762,67 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   />
                 </svg>
-                <span>REFRESH DATA</span>
+                <span className="hidden md:inline">REFRESH DATA</span>
               </button>
             ) : null}
           </div>
+
+          {/* Expandable Mobile Search Bar Dropdown on small screens (< 640px) */}
+          {isMobileSearchOpen && (
+            <div className="sm:hidden absolute top-full left-0 right-0 p-3 bg-[#0d0d0d] border-b border-[rgba(255,255,255,0.08)] shadow-2xl z-30 flex items-center gap-2 animate-fadeIn">
+              <div className="relative flex-1">
+                <span className="absolute inset-y-0 left-3 flex items-center text-[#8e8e93]">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder={
+                    pathname === "/admin/orders"
+                      ? "Search Orders..."
+                      : "Search SKU or Node..."
+                  }
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#161616] border border-[rgba(255,255,255,0.12)] rounded-md pl-9 pr-8 py-2 text-xs text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-all font-mono"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute inset-y-0 right-2 flex items-center text-[#8e8e93] hover:text-white"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileSearchOpen(false)}
+                className="text-xs text-[#8e8e93] hover:text-white px-2 py-1 font-medium"
+              >
+                Close
+              </button>
+            </div>
+          )}
         </header>
 
-        {/* PAGE CONTENT CONTAINER */}
-        <main className="flex-1 overflow-y-auto p-8 bg-[#050505] custom-scrollbar">
+        {/* PAGE CONTENT CONTAINER - Natural non-fixed expansion */}
+        <main className="admin-main-content flex-1 p-4 sm:p-8 bg-[#050505]">
           {children}
         </main>
         <OnboardingTour role="admin" />
