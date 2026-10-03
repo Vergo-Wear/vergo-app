@@ -234,9 +234,9 @@ export default function Hero() {
       <div className="carnage-hero-content-wrap">
         <div className="carnage-hero-content" key={currentIndex}>
           {heroCustomization.heroBadge && (
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#50C878] border border-[#50C878] shadow-[0_0_15px_rgba(80,200,120,0.4)] mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-black shadow-[0_0_4px_rgba(0,0,0,0.5)]" />
-              <span className="text-[11px] font-black tracking-[0.25em] text-black uppercase">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-transparent border border-[#04ff00] mb-4">
+              <span className="w-2 h-2 rounded-full bg-[#04ff00] shadow-[0_0_6px_#04ff00]" />
+              <span className="text-[11px] font-black tracking-[0.25em] text-[#04ff00] uppercase">
                 {heroCustomization.heroBadge}
               </span>
             </div>

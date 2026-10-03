@@ -20,6 +20,8 @@ export class ProfilesController {
   constructor(private readonly profilesService: ProfilesService) {}
 
   @Post()
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin')
   async create(@Body() dto: CreateProfileDto) {
     return this.profilesService.create(dto);
   }
@@ -45,11 +47,14 @@ export class ProfilesController {
   }
 
   @Get(':id')
+  @UseGuards(SupabaseAuthGuard)
   async findOne(@Param('id') id: string) {
     return this.profilesService.findOne(id);
   }
 
   @Patch(':id')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin')
   async update(@Param('id') id: string, @Body() dto: UpdateProfileDto) {
     return this.profilesService.update(id, dto);
   }

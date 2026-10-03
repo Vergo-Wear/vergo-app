@@ -58,14 +58,18 @@ async function bootstrap() {
         return true;
       }
 
-      // Local dev origins
-      return (
+      // Local dev origins (RFC1918 private network ranges)
+      if (
         url.hostname === 'localhost' ||
         url.hostname === '127.0.0.1' ||
-        url.hostname.startsWith('192.168.') ||
-        url.hostname.startsWith('10.') ||
-        url.hostname.startsWith('172.')
-      );
+        /^192\.168\.\d{1,3}\.\d{1,3}$/.test(url.hostname) ||
+        /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(url.hostname) ||
+        /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(url.hostname)
+      ) {
+        return true;
+      }
+
+      return false;
     } catch {
       return false;
     }

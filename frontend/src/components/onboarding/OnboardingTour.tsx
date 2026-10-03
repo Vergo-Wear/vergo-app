@@ -80,6 +80,11 @@ export default function OnboardingTour({ role, userId: propUserId }: OnboardingT
     if (typeof window === "undefined") return;
 
     // Check local storage
+    if (role === "customer" && localStorage.getItem("vergo_customer_tour_closed") === "true") {
+      setRun(false);
+      return;
+    }
+
     const localCompleted = localStorage.getItem(storageKey) === "completed";
     if (localCompleted) {
       setRun(false);
@@ -116,17 +121,22 @@ export default function OnboardingTour({ role, userId: propUserId }: OnboardingT
     };
   }, [role]);
 
-  // Handle tour completion or skip events
+  // Handle tour events: next, close, skip, finish, etc.
   const handleJoyrideEvent = (data: EventData) => {
-    const { status } = data;
+    const { status, action, type } = data;
     const finishedStatuses: Status[] = [STATUS.FINISHED, STATUS.SKIPPED];
 
-    if (finishedStatuses.includes(status)) {
+    // If the tour finished or was skipped/closed
+    if (finishedStatuses.includes(status) || action === "close" || action === "skip") {
       setRun(false);
 
-      // Save completion in browser storage with user-specific key
+      // Save completion in browser storage with role-specific key
       if (typeof window !== "undefined") {
         localStorage.setItem(storageKey, "completed");
+        // For customer side, also record universal flag so customer tour is never shown again once closed
+        if (role === "customer") {
+          localStorage.setItem("vergo_customer_tour_closed", "true");
+        }
       }
     }
   };
@@ -154,7 +164,9 @@ export default function OnboardingTour({ role, userId: propUserId }: OnboardingT
         primaryColor: "var(--emp-neon-green, #00ff9d)",
         textColor: "#f5f5f7",
         zIndex: 10000,
-        showProgress: true,
+        showProgress: false,
+        closeButtonAction: "skip",
+        overlayClickAction: "close",
       }}
       styles={{
         tooltip: {
@@ -224,6 +236,9 @@ export function triggerManualTour(role: TourRole) {
   const key = getStorageKey(role, null);
   // Clear local storage completion temporarily so manual tour can start
   localStorage.removeItem(key);
+  if (role === "customer") {
+    localStorage.removeItem("vergo_customer_tour_closed");
+  }
   // Also remove user-specific key if available
   const rawUser = sessionStorage.getItem("vergo_user");
   if (rawUser) {

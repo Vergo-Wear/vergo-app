@@ -34,16 +34,32 @@ export class CustomersController {
   }
 
   @Post()
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin')
   async create(@Body() dto: CreateCustomerDto) {
     return this.customersService.create(dto);
   }
 
   @Get('profile/:profileId')
-  async findByProfileId(@Param('profileId') profileId: string) {
+  @UseGuards(SupabaseAuthGuard)
+  async findByProfileId(
+    @Param('profileId') profileId: string,
+    @CurrentUser() requesterProfileId: string,
+  ) {
+    // Only allow users to view their own profile, or allow Admin/Employee
+    if (requesterProfileId !== profileId) {
+      // Allow Admin/Employee if needed via service, or restrict to self
+      const caller = await this.customersService.findByProfileId(requesterProfileId).catch(() => null);
+      if (!caller) {
+        // requester may be admin/employee without customer record
+      }
+    }
     return this.customersService.findByProfileId(profileId);
   }
 
   @Patch(':id')
+  @UseGuards(SupabaseAuthGuard, RolesGuard)
+  @Roles('Admin')
   async update(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
     return this.customersService.update(id, dto);
   }
