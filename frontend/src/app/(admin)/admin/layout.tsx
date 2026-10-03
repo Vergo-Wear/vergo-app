@@ -442,14 +442,14 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         aria-hidden="true"
       />
 
-      {/* SIDEBAR (Left) - Collapsible on <= 768px, sticky h-screen on desktop */}
+      {/* SIDEBAR (Left) - Fixed independent viewport height on desktop, collapsible on mobile */}
       <aside
-        className={`admin-sidebar flex-col md:w-64 bg-[#000000] border-r border-[rgba(255,255,255,0.06)] md:sticky md:top-0 md:h-screen select-none ${
+        className={`admin-sidebar flex-col md:w-64 bg-[#000000] border-r border-[rgba(255,255,255,0.06)] md:fixed md:top-0 md:bottom-0 md:left-0 md:h-screen md:max-h-screen md:overflow-hidden select-none z-40 shrink-0 ${
           isSidebarOpen ? "flex sidebar-open" : "hidden md:flex"
         }`}
       >
-        {/* Brand Area */}
-        <div className="flex items-center justify-between p-6 border-b border-[rgba(255,255,255,0.06)]">
+        {/* Brand Area - Pinned to Top */}
+        <div className="flex items-center justify-between p-6 border-b border-[rgba(255,255,255,0.06)] shrink-0">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-3">
               <Image
@@ -485,55 +485,59 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
-          {navItems.map((item) => {
-            const isActive = pathname === item.path;
-            return (
-              <Link
-                key={item.name}
-                href={item.path}
-                {...((item as any).tourKey ? { "data-tour": (item as any).tourKey } : {})}
-                className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-[rgba(255,255,255,0.08)] text-white"
-                    : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
-                }`}
-              >
-                {item.icon}
-                <span>{item.name}</span>
-              </Link>
-            );
-          })}
-
-          {/* Divider */}
-          <div className="my-4 border-t border-[rgba(255,255,255,0.05)] mx-2" />
-
-          {/* Second section */}
-          {subNavItems.map((item) => {
-            const isActive = pathname === item.path;
-            return (
-              <Link
-                key={item.name}
-                href={item.path}
-                {...((item as any).tourKey ? { "data-tour": (item as any).tourKey } : {})}
-                className={`flex items-center justify-between px-4 py-3 rounded-md text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-[rgba(255,255,255,0.08)] text-white"
-                    : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
+        {/* Navigation Items - Scrollable independently, spaced from top to bottom */}
+        <nav className="flex-1 px-4 py-5 flex flex-col justify-between overflow-y-auto custom-scrollbar min-h-0">
+          <div className="space-y-1">
+            {navItems.map((item) => {
+              const isActive = pathname === item.path;
+              return (
+                <Link
+                  key={item.name}
+                  href={item.path}
+                  {...((item as any).tourKey ? { "data-tour": (item as any).tourKey } : {})}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all ${
+                    isActive
+                      ? "bg-[rgba(255,255,255,0.08)] text-white"
+                      : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
+                  }`}
+                >
                   {item.icon}
                   <span>{item.name}</span>
-                </div>
-              </Link>
-            );
-          })}
+                </Link>
+              );
+            })}
+
+            {/* Divider */}
+            <div className="my-3 border-t border-[rgba(255,255,255,0.05)] mx-2" />
+
+            {/* Sub Nav Items */}
+            <div className="space-y-1">
+              {subNavItems.map((item) => {
+                const isActive = pathname === item.path;
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.path}
+                    {...((item as any).tourKey ? { "data-tour": (item as any).tourKey } : {})}
+                    className={`flex items-center justify-between px-4 py-3 rounded-md text-sm font-medium transition-all ${
+                      isActive
+                        ? "bg-[rgba(255,255,255,0.08)] text-white"
+                        : "text-[#8e8e93] hover:bg-[rgba(255,255,255,0.03)] hover:text-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {item.icon}
+                      <span>{item.name}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         </nav>
 
-        {/* User profile at the bottom */}
-        <div className="relative p-4 border-t border-[rgba(255,255,255,0.06)]">
+        {/* User profile - Always pinned to the bottom */}
+        <div className="relative p-4 border-t border-[rgba(255,255,255,0.06)] bg-[#000000] shrink-0 mt-auto">
           {showLogoutMenu && (
             <div className="absolute bottom-[calc(100%-8px)] left-4 right-4 bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded shadow-2xl p-1 mb-2 z-50 animate-slide-in flex flex-col gap-1">
               <button
@@ -616,8 +620,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* MAIN CONTAINER - Natural non-fixed height */}
-      <div className="flex-1 flex flex-col min-h-screen min-w-0 bg-[#0d0d0d]">
+      {/* MAIN CONTAINER - Natural non-fixed height, offset by fixed sidebar width on desktop */}
+      <div className="flex-1 flex flex-col min-h-screen min-w-0 bg-[#0d0d0d] md:ml-64 md:w-[calc(100%-16rem)]">
         {/* HEADER (Top Bar) - Sticky responsive charcoal border-bottom */}
         <header className="admin-header sticky top-0 z-40 h-14 sm:h-16 border-b border-[rgba(255,255,255,0.06)] bg-[#050505]/95 backdrop-blur-md flex items-center justify-between px-3 sm:px-6 lg:px-8 select-none transition-all">
           {/* Left section: Hamburger (mobile) + Section Title */}

@@ -1,22 +1,25 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { UserRoleService, UserIdentificationResult } from './user-role.service';
+import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('user-role')
 export class UserRoleController {
   constructor(private readonly userRoleService: UserRoleService) {}
 
   /**
-   * SECURITY WARNING: This endpoint is unauthenticated and accepts arbitrary user IDs.
-   * In a production environment, this endpoint MUST be protected by an authentication
-   * guard (e.g., Supabase Auth Guard / JWT verification) and authorization checks.
-   * Access should only be allowed if:
-   * 1. The caller is requesting their own identity details.
-   * 2. The caller is an Admin / authorized Employee.
+   * Protected endpoint: Returns identity details. Callers can only request their
+   * own user identity.
    */
   @Get('identify/:userId')
+  @UseGuards(SupabaseAuthGuard)
   async identifyUser(
     @Param('userId') userId: string,
+    @CurrentUser() requesterId: string,
   ): Promise<UserIdentificationResult> {
+    if (requesterId !== userId) {
+      throw new ForbiddenException('You can only identify your own user account.');
+    }
     return this.userRoleService.identifyUser(userId);
   }
 
