@@ -37,12 +37,28 @@ async function bootstrap() {
     }),
   );
 
-  const rawFrontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-  const cleanFrontendUrl = rawFrontendUrl.replace(/\/+$/, '');
+  const rawFrontendUrls = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+  const allowedOrigins = rawFrontendUrls
+    .split(',')
+    .map((u) => u.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
 
-  const isLocalDevOrigin = (origin: string): boolean => {
+  const isAllowedOrigin = (origin: string): boolean => {
     try {
       const url = new URL(origin);
+      const cleanOrigin = origin.replace(/\/+$/, '');
+
+      // Check configured FRONTEND_URL items
+      if (allowedOrigins.includes(cleanOrigin)) {
+        return true;
+      }
+
+      // Allow vergo.lk and any subdomains (e.g. www.vergo.lk)
+      if (url.hostname === 'vergo.lk' || url.hostname.endsWith('.vergo.lk')) {
+        return true;
+      }
+
+      // Local dev origins
       return (
         url.hostname === 'localhost' ||
         url.hostname === '127.0.0.1' ||
@@ -58,16 +74,14 @@ async function bootstrap() {
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, server-to-server)
-      if (!origin) {
+      if (!origin || isAllowedOrigin(origin)) {
         return callback(null, true);
       }
-      const cleanOrigin = origin.replace(/\/+$/, '');
-      if (cleanOrigin === cleanFrontendUrl || isLocalDevOrigin(origin)) {
-        return callback(null, true);
-      }
-      return callback(null, false);
+      return callback(new Error(`CORS blocked for origin: ${origin}`), false);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   await app.listen(process.env.PORT ?? 3001);
