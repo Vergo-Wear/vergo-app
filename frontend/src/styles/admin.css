@@ -1,0 +1,191 @@
+/* Admin Dashboard Custom CSS Styles */
+
+/* Custom Scrollbar for modern dark UI */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Animations */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-out {
+  animation: fadeOut 0.3s ease forwards;
+}
+
+/* Pulse animation for critical alerts */
+@keyframes alertPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-alert-pulse {
+  animation: alertPulse 2s infinite ease-in-out;
+}
+
+/* Glass panel styled grid cards */
+.admin-card {
+  background-color: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-card:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Monospace font styling helper */
+.font-mono-meta {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hide arrow from input number */
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ========================================================
+   Admin Mobile Compatibility & Responsive Sidebar (<= 768px)
+   ======================================================== */
+.admin-dashboard-container {
+  width: 100%;
+  max-width: 100vw;
+  min-width: 375px;
+  overflow-x: hidden;
+}
+
+@media screen and (min-width: 769px) {
+  .admin-sidebar {
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 16rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+    z-index: 40 !important;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  /* Admin Sidebar Drawer on Mobile - completely taken out of document flow */
+  .admin-sidebar {
+    position: fixed !important;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 280px !important;
+    max-width: 85vw !important;
+    height: 100vh !important;
+    z-index: 100 !important;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: none;
+    flex-shrink: 0;
+  }
+
+  .admin-sidebar.sidebar-open {
+    transform: translateX(0);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.85);
+  }
+
+  /* Backdrop Overlay */
+  .admin-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .admin-sidebar-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Header Spacing and layout on Mobile */
+  .admin-header {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    gap: 8px;
+  }
+
+  /* Compact padding for main content */
+  .admin-main-content {
+    padding: 12px !important;
+  }
+}
+
+/* Extra small mobile adjustments (375px to 480px) */
+@media screen and (max-width: 480px) {
+  .admin-header {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    height: 3.5rem !important; /* 56px compact header */
+  }
+
+  .admin-header-title {
+    font-size: 0.75rem !important;
+    letter-spacing: 0.1em !important;
+  }
+}

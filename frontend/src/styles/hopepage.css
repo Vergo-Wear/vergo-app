@@ -1,0 +1,15 @@
+/* Custom CSS for Vergo Store Home Page - Layout Containers */
+
+/* Hero & Collection Section Container Wrapper */
+.hero-collection-container {
+  background: linear-gradient(180deg, transparent 75%, #020202 100%),
+    linear-gradient(90deg,
+      rgba(2, 2, 2, 0.94) 0%,
+      rgba(2, 2, 2, 0.70) 50%,
+      rgba(2, 2, 2, 0.35) 100%),
+    url("https://res.cloudinary.com/aql7sojg/image/upload/v1790879213/bg_h7fcwm.png");
+  background-size: cover;
+  background-position: top center;
+  background-repeat: no-repeat;
+  width: 100%;
+}

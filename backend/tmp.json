@@ -1,0 +1,161 @@
+[
+  {
+    "product_id": "68069928-3f1a-471b-b769-85a5ae4a3bf1",
+    "name": "Classic Black T-Shirt",
+    "description": "Comfortable cotton T-shirt",
+    "category": {
+      "category_id": "c302329d-a69a-4520-9d8f-6cc2785065ff",
+      "name": "T-Shirts",
+      "description": "Casual and printed T-shirts"
+    },
+    "supplier": {
+      "supplier_id": "71c352f1-a2e5-46e7-aa9e-eeb1ab6fdc19",
+      "name": "Vergo Main Supplier"
+    },
+    "images": [
+      {
+        "image_id": "5",
+        "url": "https://res.cloudinary.com/aql7sojg/image/upload/v1783192065/hero-bg_puwdic.jpg"
+      },
+      {
+        "image_id": "7",
+        "url": "https://res.cloudinary.com/aql7sojg/image/upload/f_auto/q_auto/boxy_tee_vad3y2.jpg"
+      },
+      {
+        "image_id": "6",
+        "url": "https://res.cloudinary.com/aql7sojg/image/upload/v1783190460/default-avatar_tufqcn.jpg"
+      }
+    ],
+    "variants": [
+      {
+        "variant_id": "4dbb0f6f-90fa-4804-a882-3ada9a7d3b0c",
+        "sku": "VG-BLK-S",
+        "size": "S",
+        "colour": "Black",
+        "price": 2500,
+        "inventory": {
+          "quantity": 18,
+          "reserved_quantity": 5
+        },
+        "images": [
+          {
+            "image_id": "5",
+            "url": "https://res.cloudinary.com/aql7sojg/image/upload/v1783192065/hero-bg_puwdic.jpg"
+          }
+        ]
+      },
+      {
+        "variant_id": "6ba4d749-47af-4158-805e-89791aed3ec3",
+        "sku": "VG-BLK-M",
+        "size": "M",
+        "colour": "Black",
+        "price": 2500,
+        "inventory": {
+          "quantity": 0,
+          "reserved_quantity": 0
+        },
+        "images": [
+          {
+            "image_id": "7",
+            "url": "https://res.cloudinary.com/aql7sojg/image/upload/f_auto/q_auto/boxy_tee_vad3y2.jpg"
+          }
+        ]
+      },
+      {
+        "variant_id": "5bfda07e-5e62-431b-8a36-894ada967ded",
+        "sku": "VG-BLK-L",
+        "size": "L",
+        "colour": "Black",
+        "price": 2600,
+        "inventory": {
+          "quantity": 0,
+          "reserved_quantity": 0
+        },
+        "images": [
+          {
+            "image_id": "6",
+            "url": "https://res.cloudinary.com/aql7sojg/image/upload/v1783190460/default-avatar_tufqcn.jpg"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "product_id": "5e41fedd-4b32-4345-9f0b-7538884893b4",
+    "name": "test 1",
+    "description": "testing",
+    "category": {
+      "category_id": "a6afe072-e21f-4e34-9b03-7bd45a50be5b",
+      "name": "The Aether Loop Tee",
+      "description": "Crafted from gravity-defying, ultra-soft organic cotton, The Aether Loop Tee merges absurd comfort with an effortless, structured drape. It features a subtly tailored fit that remembers your shape without ever clinging, micro-ribbed collars that refuse to stretch out, and seamless shoulders designed for maximum mobility. Whether you are lounging in absolute silence or navigating a chaotic cityscape, this is the reliable foundational piece your wardrobe didn't know it was missing."
+    },
+    "supplier": {
+      "supplier_id": "71c352f1-a2e5-46e7-aa9e-eeb1ab6fdc19",
+      "name": "Vergo Main Supplier"
+    },
+    "images": [
+      {
+        "image_id": "8",
+        "url": "https://res.cloudinary.com/aql7sojg/image/upload/v1785020776/products/q9wlup96pplcjmrxadio.jpg"
+      }
+    ],
+    "variants": [
+      {
+        "variant_id": "f58a2e36-b69d-4d22-b1d2-9bdbcc1e46e6",
+        "sku": "VG-TEST1-VOIDOF-L",
+        "size": "L",
+        "colour": "Void of Tuesday",
+        "price": 2500,
+        "inventory": {
+          "quantity": 10,
+          "reserved_quantity": 0
+        },
+        "images": [
+          {
+            "image_id": "8",
+            "url": "https://res.cloudinary.com/aql7sojg/image/upload/v1785020776/products/q9wlup96pplcjmrxadio.jpg"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "product_id": "a2eab1c8-fb4a-43ba-bd5d-d3a55e4703e6",
+    "name": "test_2",
+    "description": null,
+    "category": {
+      "category_id": "a6afe072-e21f-4e34-9b03-7bd45a50be5b",
+      "name": "The Aether Loop Tee",
+      "description": "Crafted from gravity-defying, ultra-soft organic cotton, The Aether Loop Tee merges absurd comfort with an effortless, structured drape. It features a subtly tailored fit that remembers your shape without ever clinging, micro-ribbed collars that refuse to stretch out, and seamless shoulders designed for maximum mobility. Whether you are lounging in absolute silence or navigating a chaotic cityscape, this is the reliable foundational piece your wardrobe didn't know it was missing."
+    },
+    "supplier": {
+      "supplier_id": "71c352f1-a2e5-46e7-aa9e-eeb1ab6fdc19",
+      "name": "Vergo Main Supplier"
+    },
+    "images": [
+      {
+        "image_id": "9",
+        "url": "https://res.cloudinary.com/aql7sojg/image/upload/v1785024240/products/xzhlviauhte3dwsv3tqc.jpg"
+      }
+    ],
+    "variants": [
+      {
+        "variant_id": "83c1dbaa-bee6-4727-84b9-377bd787ee2c",
+        "sku": "VG-TEST2-RADIOACT-L",
+        "size": "L",
+        "colour": "Radioactive Moss",
+        "price": 2500,
+        "inventory": {
+          "quantity": 10,
+          "reserved_quantity": 0
+        },
+        "images": [
+          {
+            "image_id": "9",
+            "url": "https://res.cloudinary.com/aql7sojg/image/upload/v1785024240/products/xzhlviauhte3dwsv3tqc.jpg"
+          }
+        ]
+      }
+    ]
+  }
+]

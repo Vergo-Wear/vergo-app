@@ -1,0 +1,108 @@
+import { NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { ProductCatalogueService } from './product-catalogue.service';
+
+describe('ProductCatalogueService', () => {
+  const productDelegate = {
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+  };
+  const prisma = { product: productDelegate };
+  let service: ProductCatalogueService;
+
+  const product = {
+    productId: '3a2c831a-284e-4d02-b780-5c9164246eb8',
+    categoryId: 'ff4b7461-dd1c-4a37-a255-bc9090312067',
+    supplierId: 'd47a863c-b846-4d1b-ae89-bfc17bc0865a',
+    name: 'Essential Tee',
+    description: 'Heavy cotton tee',
+    basePrice: new Prisma.Decimal(4500),
+    status: 'live',
+    createdAt: new Date('2026-07-26T00:00:00.000Z'),
+    category: {
+      categoryId: 'ff4b7461-dd1c-4a37-a255-bc9090312067',
+      name: 'T-Shirts',
+      description: 'Everyday tees',
+    },
+    supplier: {
+      supplierId: 'd47a863c-b846-4d1b-ae89-bfc17bc0865a',
+      name: 'Vergo Supply',
+    },
+    variants: [
+      {
+        variantId: 'e335e75a-f87d-4937-a765-712f3ad945ad',
+        productId: '3a2c831a-284e-4d02-b780-5c9164246eb8',
+        sku: 'VGO-TEE-BLK-M',
+        status: 'show',
+        sizeId: 'a0c324a5-d46b-4993-b5e6-95c4453fc204',
+        size: { name: 'M' },
+        colorId: '79fef8d6-c5f5-4a40-83ec-bd9310d5172b',
+        color: { name: 'Black' },
+        priceAdjustment: new Prisma.Decimal(250),
+        inventory: [
+          { quantity: 8, stockReservations: [{ quantity: 2 }] },
+          { quantity: 5, stockReservations: [{ quantity: 1 }] },
+        ],
+        images: [
+          { id: BigInt(1), imageUrl: ' https://cdn.example.com/tee.jpg ' },
+          { id: BigInt(2), imageUrl: 'not-a-valid-url' },
+        ],
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new ProductCatalogueService(prisma as never);
+  });
+
+  it('returns live and held products with variants, pricing, stock and valid images', async () => {
+    productDelegate.findMany.mockResolvedValue([product]);
+
+    const result = await service.getCatalogue();
+
+    expect(productDelegate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: { in: ['live', 'hold'] } },
+      }),
+    );
+    expect(result[0]).toMatchObject({
+      category: {
+        name: 'T-Shirts',
+        description: 'Everyday tees',
+      },
+      status: 'live',
+      images: [{ image_id: '1', url: 'https://cdn.example.com/tee.jpg' }],
+      variants: [
+        {
+          sku: 'VGO-TEE-BLK-M',
+          status: 'show',
+          size: 'M',
+          colour: 'Black',
+          price: 4750,
+          inventory: { quantity: 13, reserved_quantity: 3 },
+          images: [{ image_id: '1', url: 'https://cdn.example.com/tee.jpg' }],
+        },
+      ],
+    });
+  });
+
+  it('returns one visible product by product_id', async () => {
+    productDelegate.findUnique.mockResolvedValue(product);
+
+    const result = await service.getProductById(product.productId);
+
+    expect(result.product_id).toBe(product.productId);
+  });
+
+  it.each([null, { ...product, status: 'hidden' }])(
+    'returns a clear not-found error for missing or hidden customer products',
+    async (value) => {
+      productDelegate.findUnique.mockResolvedValue(value);
+
+      await expect(service.getProductById(product.productId)).rejects.toThrow(
+        new NotFoundException('Product not found'),
+      );
+    },
+  );
+});
