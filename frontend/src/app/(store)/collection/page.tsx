@@ -34,6 +34,47 @@ function CollectionContent() {
     setLocalSearch(searchQuery);
   }, [searchQuery]);
 
+  // Dynamic Collection Page Header Info from Customization settings
+  const [collectionInfo, setCollectionInfo] = useState({
+    collectionTitle: "ESSENTIALS",
+    collectionTitleHighlight: "DROP 01",
+    collectionSubtitle:
+      "A definitive study in form and silhouette. Modern minimalist streetwear engineered for the contemporary landscape.",
+  });
+
+  useEffect(() => {
+    const loadCustomization = () => {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/customization?t=${Date.now()}`, {
+        cache: "no-store",
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) {
+            setCollectionInfo({
+              collectionTitle: data.collectionTitle || "ESSENTIALS",
+              collectionTitleHighlight:
+                data.collectionTitleHighlight !== undefined ? data.collectionTitleHighlight : "DROP 01",
+              collectionSubtitle:
+                data.collectionSubtitle ||
+                "A definitive study in form and silhouette. Modern minimalist streetwear engineered for the contemporary landscape.",
+            });
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    loadCustomization();
+
+    const handleUpdate = () => loadCustomization();
+    window.addEventListener("vergo_customization_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    return () => {
+      window.removeEventListener("vergo_customization_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
   // Filter States
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
@@ -155,7 +196,10 @@ function CollectionContent() {
 
   // Filter & Sort Logic
   const filteredProducts = useMemo(() => {
-    let result = [...products];
+    // Only display products whose status is live
+    let result = products.filter(
+      (p) => !p.status || p.status === "live" || p.status === "show"
+    );
 
     // Filter by Search Query
     if (localSearch.trim()) {
@@ -194,7 +238,8 @@ function CollectionContent() {
     // Filter by Availability
     if (selectedAvailability.length > 0) {
       result = result.filter((p) => {
-        const status = p.isAvailable ? "in-stock" : "out-of-stock";
+        const isSoldOut = Boolean(p.isSoldOut) || !p.isAvailable;
+        const status = !isSoldOut ? "in-stock" : "out-of-stock";
         return selectedAvailability.includes(status);
       });
     }
@@ -297,7 +342,10 @@ function CollectionContent() {
       <header className="collection-page-header">
         <div className="collection-header-left">
           <h1 className="collection-title-main">
-            ESSENTIALS <span className="collection-title-highlight">DROP 01</span>
+            {collectionInfo.collectionTitle || "ESSENTIALS"}{" "}
+            {collectionInfo.collectionTitleHighlight && (
+              <span className="collection-title-highlight">{collectionInfo.collectionTitleHighlight}</span>
+            )}
           </h1>
           {searchQuery ? (
             <p className="collection-subtitle-main" style={{ color: "#00FF9D", fontWeight: 600 }}>
@@ -305,7 +353,8 @@ function CollectionContent() {
             </p>
           ) : (
             <p className="collection-subtitle-main">
-              A definitive study in form and silhouette. Modern minimalist streetwear engineered for the contemporary landscape.
+              {collectionInfo.collectionSubtitle ||
+                "A definitive study in form and silhouette. Modern minimalist streetwear engineered for the contemporary landscape."}
             </p>
           )}
         </div>

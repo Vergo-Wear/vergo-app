@@ -54,7 +54,7 @@ export class ProductCatalogueService {
     }
 
     const products = await this.prisma.product.findMany({
-      where: { status: { in: ['live', 'hold'] } },
+      where: { status: { in: ['live', 'show'] } },
       include: CATALOGUE_INCLUDE,
     });
 
@@ -90,7 +90,7 @@ export class ProductCatalogueService {
       include: CATALOGUE_INCLUDE,
     });
 
-    if (!product || !['live', 'hold'].includes(product.status)) {
+    if (!product || !['live', 'show'].includes(product.status)) {
       throw new NotFoundException('Product not found');
     }
 

@@ -1464,12 +1464,21 @@ export default function OrdersDashboard() {
                         if (parent && !parent.querySelector(".fallback-link")) {
                           const fallback = document.createElement("div");
                           fallback.className = "fallback-link text-center p-6 space-y-3";
-                          fallback.innerHTML = `
-                            <p class="text-zinc-400 text-xs">Receipt file format cannot be displayed inline.</p>
-                            <a href="${receiptModalOrder.payment_proofs?.receipt_url}" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold hover:bg-emerald-500/30 transition-colors">
-                              Open receipt file ↗
-                            </a>
-                          `;
+
+                          const desc = document.createElement("p");
+                          desc.className = "text-zinc-400 text-xs";
+                          desc.textContent = "Receipt file format cannot be displayed inline.";
+
+                          const link = document.createElement("a");
+                          const receiptUrl = receiptModalOrder.payment_proofs?.receipt_url || "#";
+                          link.href = receiptUrl;
+                          link.target = "_blank";
+                          link.rel = "noopener noreferrer";
+                          link.className = "inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold hover:bg-emerald-500/30 transition-colors";
+                          link.textContent = "Open receipt file ↗";
+
+                          fallback.appendChild(desc);
+                          fallback.appendChild(link);
                           parent.appendChild(fallback);
                         }
                       }}

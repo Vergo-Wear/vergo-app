@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useAdmin } from "../AdminContext";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { invalidateProductsCache } from "@/hooks/useProducts";
 
 interface StandardFeature {
   number: string;
@@ -18,6 +19,10 @@ interface CustomizationSettings {
   heroButtonText: string;
   highlightsTitle: string;
   highlightsSubtitle: string;
+  highlightProductIds?: string[];
+  collectionTitle?: string;
+  collectionTitleHighlight?: string;
+  collectionSubtitle?: string;
   newsletterTitle: string;
   newsletterSubtitle: string;
   aboutHeroBadge: string;
@@ -71,6 +76,10 @@ export default function CustomizationPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [unauthorized, setUnauthorized] = useState(false);
 
+  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [highlightTab, setHighlightTab] = useState<"all" | "selected" | "unselected">("all");
+
   useEffect(() => {
     const token =
       sessionStorage.getItem("vergo_access_token") ||
@@ -81,7 +90,7 @@ export default function CustomizationPage() {
       return;
     }
 
-    fetch(`${API_URL}/customization`, {
+    fetch(`${API_URL}/customization?t=${Date.now()}`, {
       cache: "no-store",
     })
       .then((res) => {
@@ -96,7 +105,85 @@ export default function CustomizationPage() {
         addNotification(err.message || "Failed to load website settings.", "error");
         setIsLoading(false);
       });
+
+    authenticatedFetch("/admin/inventory/catalog")
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.items) {
+          const map = new Map<string, any>();
+          data.items.forEach((item: any) => {
+            if (!map.has(item.productId)) {
+              map.set(item.productId, {
+                productId: item.productId,
+                name: item.name,
+                categoryName: item.categoryName,
+                basePrice: item.basePrice,
+                status: item.status,
+                isSoldOut: Boolean(item.isSoldOut),
+                imageUrl: item.imageUrl || (item.images && item.images[0]) || null,
+              });
+            }
+          });
+          setAvailableProducts(Array.from(map.values()));
+        }
+      })
+      .catch(() => undefined);
   }, []);
+
+  const [isSyncingHighlights, setIsSyncingHighlights] = useState(false);
+  const [highlightFeedback, setHighlightFeedback] = useState<string | null>(null);
+
+  const updateAndSaveHighlights = async (nextIds: string[]) => {
+    if (!settings) return;
+    const updatedSettings = { ...settings, highlightProductIds: nextIds };
+    setSettings(updatedSettings);
+    setIsSyncingHighlights(true);
+    setHighlightFeedback("SYNCING...");
+
+    try {
+      let response = await authenticatedFetch("/customization", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedSettings),
+      });
+
+      if (!response) {
+        const token =
+          sessionStorage.getItem("vergo_access_token") ||
+          localStorage.getItem("vergo_access_token");
+        if (token) {
+          response = await fetch(`${API_URL}/customization`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(updatedSettings),
+          });
+        }
+      }
+
+      if (response && response.ok) {
+        try {
+          localStorage.setItem("vergo_customization_updated", Date.now().toString());
+          window.dispatchEvent(new Event("vergo_customization_updated"));
+          invalidateProductsCache();
+        } catch {}
+        setHighlightFeedback("SAVED TO HOMEPAGE");
+        setTimeout(() => setHighlightFeedback(null), 3000);
+      } else {
+        setHighlightFeedback("FAILED TO SAVE");
+        setTimeout(() => setHighlightFeedback(null), 3000);
+      }
+    } catch {
+      setHighlightFeedback("FAILED TO SAVE");
+      setTimeout(() => setHighlightFeedback(null), 3000);
+    } finally {
+      setIsSyncingHighlights(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,6 +238,7 @@ export default function CustomizationPage() {
       try {
         localStorage.setItem("vergo_customization_updated", Date.now().toString());
         window.dispatchEvent(new Event("vergo_customization_updated"));
+        invalidateProductsCache();
       } catch {
         // storage quota/disabled fallback
       }
@@ -255,10 +343,31 @@ export default function CustomizationPage() {
               </div>
             </div>
 
-            {/* Highlights Copy */}
-            <div className="admin-card p-6">
-              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
-                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">NEW RELEASES HEADER</h3>
+            {/* Newly Released Section Header & Product Picker */}
+            <div className="admin-card p-6 space-y-5">
+              <div className="pb-2 border-b border-[rgba(255,255,255,0.05)] flex justify-between items-center">
+                <div>
+                  <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">NEWLY RELEASED SECTION (HOMEPAGE)</h3>
+                  <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">Title, description & picked inventory garments showcase</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {highlightFeedback && (
+                    <span className={`text-[9px] font-mono-meta font-extrabold uppercase px-2.5 py-0.5 rounded border transition-all ${
+                      highlightFeedback.includes("SAVED")
+                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                        : highlightFeedback.includes("FAILED")
+                        ? "bg-red-500/15 text-red-400 border-red-500/30"
+                        : "bg-blue-500/15 text-blue-400 border-blue-500/30 animate-pulse"
+                    }`}>
+                      {highlightFeedback}
+                    </span>
+                  )}
+                  {settings.highlightProductIds && settings.highlightProductIds.length > 0 && (
+                    <span className="text-[9px] font-mono-meta font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      {settings.highlightProductIds.length} SELECTED
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="space-y-4">
                 <div>
@@ -278,6 +387,365 @@ export default function CustomizationPage() {
                     onChange={(e) => setSettings({ ...settings, highlightsSubtitle: e.target.value })}
                     className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
                   />
+                </div>
+
+                {/* Pick Garments for Newly Released */}
+                <div className="pt-4 border-t border-[rgba(255,255,255,0.06)] space-y-3">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-white tracking-wider uppercase">
+                        PICK INVENTORY ITEMS TO SHOW IN NEWLY RELEASED
+                      </label>
+                      <span className="text-[10px] text-[#8e8e93] block">
+                        {(settings.highlightProductIds?.length ?? 0) === 0
+                          ? "Automatic mode: displaying latest releases. Click ADD on any garment below to feature it."
+                          : `${settings.highlightProductIds?.length} garment(s) currently hand-picked. Click REMOVE to take items off the showcase.`}
+                      </span>
+                    </div>
+
+                    {(settings.highlightProductIds?.length ?? 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => updateAndSaveHighlights([])}
+                        className="text-[9px] uppercase font-bold text-red-400 hover:text-white bg-red-950/40 hover:bg-red-900/60 px-3 py-1.5 rounded-lg border border-red-800/40 cursor-pointer self-start sm:self-auto transition-all shadow-sm flex items-center gap-1.5"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span>RESET / REMOVE ALL</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Featured Garments Quick Chips Tray */}
+                  {(settings.highlightProductIds?.length ?? 0) > 0 && (
+                    <div className="p-3 bg-[#0d0d0f] border border-emerald-500/25 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9.5px] font-extrabold uppercase text-emerald-400 tracking-wider flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          CURRENTLY FEATURED ({settings.highlightProductIds?.length})
+                        </span>
+                        <span className="text-[9px] text-[#71717a] font-mono-meta">
+                          Click &quot;✕&quot; to remove individual items
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+                        {settings.highlightProductIds?.map((id) => {
+                          const prod = availableProducts.find((p) => p.productId === id);
+                          if (!prod) return null;
+                          return (
+                            <div
+                              key={id}
+                              className="flex items-center gap-1.5 bg-[#18181b] border border-white/10 hover:border-red-500/30 rounded-lg pl-1.5 pr-2 py-1 text-xs text-white group transition-all"
+                            >
+                              {prod.imageUrl ? (
+                                <img src={prod.imageUrl} alt={prod.name} className="w-5 h-5 rounded object-cover" />
+                              ) : (
+                                <span className="w-5 h-5 rounded bg-zinc-800 text-[8px] flex items-center justify-center text-zinc-400">VG</span>
+                              )}
+                              <span className="text-[10px] font-bold uppercase truncate max-w-[120px]">{prod.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const current = settings.highlightProductIds || [];
+                                  updateAndSaveHighlights(current.filter((pid) => pid !== id));
+                                }}
+                                className="text-zinc-500 hover:text-red-400 hover:bg-red-950/40 w-4 h-4 rounded flex items-center justify-center transition-all ml-0.5 cursor-pointer font-bold text-xs"
+                                title={`Remove "${prod.name}" from Newly Released`}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Search Bar & Action Filter Tabs */}
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="FILTER GARMENTS BY NAME OR COLLECTION..."
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded-lg px-3 py-2 text-xs text-white uppercase placeholder-[#555] focus:outline-none focus:border-emerald-500/50"
+                    />
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      {/* Filter Tabs */}
+                      <div className="flex items-center gap-1.5">
+                        {[
+                          { id: "all", label: "ALL", count: availableProducts.length },
+                          { id: "selected", label: "FEATURED", count: (settings.highlightProductIds || []).length },
+                          {
+                            id: "unselected",
+                            label: "AVAILABLE TO ADD",
+                            count: Math.max(0, availableProducts.length - (settings.highlightProductIds || []).length),
+                          },
+                        ].map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setHighlightTab(t.id as "all" | "selected" | "unselected")}
+                            className={`px-2.5 py-1 rounded text-[9.5px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                              highlightTab === t.id
+                                ? "bg-white text-black shadow-sm"
+                                : "bg-[#18181b] text-[#8e8e93] hover:text-white border border-[rgba(255,255,255,0.08)]"
+                            }`}
+                          >
+                            {t.label} ({t.count})
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Batch Controls */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const filtered = availableProducts.filter((p) => {
+                              const matchSearch = productSearch.trim()
+                                ? p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                                  (p.categoryName && p.categoryName.toLowerCase().includes(productSearch.toLowerCase()))
+                                : true;
+                              return matchSearch;
+                            });
+                            const current = settings.highlightProductIds || [];
+                            const combined = Array.from(new Set([...current, ...filtered.map((p) => p.productId)]));
+                            updateAndSaveHighlights(combined);
+                          }}
+                          className="text-[9px] uppercase font-bold text-emerald-400 hover:text-white bg-emerald-950/30 hover:bg-emerald-900/50 px-2.5 py-1 rounded border border-emerald-800/40 cursor-pointer transition-all"
+                        >
+                          + ADD ALL FILTERED
+                        </button>
+                        {(settings.highlightProductIds?.length ?? 0) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const filteredIds = new Set(
+                                availableProducts
+                                  .filter((p) => {
+                                    return productSearch.trim()
+                                      ? p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                                          (p.categoryName && p.categoryName.toLowerCase().includes(productSearch.toLowerCase()))
+                                      : true;
+                                  })
+                                  .map((p) => p.productId)
+                              );
+                              const next = (settings.highlightProductIds || []).filter((id) => !filteredIds.has(id));
+                              updateAndSaveHighlights(next);
+                            }}
+                            className="text-[9px] uppercase font-bold text-zinc-400 hover:text-red-400 bg-zinc-900 hover:bg-red-950/30 px-2.5 py-1 rounded border border-zinc-700/50 cursor-pointer transition-all"
+                          >
+                            ✕ REMOVE FILTERED
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pickable Garments List */}
+                  <div className="max-h-[340px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                    {availableProducts
+                      .filter((p) => {
+                        const matchSearch = productSearch.trim()
+                          ? p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                            (p.categoryName && p.categoryName.toLowerCase().includes(productSearch.toLowerCase()))
+                          : true;
+                        if (!matchSearch) return false;
+
+                        // When user is searching by text, show all search matches so they can easily ADD or REMOVE them
+                        if (productSearch.trim()) return true;
+
+                        const isSelected = (settings.highlightProductIds || []).includes(p.productId);
+                        if (highlightTab === "selected") return isSelected;
+                        if (highlightTab === "unselected") return !isSelected;
+                        return true;
+                      })
+                      .map((p) => {
+                        const isSelected = (settings.highlightProductIds || []).includes(p.productId);
+                        const isLive = p.status === "live" || p.status === "show";
+
+                        return (
+                          <div
+                            key={p.productId}
+                            className={`p-3 rounded-xl border flex items-center justify-between gap-3 transition-all ${
+                              isSelected
+                                ? "bg-emerald-950/20 border-emerald-500/40 text-white"
+                                : "bg-[#141416] border-[rgba(255,255,255,0.06)] hover:border-white/20 text-[#8e8e93]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  const current = settings.highlightProductIds || [];
+                                  const next = current.includes(p.productId)
+                                    ? current.filter((id) => id !== p.productId)
+                                    : [...current, p.productId];
+                                  updateAndSaveHighlights(next);
+                                }}
+                                className="accent-emerald-500 w-4 h-4 cursor-pointer rounded"
+                              />
+                              {p.imageUrl ? (
+                                <img
+                                  src={p.imageUrl}
+                                  alt={p.name}
+                                  className="w-10 h-10 object-cover rounded-lg bg-[#0d0d0d] border border-white/10 flex-shrink-0"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-[#0d0d0d] border border-white/10 flex items-center justify-center text-[8px] text-[#666] flex-shrink-0">
+                                  NO IMG
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-white uppercase block truncate">
+                                  {p.name}
+                                </span>
+                                <span className="text-[10px] text-[#71717a] font-mono-meta block">
+                                  {p.categoryName} • ${Number(p.basePrice).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2.5 flex-shrink-0">
+                              {p.isSoldOut && (
+                                <span className="text-[8px] font-bold uppercase px-2 py-0.5 rounded border bg-orange-500/10 text-[#ff7a00] border-orange-500/30">
+                                  SOLD OUT
+                                </span>
+                              )}
+                              <span
+                                className={`text-[8px] font-bold uppercase px-2 py-0.5 rounded border ${
+                                  isLive
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                    : "bg-red-500/10 text-red-400 border-red-500/30"
+                                }`}
+                              >
+                                {isLive ? "LIVE" : "HIDDEN"}
+                              </span>
+
+                              {/* EXPLICIT ADD / REMOVE BUTTON */}
+                              {isSelected ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const current = settings.highlightProductIds || [];
+                                    updateAndSaveHighlights(current.filter((id) => id !== p.productId));
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg text-[9.5px] font-extrabold uppercase bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-white border border-red-800/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                                  title={`Remove "${p.name}" from Newly Released showcase`}
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  <span>REMOVE</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const current = settings.highlightProductIds || [];
+                                    updateAndSaveHighlights([...current, p.productId]);
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg text-[9.5px] font-extrabold uppercase bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 hover:text-white border border-emerald-800/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                                  title={`Add "${p.name}" to Newly Released showcase`}
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  <span>ADD</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                    {availableProducts.length === 0 && (
+                      <p className="text-[10px] text-[#666] uppercase text-center py-4 font-semibold">
+                        No garments available in catalog.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Collection Page Section Header & Subtitle */}
+            <div className="admin-card p-6 space-y-5">
+              <div className="pb-2 border-b border-[rgba(255,255,255,0.05)] flex justify-between items-center">
+                <div>
+                  <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">
+                    COLLECTION PAGE (CATALOGUE HEADINGS)
+                  </h3>
+                  <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">
+                    Title, highlight drop badge & description displayed on the customer collection catalogue
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                      Collection Main Title
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.collectionTitle || ""}
+                      onChange={(e) => setSettings({ ...settings, collectionTitle: e.target.value })}
+                      placeholder="ESSENTIALS"
+                      className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white placeholder-[#555]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                      Collection Highlight Tag / Drop
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.collectionTitleHighlight || ""}
+                      onChange={(e) => setSettings({ ...settings, collectionTitleHighlight: e.target.value })}
+                      placeholder="DROP 01"
+                      className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white placeholder-[#555]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                    Collection Subtitle / Description
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={settings.collectionSubtitle || ""}
+                    onChange={(e) => setSettings({ ...settings, collectionSubtitle: e.target.value })}
+                    placeholder="A definitive study in form and silhouette..."
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white placeholder-[#555] resize-none"
+                  />
+                </div>
+
+                {/* Live Preview Box */}
+                <div className="p-3.5 bg-[#0d0d0f] border border-white/10 rounded-xl space-y-1.5">
+                  <span className="text-[9px] font-mono-meta font-extrabold uppercase text-[#8e8e93] tracking-wider block">
+                    LIVE STOREFRONT PREVIEW
+                  </span>
+                  <div className="pt-1">
+                    <h2 className="text-lg font-black tracking-wider text-white uppercase font-mono-meta">
+                      {settings.collectionTitle || "ESSENTIALS"}{" "}
+                      {settings.collectionTitleHighlight && (
+                        <span className="text-[#00ff9d]">{settings.collectionTitleHighlight}</span>
+                      )}
+                    </h2>
+                    <p className="text-xs text-[#8e8e93] mt-1 line-clamp-2">
+                      {settings.collectionSubtitle || "A definitive study in form and silhouette. Modern minimalist streetwear engineered for the contemporary landscape."}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

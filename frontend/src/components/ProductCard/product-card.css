@@ -58,14 +58,16 @@
 }
 
 .sold-out-box {
-  border: 1.5px solid #ffffff;
-  color: #ffffff;
+  border: 1.5px solid #ff7a00;
+  color: #ff7a00;
   padding: 10px 24px;
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.25em;
   text-transform: uppercase;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(10, 10, 12, 0.75);
+  box-shadow: 0 4px 20px rgba(255, 122, 0, 0.25);
+  border-radius: 4px;
 }
 
 .product-info-container {

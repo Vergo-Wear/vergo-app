@@ -83,6 +83,72 @@ export default function DashboardPage() {
     }
   };
 
+  // Dynamic metrics computations for Dashboard Cards
+  const unitsOperationalStatus = React.useMemo(() => {
+    if (pendingApprovalOrders.length > 0) {
+      return {
+        color: "bg-[#f59e0b]",
+        label: `Operational Status: ${pendingApprovalOrders.length} Order${pendingApprovalOrders.length > 1 ? "s" : ""} Pending Approval`,
+      };
+    }
+    if (stats.pendingShipments > 0) {
+      return {
+        color: "bg-[#10b981]",
+        label: `Operational Status: ${stats.pendingShipments} in Dispatch Queue`,
+      };
+    }
+    return {
+      color: "bg-[#10b981]",
+      label: "Operational Status: Nominal",
+    };
+  }, [pendingApprovalOrders.length, stats.pendingShipments]);
+
+  const productsOperationalStatus = React.useMemo(() => {
+    const outOfStockItems = inventory.filter((item) => item.inStock === 0);
+    const lowStockAlerts = alerts.length;
+
+    if (outOfStockItems.length > 0) {
+      return {
+        color: "bg-[#ef4444]",
+        label: `Operational Status: ${outOfStockItems.length} Out of Stock`,
+      };
+    }
+    if (lowStockAlerts > 0) {
+      return {
+        color: "bg-[#f59e0b]",
+        label: `Operational Status: ${lowStockAlerts} Low Stock Alert${lowStockAlerts > 1 ? "s" : ""}`,
+      };
+    }
+    return {
+      color: "bg-[#10b981]",
+      label: "Operational Status: Nominal",
+    };
+  }, [inventory, alerts]);
+
+  const staffEfficiency = React.useMemo(() => {
+    const totalStaff = employees.length > 0 ? employees.length : stats.activeStaff;
+    const onDutyCount = employees.filter(
+      (e) => e.status === "ON DUTY" || e.status === "ON SHIFT"
+    ).length;
+
+    const efficiency = totalStaff > 0
+      ? Math.round((onDutyCount / totalStaff) * 100)
+      : (stats.activeStaff > 0 ? 100 : 0);
+
+    const color =
+      efficiency >= 80
+        ? "text-[#10b981]"
+        : efficiency >= 50
+        ? "text-[#f59e0b]"
+        : "text-[#ef4444]";
+
+    return {
+      efficiency,
+      color,
+      label: `${efficiency}% On-Duty Efficiency`,
+    };
+  }, [employees, stats.activeStaff]);
+
   return (
     <div className="space-y-8 select-none">
             <div style={{ fontSize: "22px", fontWeight: "900", color: "#ffffff", marginBottom: "20px", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em" }}>
@@ -98,11 +164,9 @@ export default function DashboardPage() {
               {stats.completedUnits.toLocaleString()}
             </div>
           </div>
-          <div className="text-xs font-bold text-[#10b981] flex items-center gap-1 mt-2">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-            </svg>
-            <span>+12% vs LY</span>
+          <div className="text-xs text-[#8e8e93] mt-2 font-medium flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${unitsOperationalStatus.color} animate-pulse`}></span>
+            <span>{unitsOperationalStatus.label}</span>
           </div>
         </div>
 
@@ -115,8 +179,8 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="text-xs text-[#8e8e93] mt-2 font-medium flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
-            <span>Operational Status: Nominal</span>
+            <span className={`w-2 h-2 rounded-full ${productsOperationalStatus.color} animate-pulse`}></span>
+            <span>{productsOperationalStatus.label}</span>
           </div>
         </div>
 
@@ -125,11 +189,11 @@ export default function DashboardPage() {
           <div>
             <h4 className="text-[10px] font-bold text-[#8e8e93] tracking-widest uppercase">ACTIVE STAFF</h4>
             <div className="text-3xl font-bold mt-2 text-white font-mono-meta">
-              {stats.activeStaff}
+              {stats.activeStaff || employees.length}
             </div>
           </div>
-          <div className="text-xs font-bold text-[#10b981] mt-2 flex items-center gap-1">
-            <span>96% On-Duty Efficiency</span>
+          <div className={`text-xs font-bold mt-2 flex items-center gap-1 ${staffEfficiency.color}`}>
+            <span>{staffEfficiency.label}</span>
           </div>
         </div>
       </section>

@@ -33,6 +33,7 @@ export interface ProductVariantSummary {
 export interface ProductCatalogueItem {
   product_id: string;
   status: 'live' | 'hold';
+  is_sold_out: boolean;
   name: string;
   description: string | null;
   category: CategorySummary | null;

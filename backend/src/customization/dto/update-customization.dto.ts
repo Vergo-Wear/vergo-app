@@ -25,6 +25,21 @@ export class UpdateCustomizationDto {
   @IsOptional()
   highlightsSubtitle?: string;
 
+  @IsOptional()
+  highlightProductIds?: string[];
+
+  @IsString()
+  @IsOptional()
+  collectionTitle?: string;
+
+  @IsString()
+  @IsOptional()
+  collectionTitleHighlight?: string;
+
+  @IsString()
+  @IsOptional()
+  collectionSubtitle?: string;
+
   @IsString()
   @IsOptional()
   newsletterTitle?: string;

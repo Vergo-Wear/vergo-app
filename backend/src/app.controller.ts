@@ -7,6 +7,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
 import { SupabaseAuthGuard } from './auth/guards/supabase-auth.guard';
@@ -92,6 +93,7 @@ export class AppController {
     }
   }
   @Post('/checkout/check-contact')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   async checkContact(@Body() body: CheckContactDto) {
     const email = body.email?.trim().toLowerCase();
     const phone = body.phone?.trim();
@@ -125,6 +127,7 @@ export class AppController {
   }
 
   @Post('/contact')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async submitContact(@Body() dto: ContactFormDto) {
     try {
       const googleFormUrl =

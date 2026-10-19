@@ -6,6 +6,7 @@ import {
   HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { CustomerSignupDto } from './dto/customer-signup.dto';
 import { SigninDto } from './dto/signin.dto';
@@ -27,6 +28,7 @@ export class AuthController {
    * Registers a new customer and returns the created customer and profile details.
    */
   @Post('customer/signup')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async customerSignup(@Body() dto: CustomerSignupDto) {
     return this.authService.customerSignup(dto);
   }
@@ -35,6 +37,7 @@ export class AuthController {
    * Authenticats a customer with email or phone number and password.
    */
   @Post('customer/signin')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   async customerSignin(@Body() dto: SigninDto) {
     return this.authService.signin(dto, 'Customer');
@@ -44,12 +47,14 @@ export class AuthController {
    * Authenticats an employee with email or phone number and password.
    */
   @Post('employee/signin')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   async employeeSignin(@Body() dto: SigninDto) {
     return this.authService.signin(dto, 'Employee');
   }
 
   @Post('employee/reset-temp-password')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   async employeeResetTempPassword(@Body() dto: ResetTempPasswordDto) {
     return this.authService.resetTempPassword(dto);
@@ -59,6 +64,7 @@ export class AuthController {
    * Authenticats an admin with email or phone number and password.
    */
   @Post('admin/signin')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   async adminSignin(@Body() dto: SigninDto) {
     return this.authService.signin(dto, 'Admin');

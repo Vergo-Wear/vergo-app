@@ -23,6 +23,7 @@ export default function Highlights() {
             setHeaderInfo((prev) => ({
               highlightsTitle: data.highlightsTitle || prev.highlightsTitle,
               highlightsSubtitle: data.highlightsSubtitle || prev.highlightsSubtitle,
+              highlightProductIds: Array.isArray(data.highlightProductIds) ? data.highlightProductIds : [],
             }));
           }
         })
@@ -41,8 +42,17 @@ export default function Highlights() {
     };
   }, []);
 
-  // Filter only active available products (or all products from the database)
-  const dbProducts = products.filter((p) => p.isAvailable);
+  // Filter products: If highlightProductIds are specified, strictly display only those items.
+  // Only fall back to latest products if highlightProductIds has never been configured (null/undefined).
+  const dbProducts = React.useMemo(() => {
+    const list = (headerInfo as any).highlightProductIds;
+    if (Array.isArray(list)) {
+      return list
+        .map((id: string) => products.find((p) => p.id === id))
+        .filter((p): p is NonNullable<typeof p> => Boolean(p));
+    }
+    return products.slice(0, 8);
+  }, [products, headerInfo]);
 
   return (
     <section id="highlights" className="newly-released-section" data-tour="customer-products">
@@ -86,26 +96,29 @@ export default function Highlights() {
                 }
               }
 
+              const isSoldOut = Boolean(product.isSoldOut) || !product.isAvailable;
+
               return (
                 <div key={product.id} className="newly-card">
                   <Link href={`/collection/${product.id}`} className="newly-card-media-wrap">
-                    {/* AVAILABLE NOW Green Badge */}
-                    <div className="newly-badge-available">AVAILABLE NOW</div>
+                    {/* Badge */}
+                    {!isSoldOut && (
+                      <div className="newly-badge-available">AVAILABLE NOW</div>
+                    )}
 
-                    {/* Primary & Hover Images */}
+                    {/* Product Image */}
                     <img
                       src={primaryImg}
                       alt={product.name}
-                      className="newly-card-img primary"
+                      className="newly-card-img"
                       loading="lazy"
                     />
-                    {secondaryImg !== primaryImg && (
-                      <img
-                        src={secondaryImg}
-                        alt={`${product.name} Alternate`}
-                        className="newly-card-img secondary"
-                        loading="lazy"
-                      />
+
+                    {/* Orange Sold Out Text on Image */}
+                    {isSoldOut && (
+                      <div className="newly-soldout-overlay">
+                        <span className="newly-soldout-text">SOLD OUT</span>
+                      </div>
                     )}
                   </Link>
 

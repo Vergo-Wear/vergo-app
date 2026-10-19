@@ -95,7 +95,8 @@ export function toProductCatalogueItem(
 ): ProductCatalogueItem {
   return {
     product_id: product.productId,
-    status: product.status as 'live' | 'hold',
+    status: (product.status === 'show' || product.status === 'live' ? 'live' : 'hold') as 'live' | 'hold',
+    is_sold_out: Boolean(product.isSoldOut),
     name: product.name,
     description: product.description,
     category: product.category

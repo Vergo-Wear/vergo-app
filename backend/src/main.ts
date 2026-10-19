@@ -16,6 +16,8 @@ async function bootstrap() {
     helmet({
       crossOriginResourcePolicy: { policy: 'cross-origin' },
       crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+      frameguard: { action: 'sameorigin' },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     }),
   );
 
