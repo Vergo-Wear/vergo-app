@@ -14,6 +14,8 @@ export interface Product {
   price: string;
   lkrPrice: string;
   isAvailable: boolean;
+  status?: string;
+  isSoldOut?: boolean;
   image: string;
   category: string;
   subTitle?: string;

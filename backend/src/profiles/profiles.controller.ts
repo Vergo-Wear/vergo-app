@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ProfilesService } from './profiles.service';
@@ -48,7 +50,16 @@ export class ProfilesController {
 
   @Get(':id')
   @UseGuards(SupabaseAuthGuard)
-  async findOne(@Param('id') id: string) {
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() requesterId: string,
+    @Req() req: any,
+  ) {
+    const userRole = req.user?.role?.toLowerCase();
+    const isAdmin = userRole === 'admin';
+    if (requesterId !== id && !isAdmin) {
+      throw new ForbiddenException('You are not authorized to view another user profile.');
+    }
     return this.profilesService.findOne(id);
   }
 

@@ -17,19 +17,21 @@ export default function ProductCard({
     router.push(`/collection/${product.id}`);
   };
 
+  const isSoldOut = Boolean(product.isSoldOut) || !product.isAvailable;
+
   return (
     <div
-      className={`product-card ${!product.isAvailable ? "sold-out" : ""}`}
+      className={`product-card ${isSoldOut ? "sold-out" : ""}`}
       onClick={handleCardClick}
       style={{ cursor: "pointer" }}
     >
       <div className="product-image-wrapper">
-        {product.isAvailable && (
+        {!isSoldOut && (
           <span className="product-badge">AVAILABLE NOW</span>
         )}
 
         <Image
-          src={product.image || "/logo.png"}
+          src={product.image || "/images/wlogo.png"}
           alt={product.name || "Product"}
           width={400}
           height={500}
@@ -39,7 +41,7 @@ export default function ProductCard({
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
         />
 
-        {!product.isAvailable && (
+        {isSoldOut && (
           <div className="sold-out-overlay">
             <div className="sold-out-box">SOLD OUT</div>
           </div>

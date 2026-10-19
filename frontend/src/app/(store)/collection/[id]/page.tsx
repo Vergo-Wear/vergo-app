@@ -93,8 +93,10 @@ export default function ProductDetailPage({ params }: PageProps) {
     setOpenAccordions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const isProductSoldOut = Boolean(product?.isSoldOut) || !product?.isAvailable;
+
   const handleAddToCart = () => {
-    if (!product || availableQuantity < 1) return;
+    if (!product || isProductSoldOut || availableQuantity < 1) return;
     const addedQty = Math.min(quantity, availableQuantity);
     addToCart(
       product,
@@ -111,6 +113,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   };
 
   const updateQuantity = (nextQuantity: number) => {
+    if (isProductSoldOut) return;
     setQuantity(Math.max(1, Math.min(nextQuantity || 1, availableQuantity || 1)));
   };
 
@@ -167,8 +170,30 @@ export default function ProductDetailPage({ params }: PageProps) {
           {/* Left Column: Gallery */}
           <div className="product-gallery">
             <div className="main-image-container">
+              {isProductSoldOut && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "16px",
+                    left: "16px",
+                    zIndex: 10,
+                    backgroundColor: "rgba(10, 10, 12, 0.85)",
+                    color: "#ff7a00",
+                    border: "1.5px solid #ff7a00",
+                    fontSize: "0.75rem",
+                    fontWeight: 800,
+                    letterSpacing: "0.15em",
+                    padding: "6px 14px",
+                    borderRadius: "4px",
+                    textTransform: "uppercase",
+                    boxShadow: "0 4px 15px rgba(255, 122, 0, 0.35)",
+                  }}
+                >
+                  SOLD OUT
+                </div>
+              )}
               <Image
-                src={productGallery[activeImageIndex] || product.image || "/logo.png"}
+                src={productGallery[activeImageIndex] || product.image || "/images/wlogo.png"}
                 alt={`${product.name} View ${activeImageIndex + 1}`}
                 fill
                 priority
@@ -281,13 +306,21 @@ export default function ProductDetailPage({ params }: PageProps) {
               <label className="quantity-label" htmlFor="product-quantity">
                 QUANTITY
               </label>
-              <div className="product-quantity-control">
+              <div
+                className={`product-quantity-control ${isProductSoldOut ? "disabled" : ""}`}
+                style={
+                  isProductSoldOut
+                    ? { opacity: 0.4, cursor: "not-allowed", pointerEvents: "none" }
+                    : {}
+                }
+              >
                 <button
                   type="button"
                   className="product-quantity-btn"
                   onClick={() => updateQuantity(quantity - 1)}
-                  disabled={quantity <= 1}
+                  disabled={isProductSoldOut || quantity <= 1}
                   aria-label="Decrease quantity"
+                  style={isProductSoldOut ? { cursor: "not-allowed" } : {}}
                 >
                   −
                 </button>
@@ -299,21 +332,28 @@ export default function ProductDetailPage({ params }: PageProps) {
                   max={Math.max(1, availableQuantity)}
                   value={quantity}
                   onChange={(event) => updateQuantity(Number(event.target.value))}
-                  disabled={availableQuantity < 1}
+                  disabled={isProductSoldOut || availableQuantity < 1}
                   aria-label="Quantity"
+                  style={isProductSoldOut ? { cursor: "not-allowed" } : {}}
                 />
                 <button
                   type="button"
                   className="product-quantity-btn"
                   onClick={() => updateQuantity(quantity + 1)}
-                  disabled={quantity >= availableQuantity || availableQuantity < 1}
+                  disabled={isProductSoldOut || quantity >= availableQuantity || availableQuantity < 1}
                   aria-label="Increase quantity"
+                  style={isProductSoldOut ? { cursor: "not-allowed" } : {}}
                 >
                   +
                 </button>
               </div>
-              <span className="quantity-stock-note">
-                {availableQuantity > 0
+              <span
+                className="quantity-stock-note"
+                style={isProductSoldOut ? { color: "#ff7a00" } : {}}
+              >
+                {product?.isSoldOut
+                  ? "Product marked as Sold Out"
+                  : availableQuantity > 0
                   ? `${availableQuantity} available`
                   : "Selected size is out of stock"}
               </span>
@@ -324,14 +364,19 @@ export default function ProductDetailPage({ params }: PageProps) {
               type="button"
               onClick={handleAddToCart}
               className="add-to-cart-btn"
-              disabled={!product.isAvailable || availableQuantity < 1}
+              disabled={isProductSoldOut || availableQuantity < 1}
               style={
-                !product.isAvailable || availableQuantity < 1
-                  ? { background: "rgba(255,255,255,0.08)", color: "#8e8e93", border: "1px solid rgba(255,255,255,0.08)", cursor: "not-allowed" }
+                isProductSoldOut || availableQuantity < 1
+                  ? {
+                      background: "rgba(255,255,255,0.06)",
+                      color: isProductSoldOut ? "#ff7a00" : "#8e8e93",
+                      border: isProductSoldOut ? "1px solid rgba(255,122,0,0.3)" : "1px solid rgba(255,255,255,0.08)",
+                      cursor: "not-allowed",
+                    }
                   : {}
               }
             >
-              {product.isAvailable && availableQuantity > 0 ? "ADD TO CART" : "OUT OF STOCK"}
+              {isProductSoldOut ? "SOLD OUT" : availableQuantity > 0 ? "ADD TO CART" : "OUT OF STOCK"}
             </button>
 
             {/* Accordions */}

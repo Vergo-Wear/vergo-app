@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { CustomersService } from './customers.service';
@@ -45,14 +47,12 @@ export class CustomersController {
   async findByProfileId(
     @Param('profileId') profileId: string,
     @CurrentUser() requesterProfileId: string,
+    @Req() req: any,
   ) {
-    // Only allow users to view their own profile, or allow Admin/Employee
-    if (requesterProfileId !== profileId) {
-      // Allow Admin/Employee if needed via service, or restrict to self
-      const caller = await this.customersService.findByProfileId(requesterProfileId).catch(() => null);
-      if (!caller) {
-        // requester may be admin/employee without customer record
-      }
+    const userRole = req.user?.role?.toLowerCase();
+    const isStaff = userRole === 'admin' || userRole === 'employee' || userRole === 'branch manager';
+    if (requesterProfileId !== profileId && !isStaff) {
+      throw new ForbiddenException('You are not authorized to view another customer profile.');
     }
     return this.customersService.findByProfileId(profileId);
   }

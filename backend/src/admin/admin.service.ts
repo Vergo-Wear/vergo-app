@@ -2,10 +2,13 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProductCatalogueService } from '../product-catalogue/product-catalogue.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -31,9 +34,12 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinaryService: CloudinaryService,
+    @Optional() private readonly productCatalogueService?: ProductCatalogueService,
   ) { }
 
   private async resolveVariantReferences(
@@ -417,6 +423,7 @@ export class AdminService {
           supplierName: product.supplier?.name || 'Unassigned',
           basePrice: Number(product.basePrice),
           status: product.status,
+          isSoldOut: Boolean(product.isSoldOut),
           createdAt: product.createdAt,
           variantId: variant.variantId,
           variantStatus: variant.status,
@@ -504,7 +511,7 @@ export class AdminService {
     inventoryId: string,
     dto: UpdateInventoryRecordDto,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.inventory.findUnique({
         where: { inventoryId },
         include: {
@@ -592,11 +599,13 @@ export class AdminService {
 
       return { inventoryId, updated: true };
     });
+    this.productCatalogueService?.clearCache();
+    return result;
   }
 
   async createProduct(dto: CreateProductDto) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const references = await Promise.all(
           dto.variants.map((variant) =>
             this.resolveVariantReferences(tx, variant),
@@ -617,6 +626,7 @@ export class AdminService {
               supplierId: dto.supplierId || null,
               basePrice: dto.basePrice,
               status: dto.status,
+              isSoldOut: Boolean(dto.isSoldOut),
             },
             select: { productId: true },
           });
@@ -687,20 +697,22 @@ export class AdminService {
           },
         });
       });
+      this.productCatalogueService?.clearCache();
+      return result;
     } catch (e: any) {
       if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
         throw new ConflictException(
           'A product variant with this exact Name, Color, and Size combination already exists. Please edit the existing variant in stock instead.',
         );
       }
-      require('fs').appendFileSync('debug-crash.log', String(e?.stack || e) + '\n\n');
+      this.logger.error('Product creation failed:', e?.stack || e);
       throw e;
     }
   }
 
   async updateProductWhole(productId: string, dto: CreateProductDto) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const existingProduct = await tx.product.findUnique({
           where: { productId },
           include: {
@@ -723,6 +735,7 @@ export class AdminService {
             supplierId: dto.supplierId || null,
             basePrice: dto.basePrice,
             status: dto.status,
+            ...(dto.isSoldOut !== undefined ? { isSoldOut: Boolean(dto.isSoldOut) } : {}),
           },
         });
 
@@ -891,6 +904,8 @@ export class AdminService {
           },
         });
       });
+      this.productCatalogueService?.clearCache();
+      return result;
     } catch (e: any) {
       if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
         throw new ConflictException(
@@ -911,7 +926,17 @@ export class AdminService {
       where: { productId },
       data: { status },
     });
+    this.productCatalogueService?.clearCache();
     return { success: true };
+  }
+
+  async updateProductSoldOut(productId: string, isSoldOut: boolean) {
+    const product = await this.prisma.product.update({
+      where: { productId },
+      data: { isSoldOut: Boolean(isSoldOut) },
+    });
+    this.productCatalogueService?.clearCache();
+    return { success: true, isSoldOut: product.isSoldOut };
   }
 
   async updateColorGallery(productId: string, colorId: string, imageUrls: string[]) {
@@ -1132,6 +1157,7 @@ export class AdminService {
       }
 
       console.log(`[deleteProduct] Successfully deleted product ${productId}`);
+      this.productCatalogueService?.clearCache();
       return { success: true };
     } catch (error: any) {
       console.error('[deleteProduct Error]:', error);

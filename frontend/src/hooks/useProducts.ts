@@ -14,6 +14,21 @@ const inflightProductPromises = new Map<string, Promise<Product | null>>();
 
 const CLIENT_CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
+export function invalidateProductsCache() {
+  cachedProducts = null;
+  cachedProductsTimestamp = 0;
+  inflightCataloguePromise = null;
+  individualProductCache.clear();
+  inflightProductPromises.clear();
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("vergo_inventory_updated"));
+    try {
+      localStorage.setItem("vergo_inventory_updated", Date.now().toString());
+    } catch {}
+  }
+}
+
 export function useProducts() {
   return useProductsState().products;
 }
@@ -29,14 +44,20 @@ export function useProductsState() {
   useEffect(() => {
     let isMounted = true;
 
-    async function fetchProducts() {
-      if (cachedProducts && Date.now() - cachedProductsTimestamp < CLIENT_CACHE_TTL_MS) {
+    async function fetchProducts(forceBypass = false) {
+      if (!forceBypass && cachedProducts && Date.now() - cachedProductsTimestamp < CLIENT_CACHE_TTL_MS) {
         setProducts(cachedProducts);
         setIsLoading(false);
         return;
       }
 
       try {
+        if (forceBypass) {
+          cachedProducts = null;
+          cachedProductsTimestamp = 0;
+          inflightCataloguePromise = null;
+        }
+
         if (!inflightCataloguePromise) {
           inflightCataloguePromise = loadProducts();
         }
@@ -68,8 +89,22 @@ export function useProductsState() {
 
     fetchProducts();
 
+    const handleUpdate = () => {
+      fetchProducts(true);
+    };
+
+    window.addEventListener("vergo_inventory_updated", handleUpdate);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "vergo_inventory_updated") {
+        fetchProducts(true);
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("vergo_inventory_updated", handleUpdate);
+      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
@@ -114,10 +149,14 @@ export function useProduct(productId: string) {
       }
     }
 
-    async function fetchSingleProduct() {
+    async function fetchSingleProduct(forceRefresh = false) {
+      if (forceRefresh) {
+        individualProductCache.delete(productId);
+        inflightProductPromises.delete(productId);
+      }
       try {
         let fetchPromise = inflightProductPromises.get(productId);
-        if (!fetchPromise) {
+        if (!fetchPromise || forceRefresh) {
           fetchPromise = loadProductById(productId);
           inflightProductPromises.set(productId, fetchPromise);
         }
@@ -143,8 +182,22 @@ export function useProduct(productId: string) {
 
     fetchSingleProduct();
 
+    const handleUpdate = () => {
+      fetchSingleProduct(true);
+    };
+
+    window.addEventListener("vergo_inventory_updated", handleUpdate);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "vergo_inventory_updated") {
+        fetchSingleProduct(true);
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("vergo_inventory_updated", handleUpdate);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [productId, cachedFromIndividual]);
 

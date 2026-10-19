@@ -912,55 +912,56 @@ export default function EmployeesPage() {
               return (
                 <div
                   key={emp.employeeId}
-                  className="bg-[#121214] border border-white/5 hover:border-white/15 rounded-2xl p-5 lg:p-6 transition-all shadow-lg hover:shadow-2xl flex flex-col xl:flex-row xl:items-center justify-between gap-6"
+                  className="bg-[#121214] border border-white/5 hover:border-white/15 rounded-2xl p-5 lg:p-6 transition-all shadow-lg hover:shadow-2xl flex flex-col gap-5"
                 >
-                  {/* Left Column: Avatar + Profile Identity */}
-                  <div className="flex items-start gap-4 min-w-0 xl:w-[32%]">
-                    <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 text-white font-extrabold flex items-center justify-center text-base shadow-inner flex-shrink-0">
-                      {avatarInitials}
-                    </div>
-                    <div className="space-y-1.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-bold text-white text-base tracking-wide truncate" title={emp.name}>
-                          {emp.name}
-                        </h4>
-                        <span className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/20 font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase">
-                          {emp.position || "Employee"}
-                        </span>
-                        {/* Live Duty Availability Badge */}
-                        <span
-                          className={`font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase flex items-center gap-1 ${
-                            isDuty
-                              ? "bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30"
-                              : isBusy
-                              ? "bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30"
-                              : "bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/30"
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              isDuty
-                                ? "bg-[#10b981] animate-pulse"
-                                : isBusy
-                                ? "bg-[#ef4444]"
-                                : "bg-[#f59e0b]"
-                            }`}
-                          ></span>
-                          {isDuty ? "ON DUTY" : isBusy ? "BUSY" : "ON BREAK"}
-                        </span>
-                        <span
-                          className={`font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase ${
-                            emp.accountStatus?.toLowerCase() === "active"
-                              ? "bg-[#10b981]/20 text-[#10b981]"
-                              : "bg-white/10 text-[#8e8e93]"
-                          }`}
-                        >
-                          {emp.accountStatus || "Active"}
-                        </span>
+                  {/* TOP ROW: Profile Identity (Left) + Action Toolbar (Right) */}
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
+                    {/* Left: Avatar & Identity Details */}
+                    <div className="flex items-start sm:items-center gap-4 min-w-0 flex-1">
+                      <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 text-white font-extrabold flex items-center justify-center text-base shadow-inner flex-shrink-0">
+                        {avatarInitials}
                       </div>
+                      <div className="space-y-1.5 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-white text-base tracking-wide" title={emp.name}>
+                            {emp.name}
+                          </h4>
+                          <span className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/20 font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase">
+                            {emp.position || "Employee"}
+                          </span>
+                          {/* Live Duty Availability Badge */}
+                          <span
+                            className={`font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase flex items-center gap-1.5 ${
+                              isDuty
+                                ? "bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30"
+                                : isBusy
+                                ? "bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30"
+                                : "bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/30"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isDuty
+                                  ? "bg-[#10b981] animate-pulse"
+                                  : isBusy
+                                  ? "bg-[#ef4444]"
+                                  : "bg-[#f59e0b]"
+                              }`}
+                            ></span>
+                            {isDuty ? "ON DUTY" : isBusy ? "BUSY" : "ON BREAK"}
+                          </span>
+                          <span
+                            className={`font-bold text-[9px] px-2 py-0.5 rounded tracking-wider uppercase ${
+                              emp.accountStatus?.toLowerCase() === "active"
+                                ? "bg-[#10b981]/20 text-[#10b981]"
+                                : "bg-white/10 text-[#8e8e93]"
+                            }`}
+                          >
+                            {emp.accountStatus || "Active"}
+                          </span>
+                        </div>
 
-                      <div className="space-y-1 text-xs text-[#8e8e93]">
-                        <div className="flex items-center gap-3 flex-wrap font-mono-meta">
+                        <div className="flex items-center gap-3.5 flex-wrap text-xs text-[#8e8e93] font-mono-meta">
                           <span className="flex items-center gap-1.5 text-white/80">
                             <svg
                               className="w-3.5 h-3.5 text-[#8e8e93]"
@@ -994,10 +995,8 @@ export default function EmployeesPage() {
                             </svg>
                             {emp.phone}
                           </span>
-                        </div>
 
-                        <div className="flex items-center gap-3 flex-wrap text-[11px] text-[#71717a]">
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1.5 text-[#71717a]">
                             <svg
                               className="w-3.5 h-3.5 text-[#8e8e93]"
                               fill="none"
@@ -1018,11 +1017,11 @@ export default function EmployeesPage() {
 
                           {emp.address && (
                             <span
-                              className="flex items-center gap-1 truncate max-w-[240px]"
+                              className="flex items-center gap-1.5 text-[#71717a]"
                               title={emp.address}
                             >
                               <svg
-                                className="w-3 h-3 text-[#71717a]"
+                                className="w-3.5 h-3.5 text-[#8e8e93]"
                                 fill="none"
                                 viewBox="0 0 24 24"
                                 stroke="currentColor"
@@ -1045,28 +1044,127 @@ export default function EmployeesPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Right: Actions Group */}
+                    <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap flex-shrink-0 self-end lg:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setViewStockEmployee(emp)}
+                        title={`View garment stock held by ${emp.name}`}
+                        className="bg-white/5 hover:bg-white/10 hover:border-white/20 border border-white/10 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 uppercase active:scale-95 whitespace-nowrap"
+                      >
+                        <svg
+                          className="w-4 h-4 text-[#10b981]"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                          />
+                        </svg>
+                        <span>VIEW STOCK</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openStockDistributorModal(emp.employeeId)}
+                        title={`Distribute & allocate garment stock to ${emp.name}`}
+                        className="bg-[#10b981] hover:bg-[#059669] text-black font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shadow-[#10b981]/20 cursor-pointer flex items-center gap-1.5 uppercase active:scale-95 whitespace-nowrap"
+                      >
+                        <svg
+                          className="w-4 h-4 text-black"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2.2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                          />
+                        </svg>
+                        <span>DISTRIBUTE STOCK</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(emp)}
+                        title={`Edit ${emp.name}`}
+                        className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 hover:border-white/20 border border-white/10 text-[#8e8e93] hover:text-white flex items-center justify-center transition-all cursor-pointer flex-shrink-0"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRemoveTarget({
+                            id: emp.employeeId,
+                            name: emp.name,
+                          })
+                        }
+                        title={`Remove ${emp.name}`}
+                        className="w-9 h-9 rounded-xl bg-red-950/20 hover:bg-[#ef4444] text-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] flex items-center justify-center transition-all cursor-pointer flex-shrink-0"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Middle Column: Expanded Metrics Grid (Assigned Stock, Commission, Logistics) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 xl:max-w-2xl">
+                  {/* BOTTOM ROW: 3 Expanded Full-Width Metrics Tiles */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                     {/* Tile 1: Assigned Stock Tile */}
                     <div
                       onClick={() => setViewStockEmployee(emp)}
-                      className="bg-[#18181c] hover:bg-[#1e1e24] p-3.5 rounded-xl border border-white/5 hover:border-[#10b981]/30 transition-all cursor-pointer group flex flex-col justify-between shadow-sm"
+                      className="bg-[#18181c] hover:bg-[#1e1e24] p-4 rounded-xl border border-white/5 hover:border-[#10b981]/30 transition-all cursor-pointer group flex flex-col justify-between shadow-sm"
                       title="Click to view assigned garment breakdown"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[9px] text-[#8e8e93] group-hover:text-[#10b981] font-bold tracking-wider uppercase transition-colors">
+                        <span className="text-[10px] text-[#8e8e93] group-hover:text-[#10b981] font-bold tracking-wider uppercase transition-colors">
                           ASSIGNED STOCK
                         </span>
-                        <span className="text-[9px] bg-white/5 group-hover:bg-[#10b981]/15 text-[#8e8e93] group-hover:text-[#10b981] px-1.5 py-0.5 rounded font-mono-meta transition-colors">
+                        <span className="text-[9.5px] bg-white/5 group-hover:bg-[#10b981]/15 text-[#8e8e93] group-hover:text-[#10b981] px-2 py-0.5 rounded font-mono-meta transition-colors font-bold">
                           VIEW ↗
                         </span>
                       </div>
-                      <div className="mt-2">
+                      <div className="mt-3">
                         <div className="flex items-baseline gap-1.5">
                           <span
-                            className={`font-mono-meta font-extrabold text-xl ${
+                            className={`font-mono-meta font-extrabold text-2xl ${
                               (emp.totalStockUnits || 0) > 0
                                 ? "text-[#10b981]"
                                 : "text-[#71717a]"
@@ -1076,167 +1174,80 @@ export default function EmployeesPage() {
                           </span>
                           <span className="text-xs text-[#8e8e93]">units</span>
                         </div>
-                        <span className="text-[10px] text-[#71717a] block mt-0.5">
-                          {(emp.assignedStock || []).length} active SKUs
+                        <span className="text-[11px] text-[#71717a] block mt-0.5 font-medium">
+                          {(emp.assignedStock || []).length} active SKU variant(s)
                         </span>
                       </div>
                     </div>
 
                     {/* Tile 2: Commission Rate */}
-                    <div className="bg-[#18181c] p-3.5 rounded-xl border border-white/5 flex flex-col justify-between shadow-sm">
-                      <span className="text-[9px] text-[#8e8e93] font-bold tracking-wider uppercase block">
-                        COMMISSION RATE
-                      </span>
-                      <div className="mt-2">
-                        <span className="font-mono-meta font-bold text-white text-lg block">
-                          {emp.commissionPerParcel &&
-                          emp.commissionPerParcel > 0
+                    <div className="bg-[#18181c] p-4 rounded-xl border border-white/5 flex flex-col justify-between shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-[#8e8e93] font-bold tracking-wider uppercase block">
+                          COMMISSION RATE
+                        </span>
+                        <span className="text-[9.5px] bg-white/5 text-[#8e8e93] px-2 py-0.5 rounded font-mono-meta font-bold">
+                          PAYOUT
+                        </span>
+                      </div>
+                      <div className="mt-3">
+                        <span
+                          className={`font-mono-meta font-extrabold text-2xl block ${
+                            emp.commissionPerParcel && emp.commissionPerParcel > 0
+                              ? "text-[#10b981]"
+                              : "text-[#71717a]"
+                          }`}
+                        >
+                          {emp.commissionPerParcel && emp.commissionPerParcel > 0
                             ? `${emp.commissionPerParcel}%`
                             : "0%"}
                         </span>
-                        <span className="text-[10px] text-[#71717a] block mt-0.5">
-                          {emp.commissionPerParcel &&
-                          emp.commissionPerParcel > 0
-                            ? "Per parcel commission"
-                            : "No commission"}
+                        <span className="text-[11px] text-[#71717a] block mt-0.5 font-medium">
+                          {emp.commissionPerParcel && emp.commissionPerParcel > 0
+                            ? "Per parcel commission payout"
+                            : "No commission configured"}
                         </span>
                       </div>
                     </div>
 
                     {/* Tile 3: Fulfillment Performance */}
-                    <div className="bg-[#18181c] p-3.5 rounded-xl border border-white/5 flex flex-col justify-between shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] text-[#8e8e93] font-bold tracking-wider uppercase">
-                          FULFILLMENT
+                    <div className="bg-[#18181c] p-4 rounded-xl border border-white/5 flex flex-col justify-between shadow-sm">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[10px] text-[#8e8e93] font-bold tracking-wider uppercase">
+                          FULFILLMENT RATE
                         </span>
-                        <span className="text-[9px] font-mono-meta font-bold text-[#10b981]">
-                          {emp.metrics?.successRate || 0}% rate
+                        <span className="text-[9.5px] bg-white/5 text-[#8e8e93] px-2 py-0.5 rounded font-mono-meta font-bold">
+                          {emp.metrics?.claimedCount || 0} ORDERS
                         </span>
                       </div>
-                      <div className="grid grid-cols-3 gap-1 mt-2 text-center font-mono-meta">
-                        <div>
-                          <span className="text-[8px] text-[#71717a] block uppercase">
-                            PREP
+                      <div className="mt-3">
+                        <div className="flex items-baseline gap-1.5">
+                          <span
+                            className={`font-mono-meta font-extrabold text-2xl ${
+                              (emp.metrics?.successRate || 0) > 0
+                                ? "text-[#10b981]"
+                                : "text-[#71717a]"
+                            }`}
+                          >
+                            {emp.metrics?.successRate || 0}%
                           </span>
-                          <span className="text-xs font-bold text-white">
-                            {emp.metrics?.preparedCount || 0}
-                          </span>
+                          <span className="text-xs text-[#8e8e93]">success rate</span>
                         </div>
-                        <div>
-                          <span className="text-[8px] text-[#71717a] block uppercase">
-                            SENT
+                        <div className="flex items-center gap-2 text-[11px] text-[#71717a] mt-0.5 font-mono-meta">
+                          <span>
+                            Prep: <strong className="text-white font-semibold">{emp.metrics?.preparedCount || 0}</strong>
                           </span>
-                          <span className="text-xs font-bold text-white">
-                            {emp.metrics?.dispatchedCount || 0}
+                          <span>•</span>
+                          <span>
+                            Sent: <strong className="text-white font-semibold">{emp.metrics?.dispatchedCount || 0}</strong>
                           </span>
-                        </div>
-                        <div>
-                          <span className="text-[8px] text-[#71717a] block uppercase">
-                            DONE
-                          </span>
-                          <span className="text-xs font-bold text-[#10b981]">
-                            {emp.metrics?.deliveredCount || 0}
+                          <span>•</span>
+                          <span>
+                            Done: <strong className="text-[#10b981] font-semibold">{emp.metrics?.deliveredCount || 0}</strong>
                           </span>
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Right Column: Actions Group */}
-                  <div className="flex items-center justify-end gap-2.5 pt-3 xl:pt-0 border-t xl:border-t-0 border-white/5 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setViewStockEmployee(emp)}
-                      title={`View garment stock held by ${emp.name}`}
-                      className="bg-white/5 hover:bg-white/10 hover:border-white/20 border border-white/10 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 uppercase active:scale-95 whitespace-nowrap"
-                    >
-                      <svg
-                        className="w-4 h-4 text-[#10b981]"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        />
-                      </svg>
-                      <span>VIEW STOCK</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openStockDistributorModal(emp.employeeId)}
-                      title={`Distribute & allocate garment stock to ${emp.name}`}
-                      className="bg-[#10b981] hover:bg-[#059669] text-black font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shadow-[#10b981]/20 cursor-pointer flex items-center gap-1.5 uppercase active:scale-95 whitespace-nowrap"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2.2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                        />
-                      </svg>
-                      <span>DISTRIBUTE STOCK</span>
-                    </button>
-
-                    <button
-                      onClick={() => openEditModal(emp)}
-                      title={`Edit ${emp.name}`}
-                      className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 hover:border-white/20 border border-white/10 text-[#8e8e93] hover:text-white flex items-center justify-center transition-all cursor-pointer flex-shrink-0"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                      </svg>
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        setRemoveTarget({
-                          id: emp.employeeId,
-                          name: emp.name,
-                        })
-                      }
-                      title={`Remove ${emp.name}`}
-                      className="w-9 h-9 rounded-xl bg-red-950/20 hover:bg-[#ef4444] text-[#ef4444] hover:text-white border border-[rgba(239,68,68,0.2)] flex items-center justify-center transition-all cursor-pointer flex-shrink-0"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
-                    </button>
                   </div>
                 </div>
               );

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, FormEvent, useCallback } from "react";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { invalidateProductsCache } from "@/hooks/useProducts";
 
 type TabType = "catalog" | "collections" | "colors";
 
@@ -47,6 +48,7 @@ interface InventoryCatalogItem {
   supplierName: string;
   basePrice: number;
   status: string;
+  isSoldOut?: boolean;
   createdAt: string;
   variantId: string;
   variantStatus: string;
@@ -81,6 +83,7 @@ interface ProductCardData {
   branchName: string;
   basePrice: number;
   status: string;
+  isSoldOut: boolean;
   createdAt: string;
   mainImage: string | null;
   totalQuantity: number;
@@ -189,6 +192,7 @@ export default function InventoryDashboard() {
           branchName: item.branchName,
           basePrice: item.basePrice,
           status: item.status,
+          isSoldOut: Boolean(item.isSoldOut),
           createdAt: item.createdAt,
           mainImage: item.imageUrl || (item.images && item.images[0]) || null,
           totalQuantity: 0,
@@ -278,6 +282,7 @@ export default function InventoryDashboard() {
           if (res && res.ok) {
             console.log(`[Frontend] Product ${productId} deleted successfully.`);
             showToast("Product deleted successfully", "success");
+            invalidateProductsCache();
             setIsProductModalOpen(false);
             setDeleteModal(null);
             await fetchAllData();
@@ -307,6 +312,7 @@ export default function InventoryDashboard() {
         body: JSON.stringify({ status: nextStatus }),
       });
       if (res && res.ok) {
+        invalidateProductsCache();
         showToast(`Product set to ${nextStatus.toUpperCase()}`, "success");
         await fetchAllData();
       } else {
@@ -315,6 +321,31 @@ export default function InventoryDashboard() {
       }
     } catch (err: any) {
       showToast(err.message || "Failed to update visibility", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleSoldOut = async (productId: string, currentSoldOut: boolean, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const nextSoldOut = !currentSoldOut;
+    setLoading(true);
+    try {
+      const res = await authenticatedFetch(`/admin/products/${productId}/sold-out`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isSoldOut: nextSoldOut }),
+      });
+      if (res && res.ok) {
+        invalidateProductsCache();
+        showToast(`Product marked as ${nextSoldOut ? "SOLD OUT" : "IN STOCK"}`, "success");
+        await fetchAllData();
+      } else {
+        const msg = res ? await responseMessage(res, "Failed to update sold out status") : "Request failed";
+        showToast(msg, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to update sold out status", "error");
     } finally {
       setLoading(false);
     }
@@ -515,6 +546,7 @@ export default function InventoryDashboard() {
     branchId: "",
     basePrice: "2500",
     status: "live" as "live" | "hidden",
+    isSoldOut: false,
   });
 
   // Selected Colors & Sizes
@@ -545,6 +577,7 @@ export default function InventoryDashboard() {
       branchId: branches[0]?.branchId || "",
       basePrice: "2500",
       status: "live",
+      isSoldOut: false,
     });
 
     const initialColors = colors.slice(0, 2).map((c) => c.colorId);
@@ -573,6 +606,7 @@ export default function InventoryDashboard() {
       branchId: card.branchId || "",
       basePrice: card.basePrice.toString(),
       status: (card.status === "show" || card.status === "live" ? "live" : "hidden") as "live" | "hidden",
+      isSoldOut: Boolean(card.isSoldOut),
     });
 
     // Populate selected colors
@@ -792,6 +826,7 @@ export default function InventoryDashboard() {
       supplierId: productForm.supplierId || undefined,
       basePrice: basePriceNum,
       status: finalStatus,
+      isSoldOut: productForm.isSoldOut,
       variants: variantsPayload,
     };
 
@@ -807,6 +842,7 @@ export default function InventoryDashboard() {
       });
 
       if (res && res.ok) {
+        invalidateProductsCache();
         showToast(
           isEditing
             ? "Product and variants updated successfully!"
@@ -977,16 +1013,23 @@ export default function InventoryDashboard() {
                       <span className="bg-black/80 backdrop-blur-md text-[#8e8e93] font-bold text-[9px] px-2.5 py-1 rounded border border-white/10 uppercase tracking-wider">
                         {card.categoryName}
                       </span>
-                      <span
-                        className={`text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border shadow-md flex items-center gap-1.5 ${
-                          isLive
-                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                            : "bg-red-500/20 text-red-400 border-red-500/40"
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`}></span>
-                        <span>{isLive ? "LIVE" : "HIDDEN"}</span>
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {card.isSoldOut && (
+                          <span className="text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border shadow-md bg-orange-500/20 text-[#ff7a00] border-[#ff7a00]/40">
+                            SOLD OUT
+                          </span>
+                        )}
+                        <span
+                          className={`text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border shadow-md flex items-center gap-1.5 ${
+                            isLive
+                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                              : "bg-red-500/20 text-red-400 border-red-500/40"
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`}></span>
+                          <span>{isLive ? "LIVE" : "HIDDEN"}</span>
+                        </span>
+                      </div>
                     </div>
 
                     {/* Bottom Floating Variant Counter */}
@@ -1074,6 +1117,19 @@ export default function InventoryDashboard() {
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-red-400" : "bg-emerald-400"}`}></span>
                       <span>{isLive ? "MAKE HIDDEN" : "MAKE LIVE"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleSoldOut(card.productId, Boolean(card.isSoldOut), e)}
+                      title={card.isSoldOut ? "Mark as In Stock" : "Mark as Sold Out"}
+                      className={`font-bold text-[9px] tracking-wider uppercase py-2 px-2.5 rounded transition-all text-center cursor-pointer flex items-center justify-center gap-1 border ${
+                        card.isSoldOut
+                          ? "bg-orange-950/40 hover:bg-orange-900/60 text-[#ff7a00] border-[#ff7a00]/40"
+                          : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 border-zinc-700/50"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${card.isSoldOut ? "bg-[#ff7a00]" : "bg-zinc-500"}`}></span>
+                      <span>{card.isSoldOut ? "SOLD OUT" : "IN STOCK"}</span>
                     </button>
                     <button
                       type="button"
@@ -1480,6 +1536,32 @@ export default function InventoryDashboard() {
                       placeholder="Fabric GSM, fit details, model sizing, streetwear aesthetics..."
                       className="w-full bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50 placeholder-[#555] transition-all"
                     />
+                  </div>
+
+                  {/* Mark as Sold Out Toggle */}
+                  <div className="sm:col-span-3 flex items-center justify-between p-3.5 bg-[#18181b] border border-[rgba(255,255,255,0.08)] rounded-lg">
+                    <div>
+                      <span className="text-xs font-bold text-white uppercase block flex items-center gap-2">
+                        <span>MARK AS &quot;SOLD OUT&quot;</span>
+                        {productForm.isSoldOut && (
+                          <span className="text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-orange-500/20 text-[#ff7a00] border border-[#ff7a00]/40">
+                            ON
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[10px] text-[#8e8e93]">
+                        When enabled, displays an orange &quot;Sold Out&quot; overlay on customer collection and newly released sections, and disables the Add to Cart button.
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer ml-4">
+                      <input
+                        type="checkbox"
+                        checked={productForm.isSoldOut}
+                        onChange={(e) => setProductForm({ ...productForm, isSoldOut: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ff7a00]"></div>
+                    </label>
                   </div>
                 </div>
               </div>

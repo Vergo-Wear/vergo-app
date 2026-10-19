@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CustomizationService } from './customization.service';
 import { UpdateCustomizationDto } from './dto/update-customization.dto';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
@@ -24,6 +25,7 @@ export class CustomizationController {
   }
 
   @Post('newsletter/subscribe')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   subscribeNewsletter(@Body() dto: SubscribeNewsletterDto) {
     return this.customizationService.subscribeNewsletter(dto.email);
   }

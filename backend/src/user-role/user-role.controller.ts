@@ -1,4 +1,5 @@
 import { Controller, ForbiddenException, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserRoleService, UserIdentificationResult } from './user-role.service';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -24,11 +25,10 @@ export class UserRoleController {
   }
 
   /**
-   * SECURITY WARNING: This endpoint is prone to account enumeration attacks.
-   * Consider implementing rate-limiting (e.g., using NestJS ThrottlerGuard) to throttle
-   * requests based on IP/fingerprint to prevent automated registration probing.
+   * Protected against account enumeration via rate-limiting.
    */
   @Get('customer/check-email')
+  @Throttle({ default: { limit: 15, ttl: 60000 } })
   async checkCustomerByEmail(
     @Query('email') email: string,
   ): Promise<{ exists: boolean }> {
@@ -37,11 +37,10 @@ export class UserRoleController {
   }
 
   /**
-   * SECURITY WARNING: This endpoint is prone to account enumeration attacks.
-   * Consider implementing rate-limiting (e.g., using NestJS ThrottlerGuard) to throttle
-   * requests based on IP/fingerprint to prevent automated registration probing.
+   * Protected against account enumeration via rate-limiting.
    */
   @Get('customer/check-phone')
+  @Throttle({ default: { limit: 15, ttl: 60000 } })
   async checkCustomerByPhone(
     @Query('phone') phone: string,
   ): Promise<{ exists: boolean }> {

@@ -124,8 +124,8 @@ export default function BrandStatement() {
 
             {/* Overlapping Detail Card */}
             <div className="hidden sm:block absolute -bottom-6 -left-6 bg-[#0e0e12] border border-white/10 rounded-lg p-4 shadow-2xl max-w-[220px]">
-              <span className="text-[9px] font-black uppercase text-[#8e8e93] tracking-widest block mb-1">ATELIER PROVENANCE</span>
-              <span className="text-xs font-black text-white block">VERGO LABS / {data.origin}</span>
+              <span className="text-[9px] font-black uppercase text-[#8e8e93] tracking-widest block mb-1">ESTABLISHED</span>
+              <span className="text-xs font-black text-white block">VERGO WEAR, {data.origin}</span>
               <span className="text-[10px] text-[#50C878] font-mono mt-1 block">FOUNDED {data.foundingYear}</span>
             </div>
           </div>

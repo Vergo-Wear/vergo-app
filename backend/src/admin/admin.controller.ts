@@ -114,6 +114,14 @@ export class AdminController {
     return this.adminService.updateProductVisibility(id, status);
   }
 
+  @Patch('products/:id/sold-out')
+  updateProductSoldOut(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body('isSoldOut') isSoldOut: boolean,
+  ) {
+    return this.adminService.updateProductSoldOut(id, Boolean(isSoldOut));
+  }
+
   @Patch('products/:id/gallery/:colorId')
   updateColorGallery(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNumber,
@@ -34,6 +35,7 @@ export class CreateProductDto {
   @IsOptional() @IsUUID() supplierId?: string;
   @IsNumber() @Min(0) basePrice: number;
   @IsIn(['live', 'hold', 'hidden']) status: string;
+  @IsOptional() @IsBoolean() isSoldOut?: boolean;
   @IsOptional() @IsString() imageUrl?: string;
   @IsArray()
   @ValidateNested({ each: true })

@@ -293,7 +293,7 @@ describe('UserRole (Service & Controller)', () => {
       const mockResult: UserIdentificationResult = { accountType: 'Guest' };
       jest.spyOn(service, 'identifyUser').mockResolvedValue(mockResult);
 
-      const result = await controller.identifyUser('test-id');
+      const result = await controller.identifyUser('test-id', 'test-id');
 
       expect(result).toBe(mockResult);
       expect(service.identifyUser).toHaveBeenCalledWith('test-id');

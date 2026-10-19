@@ -14,6 +14,7 @@ interface CatalogueVariant {
 interface CatalogueProduct {
   product_id: string;
   status: "live" | "hold";
+  is_sold_out?: boolean;
   name: string;
   description: string | null;
   category: { category_id: string; name: string; description: string | null } | null;
@@ -59,18 +60,22 @@ export function mapCatalogueItemToProduct(item: CatalogueProduct): Product {
 
   const prices = allVariants.map((v) => v.price);
   const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const isSoldOut = Boolean(item.is_sold_out);
+  const isLive = item.status === "live";
 
   return {
     id: item.product_id,
     name: item.name,
     price: formatLkr(minPrice),
     lkrPrice: formatLkr(minPrice),
-    isAvailable: item.status === "live" && allVariants.some((v) => v.availableQuantity > 0),
-    image: allImages[0] || "/logo.png",
+    status: item.status,
+    isSoldOut: isSoldOut,
+    isAvailable: isLive && !isSoldOut && allVariants.some((v) => v.availableQuantity > 0),
+    image: allImages[0] || "/images/wlogo.png",
     category: item.category?.name || "Apparel",
     subTitle: item.category?.name || "ESSENTIALS",
     description: item.description || undefined,
-    images: allImages.length > 0 ? allImages : ["/logo.png"],
+    images: allImages.length > 0 ? allImages : ["/images/wlogo.png"],
     sizes: sortSizes([...new Set(allVariants.map((v) => v.size))]),
     colors: [...new Set(allVariants.map((v) => v.color))],
     variants: allVariants,
@@ -79,8 +84,8 @@ export function mapCatalogueItemToProduct(item: CatalogueProduct): Product {
 
 export async function loadProducts(): Promise<Product[]> {
   const apiUrl = getApiUrl();
-  const response = await fetch(`${apiUrl}/product-catalogue`, {
-    next: { revalidate: 60 },
+  const response = await fetch(`${apiUrl}/product-catalogue?t=${Date.now()}`, {
+    cache: "no-store",
   });
   if (!response.ok) throw new Error(`Unable to load products (${response.status}).`);
   const items = (await response.json()) as CatalogueProduct[];
@@ -91,8 +96,8 @@ export async function loadProducts(): Promise<Product[]> {
 export async function loadProductById(productId: string): Promise<Product | null> {
   try {
     const apiUrl = getApiUrl();
-    const response = await fetch(`${apiUrl}/product-catalogue/${productId}`, {
-      next: { revalidate: 60 },
+    const response = await fetch(`${apiUrl}/product-catalogue/${productId}?t=${Date.now()}`, {
+      cache: "no-store",
     });
     if (!response.ok) {
       if (response.status === 404) return null;

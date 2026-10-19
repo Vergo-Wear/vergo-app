@@ -231,6 +231,7 @@ model Product {
   description String?
   basePrice   Decimal  @map("base_price") @db.Decimal
   status      String   @default("hidden")
+  isSoldOut   Boolean  @default(false) @map("is_sold_out")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   category Category?        @relation(fields: [categoryId], references: [categoryId], onDelete: NoAction, onUpdate: NoAction)

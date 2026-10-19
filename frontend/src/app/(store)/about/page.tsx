@@ -5,7 +5,7 @@ import CollectionsGrid from "@/components/About/CollectionsGrid";
 import Newsletter from "@/components/Newsletter/Newsletter";
 
 export const metadata = {
-  title: "About — VERGO ARCHIVAL WEAR",
+  title: "VERGO",
   description: "Learn about VERGO Streetwear Labs, founder journey, and atelier craftsmanship.",
 };
 
