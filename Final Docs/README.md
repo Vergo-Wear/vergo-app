@@ -1,20 +1,19 @@
-# Vergo Wear - Final Project Documentation Suite
+# Vergo Wear - Project Documentation Suite
 **Course:** Team Software Project (CSC304S3 / CSC304G3)  
 **Department:** Department of Computer Science, Faculty of Science, University of Jaffna  
 **Project:** Vergo Wear - Custom Apparel & E-Commerce Order Management Platform  
-**Academic Year:** 2026  
-**Evaluation Breakdown:** Developer Documentation [60%] | User Documentation [40%]  
+**Date:** October 2026  
 
 ---
 
 ## Documentation Structure & Navigation Index
 
-This directory contains the complete official documentation package prepared in strict accordance with the **Guideline for Team Software Project Report** and technical specifications:
+This directory contains the complete project documentation package:
 
 ```
 Final Docs/
-├── 01_DEVELOPER_DOCUMENTATION.md          # Official Developer Document [Weight: 60%]
-├── 02_USER_DOCUMENTATION.md               # Official User Document [Weight: 40%]
+├── 01_DEVELOPER_DOCUMENTATION.md          # Comprehensive Developer Documentation
+├── 02_USER_DOCUMENTATION.md               # User Manual & Operating Guide
 ├── 03_API_SPECIFICATION.md                # Comprehensive REST API Reference & Endpoints
 ├── 04_SECURITY_ARCHITECTURE.md            # Security, Authentication, RBAC, RLS & Hardening
 ├── 05_TEST_CASES_AND_QUALITY_ASSURANCE.md # QA Strategy, Unit Test Suites, Manual Test Matrix
@@ -25,13 +24,13 @@ Final Docs/
 
 ---
 
-## Mapping to Project Evaluation Guidelines
+## Project Documentation Overview
 
-### 1. Developer Documentation (`01_DEVELOPER_DOCUMENTATION.md`) [60%]
+### 1. Developer Documentation (`01_DEVELOPER_DOCUMENTATION.md`)
 
-| Section Required in Guideline | Document Chapter & Topic | Status |
+| Section | Topic | Status |
 | :--- | :--- | :---: |
-| **1. Copyright's Statement** | Chapter 1: Formal copyright and academic review license for University of Jaffna | Complete |
+| **1. Copyright's Statement** | Chapter 1: Formal copyright and license for University of Jaffna | Complete |
 | **2. Executive Summary** | Chapter 2: High-level architectural overview, problems resolved, tech stack | Complete |
 | **3. Objective of the Project** | Chapter 3: 6 quantifiable business and technical objectives | Complete |
 | **4. Customer** | Chapter 4: Shoppers, workshop employees, store administrators, and logistics couriers | Complete |
@@ -46,9 +45,9 @@ Final Docs/
 
 ---
 
-### 2. User Documentation (`02_USER_DOCUMENTATION.md`) [40%]
+### 2. User Documentation (`02_USER_DOCUMENTATION.md`)
 
-| Section Required in Guideline | Document Chapter & Topic | Status |
+| Section | Topic | Status |
 | :--- | :--- | :---: |
 | **1. Executive Summary** | Chapter 1: Purpose of the system from an operational perspective | Complete |
 | **2. Objective of the Project** | Chapter 2: Streamlining custom apparel ordering, fulfillment, and delivery tracking | Complete |

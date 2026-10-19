@@ -90,9 +90,9 @@ vergo-app/
 │       ├── hooks/                       # Custom data fetching hooks
 │       └── styles/                      # Tailwind CSS & custom styling
 │
-├── Final Docs/                          # Complete Academic Documentation Suite
-│   ├── 01_DEVELOPER_DOCUMENTATION.md    # Developer Document [Weight: 60%]
-│   ├── 02_USER_DOCUMENTATION.md         # User Document [Weight: 40%]
+├── Final Docs/                          # Complete Technical Documentation Suite
+│   ├── 01_DEVELOPER_DOCUMENTATION.md    # Developer Architecture & Engineering Guide
+│   ├── 02_USER_DOCUMENTATION.md         # User Manual & Operating Guide
 │   ├── 03_API_SPECIFICATION.md          # REST API Reference & Endpoints
 │   ├── 04_SECURITY_ARCHITECTURE.md      # Security, Auth, RLS & Threat Modeling
 │   ├── 05_TEST_CASES_AND_QUALITY_ASSURANCE.md # QA Matrix & 14 Jest Test Suites
@@ -162,10 +162,10 @@ npm run typecheck
 
 ## Documentation
 
-Full academic project documentation conforming to the **CSC304S3 / CSC304G3** guidelines is located in the [Final Docs](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs) directory:
-- [01_DEVELOPER_DOCUMENTATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/01_DEVELOPER_DOCUMENTATION.md) — 60% Developer Document
-- [02_USER_DOCUMENTATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/02_USER_DOCUMENTATION.md) — 40% User Document
-- [03_API_SPECIFICATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/03_API_SPECIFICATION.md) — Complete REST API Spec
+Complete system documentation is located in the [Final Docs](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs) directory:
+- [01_DEVELOPER_DOCUMENTATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/01_DEVELOPER_DOCUMENTATION.md) — Developer Architecture & Engineering Guide
+- [02_USER_DOCUMENTATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/02_USER_DOCUMENTATION.md) — User Manual & Operating Guide
+- [03_API_SPECIFICATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/03_API_SPECIFICATION.md) — Complete REST API Specification
 - [04_SECURITY_ARCHITECTURE.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/04_SECURITY_ARCHITECTURE.md) — Security & RLS Guide
 - [05_TEST_CASES_AND_QUALITY_ASSURANCE.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/05_TEST_CASES_AND_QUALITY_ASSURANCE.md) — QA Matrix & Test Cases
 - [06_DATABASE_AND_STORAGE_ARCHITECTURE.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/06_DATABASE_AND_STORAGE_ARCHITECTURE.md) — 31-Table Schema & Cloudinary
@@ -175,4 +175,4 @@ Full academic project documentation conforming to the **CSC304S3 / CSC304G3** gu
 
 ## License
 
-This software is developed for academic evaluation under the course unit **CSC304 Team Software Project**, Department of Computer Science, Faculty of Science, University of Jaffna. Licensed under the MIT / Academic Open License.
+This software is developed under the course unit **CSC304 Team Software Project**, Department of Computer Science, Faculty of Science, University of Jaffna. Licensed under the MIT License.

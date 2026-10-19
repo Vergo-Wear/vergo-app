@@ -1,7 +1,7 @@
 # Vergo Wear - User Documentation & Operating Manual
 **Course:** Team Software Project (CSC304S3 / CSC304G3)  
 **Project:** Vergo Wear - Custom Apparel & E-Commerce Order Management System  
-**Document Type:** User Documentation [Evaluation Weight: 40%]  
+**Document Type:** User Documentation & Operating Manual  
 **Date:** October 2026  
 **Document Version:** 1.0.0  
 

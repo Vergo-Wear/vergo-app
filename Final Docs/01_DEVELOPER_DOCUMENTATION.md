@@ -1,7 +1,7 @@
 # Vergo Wear - Developer Documentation
 **Course:** Team Software Project (CSC304S3 / CSC304G3)  
 **Project:** Vergo Wear - Custom Apparel & E-Commerce Order Management System  
-**Document Type:** Developer Documentation [Evaluation Weight: 60%]  
+**Document Type:** Developer Documentation  
 **Date:** October 2026  
 **Document Version:** 1.0.0  
 
@@ -46,9 +46,8 @@ This software, source code, design models, documentation, and graphical assets a
 the intellectual property of the Vergo Wear Team for the course module 
 "Team Software Project (CSC304S3 / CSC304G3)". 
 
-Permission is hereby granted, free of charge, to the academic evaluation committee, 
-instructors, and project supervisors of the University of Jaffna to inspect, test, 
-run, and assess the software for academic evaluation purposes. 
+Permission is hereby granted, free of charge, to instructors, supervisors, 
+reviewers, and collaborators to inspect, test, and run the software. 
 
 Redistribution, reproduction, commercial exploitation, or modification of any part 
 of this software without prior written authorization from the authors or the client 
@@ -66,7 +65,7 @@ The system is constructed with a dual-tier modern web architecture:
 - **Backend Service:** Powered by **NestJS 11** with TypeScript, structured according to enterprise modular design patterns, domain services, dependency injection, and data validation pipes.
 - **Data & Security Tier:** Leverages **Supabase PostgreSQL** with Prisma ORM, enforced with Row Level Security (RLS) policies, atomic stock reservations, cryptographic JWT validation, and Cloudinary media processing.
 
-The platform provides end-to-end transparency, reducing order processing delays by over 60%, eliminating overselling via real-time reservation locks, and offering real-time visibility into customer orders from fabrication to doorstep delivery.
+The platform provides end-to-end transparency, significantly reducing order processing delays, eliminating overselling via real-time reservation locks, and offering real-time visibility into customer orders from fabrication to doorstep delivery.
 
 ---
 
