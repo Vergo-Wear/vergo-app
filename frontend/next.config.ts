@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
+    const backendBase = (
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.BACKEND_URL ||
+      "http://localhost:3001"
+    ).replace(/\/+$/, "");
+
     return [
       {
         source: "/sourceMap/:path*",
@@ -22,7 +28,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/api/backend/:path*",
-        destination: "http://localhost:3001/:path*",
+        destination: `${backendBase}/:path*`,
       },
     ];
   },
