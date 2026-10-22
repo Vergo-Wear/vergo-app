@@ -25,12 +25,28 @@ interface CatalogueProduct {
 const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 function getApiUrl(): string {
-  if (typeof window !== "undefined") {
-    // When running in the browser, using relative /api/backend proxies through Next.js directly
-    // to backend:3001, eliminating CORS, port, or mixed content / firewall blocking.
-    return "/api/backend";
+  // If an explicit API URL is configured (e.g. in production or env), always honor it:
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "");
   }
-  return RAW_API_URL;
+
+  // When running in the browser locally without an explicit NEXT_PUBLIC_API_URL,
+  // proxy through /api/backend to reach local backend on port 3001
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const isLocalDev =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.startsWith("192.168.") ||
+      host.startsWith("10.") ||
+      host.startsWith("172.");
+
+    if (isLocalDev) {
+      return "/api/backend";
+    }
+  }
+
+  return RAW_API_URL.replace(/\/+$/, "");
 }
 
 function formatLkr(value: number) {

@@ -4,6 +4,7 @@ import React, { useState, KeyboardEvent, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { invalidateProductsCache } from "@/hooks/useProducts";
 
 interface Variant {
     id: string;
@@ -149,6 +150,7 @@ export default function ProductCreationPage() {
         });
         setIsSaving(false);
         if (!response.ok) { const body = await response.json().catch(() => ({})); return setSaveError(Array.isArray(body.message) ? body.message.join(" ") : body.message || "Unable to save product."); }
+        invalidateProductsCache();
         router.push("/admin/inventory");
     };
     const handleSaveHidden = () => void saveProduct("hidden");
