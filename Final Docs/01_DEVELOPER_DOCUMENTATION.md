@@ -592,8 +592,9 @@ backend/src/
 ### 6.6 More Information
 
 - **Official Git Repository:** [https://github.com/Vergo-Wear/vergo-app.git](https://github.com/Vergo-Wear/vergo-app.git)
-- **Technical Architecture Specification:** [DATABASE_SCHEMA.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/backend/prisma/DATABASE_SCHEMA.md)
-- **Review & Implementation Ledger:** [REVIEW_STATUS.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/REVIEW_STATUS.md)
-- **API Endpoints Reference:** See companion file `03_API_SPECIFICATION.md`
-- **Security & RBAC Architecture:** See companion file `04_SECURITY_ARCHITECTURE.md`
-- **QA & Test Matrix:** See companion file `05_TEST_CASES_AND_QUALITY_ASSURANCE.md`
+- **Technical Architecture Specification:** [DATABASE_ARCHITECTURE.md](../project%20structure/DATABASE_ARCHITECTURE.md) & [ER.md](../project%20structure/ER.md)
+- **Database & Storage Architecture:** [06_DATABASE_AND_STORAGE_ARCHITECTURE.md](./06_DATABASE_AND_STORAGE_ARCHITECTURE.md)
+- **API Endpoints Reference:** See companion file [03_API_SPECIFICATION.md](./03_API_SPECIFICATION.md)
+- **Security & RBAC Architecture:** See companion file [04_SECURITY_ARCHITECTURE.md](./04_SECURITY_ARCHITECTURE.md)
+- **QA & Test Matrix:** See companion file [05_TEST_CASES_AND_QUALITY_ASSURANCE.md](./05_TEST_CASES_AND_QUALITY_ASSURANCE.md)
+- **Courier Logistics & Concurrency:** See companion file [07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md](./07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md)

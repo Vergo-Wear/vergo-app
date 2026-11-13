@@ -1,9 +1,8 @@
-
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 #wrap {
   background: #111110;
-  padding: 20px;
+  padding: 24px;
   min-height: 100vh;
   width: 100%;
 }
@@ -75,13 +74,34 @@ const diagram = `erDiagram
     text phone
     text email
     text address
+    text status
+  }
+  color {
+    uuid color_id PK
+    text name
+    text hex_code
+    int display_order
+    text status
+  }
+  size {
+    uuid size_id PK
+    text name
+    int display_order
+    text status
+  }
+  delivery_fee_rules {
+    uuid rule_id PK
+    text district
+    numeric base_delivery_fee
+    int base_item_limit
+    bool is_active
   }
   profiles {
     uuid id PK
     uuid role_id FK
     text username
     text status
-    timestamptz created_at
+    bool must_change_password
   }
   employee {
     uuid employee_id PK
@@ -89,35 +109,30 @@ const diagram = `erDiagram
     uuid branch_id FK
     text first_name
     text last_name
-    text position
-    numeric salary
-    date hire_date
+    numeric commission_per_parcel
   }
   customer {
     uuid customer_id PK
     uuid profile_id FK
     text first_name
     text last_name
-    text email
-    text default_shipping_address
-    timestamptz created_at
+    text contact_email
+    text contact_phone
+  }
+  user_addresses {
+    uuid address_id PK
+    uuid customer_id FK
+    text receiver_name
+    text city
+    text district
+    bool is_primary
   }
   attendance {
     uuid attendance_id PK
     uuid employee_id FK
-    date date
     timestamptz check_in
     timestamptz check_out
     text status
-  }
-  salary_record {
-    uuid salary_id PK
-    uuid employee_id FK
-    date month
-    numeric basic_salary
-    numeric bonus
-    numeric deduction
-    numeric net_salary
   }
   product {
     uuid product_id PK
@@ -126,14 +141,20 @@ const diagram = `erDiagram
     text name
     numeric base_price
     text status
+    bool is_sold_out
   }
   product_variant {
     uuid variant_id PK
     uuid product_id FK
+    uuid color_id FK
+    uuid size_id FK
     text sku
-    text size
-    text color
     numeric price_adjustment
+    text status
+  }
+  images {
+    int8 id PK
+    uuid variant_id FK
     text image_url
   }
   inventory {
@@ -142,13 +163,24 @@ const diagram = `erDiagram
     uuid branch_id FK
     int quantity
     int reorder_level
-    timestamptz last_updated
+  }
+  stock_reservation {
+    uuid reservation_id PK
+    uuid checkout_id FK
+    uuid inventory_id FK
+    int quantity
+    text status
+  }
+  inventory_commitment {
+    uuid commitment_id PK
+    uuid order_item_id FK
+    uuid inventory_id FK
+    int quantity
+    text status
   }
   cart {
     uuid cart_id PK
     uuid customer_id FK
-    text session_id
-    timestamptz created_at
   }
   cart_item {
     uuid cart_item_id PK
@@ -156,16 +188,50 @@ const diagram = `erDiagram
     uuid variant_id FK
     int quantity
   }
+  pending_checkout {
+    uuid checkout_id PK
+    uuid customer_id FK
+    numeric total_amount
+    numeric delivery_fee
+    text payment_method
+    text status
+  }
+  pending_checkout_item {
+    uuid checkout_item_id PK
+    uuid checkout_id FK
+    uuid variant_id FK
+    int quantity
+    numeric unit_price
+  }
+  pending_checkout_customer_details {
+    uuid detail_id PK
+    uuid checkout_id FK
+    text first_name
+    text email
+    text phone
+  }
+  pending_checkout_shipping_details {
+    uuid shipping_id PK
+    uuid checkout_id FK
+    text receiver_name
+    text city
+    text district
+  }
+  payment_proof {
+    uuid payment_proof_id PK
+    uuid checkout_id FK
+    text file_url
+    text status
+  }
   orders {
     uuid order_id PK
     uuid customer_id FK
     uuid employee_id FK
     uuid branch_id FK
-    timestamptz order_date
     numeric total_amount
     text payment_method
-    text shipping_address
     text order_status
+    uuid checkout_id
   }
   order_item {
     uuid order_item_id PK
@@ -175,64 +241,134 @@ const diagram = `erDiagram
     numeric unit_price
     numeric subtotal
   }
+  order_customer_details {
+    uuid detail_id PK
+    uuid order_id FK
+    text first_name
+    text email
+    text phone
+  }
+  order_shipping_details {
+    uuid shipping_id PK
+    uuid order_id FK
+    text receiver_name
+    text city
+    text district
+  }
+  employee_commission {
+    uuid commission_id PK
+    uuid employee_id FK
+    uuid order_id FK
+    numeric commission_amount
+    text status
+  }
   delivery {
     uuid delivery_id PK
     uuid order_id FK
-    uuid assigned_employee_id FK
     text delivery_status
-    timestamptz delivered_at
+    text waybill_number
+    text courier_name
+    numeric cod_amount
+  }
+  delivery_waybill {
+    uuid waybill_id PK
+    uuid delivery_id FK
+    text waybill_number
+    text waybill_url
+  }
+  delivery_tracking_event {
+    uuid event_id PK
+    uuid delivery_id FK
+    text status_code
+    text status_description
+  }
+  courier_shipper_profile {
+    uuid profile_id PK
+    uuid branch_id FK
+    text courier_name
+    text shipper_name
+  }
+  courier_pickup_request {
+    uuid pickup_request_id PK
+    uuid courier_profile_id FK
+    text pickup_reference
+    text status
+  }
+  courier_pickup_delivery {
+    uuid id PK
+    uuid pickup_request_id FK
+    uuid delivery_id FK
+  }
+  review {
+    uuid review_id PK
+    uuid product_id FK
+    uuid customer_id FK
+    uuid order_item_id FK
+    int rating
+  }
+  review_image {
+    uuid review_image_id PK
+    uuid review_id FK
+    text image_url
   }
   notification {
     uuid notification_id PK
-    uuid customer_id FK
+    uuid recipient_profile_id FK
     uuid order_id FK
-    text message
+    uuid checkout_id FK
     text type
+    text channel
     text status
-  }
-  purchase_order {
-    uuid purchase_order_id PK
-    uuid supplier_id FK
-    uuid employee_id FK
-    timestamptz order_date
-    text status
-    numeric total_amount
-  }
-  purchase_order_item {
-    uuid po_item_id PK
-    uuid purchase_order_id FK
-    uuid variant_id FK
-    int quantity
-    numeric cost_price
   }
 
   role ||--o{ profiles : "assigned to"
-  profiles ||--o| employee : "is"
-  profiles ||--o| customer : "is"
+  profiles ||--o| employee : "has"
+  profiles ||--o| customer : "has"
+  profiles ||--o{ notification : "receives"
   branch ||--o{ employee : "works at"
   branch ||--o{ inventory : "stocks"
-  branch ||--o{ orders : "fulfilled by"
-  category ||--o{ product : "groups"
+  branch ||--o{ orders : "fulfilled from"
+  branch ||--o{ courier_shipper_profile : "pickup address"
+  category ||--o{ product : "classifies"
   supplier ||--o{ product : "supplies"
-  supplier ||--o{ purchase_order : "receives"
-  employee ||--o{ attendance : "logs"
-  employee ||--o{ salary_record : "paid via"
-  employee ||--o{ orders : "processes"
-  employee ||--o{ delivery : "assigned to"
-  employee ||--o{ purchase_order : "creates"
-  customer ||--o{ cart : "has"
-  customer ||--o{ orders : "places"
-  customer ||--o{ notification : "receives"
+  color ||--o{ product_variant : "colors"
+  size ||--o{ product_variant : "sizes"
   product ||--o{ product_variant : "has"
-  product_variant ||--o{ inventory : "tracked in"
-  product_variant ||--o{ cart_item : "added to"
-  product_variant ||--o{ order_item : "included in"
-  product_variant ||--o{ purchase_order_item : "ordered via"
+  product ||--o{ review : "has"
+  product_variant ||--o{ images : "has"
+  product_variant ||--o{ inventory : "stocked as"
+  product_variant ||--o{ cart_item : "added as"
+  product_variant ||--o{ pending_checkout_item : "reserved as"
+  product_variant ||--o{ order_item : "ordered as"
+  employee ||--o{ attendance : "logs"
+  employee ||--o{ orders : "assigned to"
+  employee ||--o{ employee_commission : "earns"
+  customer ||--o{ user_addresses : "saves"
+  customer ||--o{ cart : "owns"
+  customer ||--o{ pending_checkout : "initiates"
+  customer ||--o{ orders : "places"
+  customer ||--o{ review : "writes"
   cart ||--o{ cart_item : "contains"
+  pending_checkout ||--o{ pending_checkout_item : "contains"
+  pending_checkout ||--o| pending_checkout_customer_details : "snapshots"
+  pending_checkout ||--o| pending_checkout_shipping_details : "snapshots"
+  pending_checkout ||--o| payment_proof : "verifies"
+  pending_checkout ||--o{ stock_reservation : "holds"
+  inventory ||--o{ stock_reservation : "held from"
+  inventory ||--o{ inventory_commitment : "committed from"
   orders ||--o{ order_item : "contains"
-  orders ||--o| delivery : "fulfilled by"
-  orders ||--o{ notification : "triggers"
-  purchase_order ||--o{ purchase_order_item : "contains"
+  orders ||--o| order_customer_details : "snapshots"
+  orders ||--o| order_shipping_details : "snapshots"
+  orders ||--o| delivery : "dispatches"
+  orders ||--o| employee_commission : "generates"
+  order_item ||--o{ inventory_commitment : "commits"
+  order_item ||--o| review : "verified by"
+  delivery ||--o{ delivery_waybill : "generates"
+  delivery ||--o{ delivery_tracking_event : "tracks"
+  delivery ||--o{ courier_pickup_delivery : "grouped in"
+  courier_shipper_profile ||--o{ courier_pickup_request : "configures"
+  courier_pickup_request ||--o{ courier_pickup_delivery : "batches"
+  review ||--o{ review_image : "attaches"
 `;
 
 const { svg } = await mermaid.render('erd-svg', diagram);

@@ -34,7 +34,7 @@
 ## 1. Architectural Overview
 
 The **Vergo Wear** data tier is engineered around two complementary cloud infrastructures:
-1. **Supabase PostgreSQL 15+:** Serves as the relational operational database. It enforces relational integrity, check constraints, foreign keys, row-level security (RLS), and transactional consistency across 31 tables.
+1. **Supabase PostgreSQL 15+:** Serves as the relational operational database. It enforces relational integrity, check constraints, foreign keys, row-level security (RLS), and transactional consistency across all 40 database tables (39 domain tables plus Prisma engine migrations).
 2. **Cloudinary Media Cloud (CDN):** Serves as the distributed media repository. High-resolution product apparel photography, color fabric swatches, verified customer review photos, and sensitive bank transfer deposit receipts are stored on Cloudinary. The database stores only the immutable CDN URLs and unique `storage_public_id` identifiers, keeping the relational database lean and performant.
 
 ---
@@ -87,7 +87,10 @@ erDiagram
     EMPLOYEE ||--o{ DELIVERY : "submits"
     DELIVERY ||--o{ DELIVERY_WAYBILL : "tracks"
     DELIVERY ||--o{ DELIVERY_TRACKING_EVENT : "logs"
+    DELIVERY ||--o{ COURIER_PICKUP_DELIVERY : "grouped_in"
     BRANCH ||--o{ COURIER_SHIPPER_PROFILE : "configures"
+    COURIER_SHIPPER_PROFILE ||--o{ COURIER_PICKUP_REQUEST : "schedules"
+    COURIER_PICKUP_REQUEST ||--o{ COURIER_PICKUP_DELIVERY : "batches"
     
     CUSTOMER ||--o{ REVIEW : "writes"
     PRODUCT ||--o{ REVIEW : "reviewed_in"
@@ -185,6 +188,20 @@ Registered retail apparel shoppers.
 - `contact_phone` (`text`): Primary contact phone number.
 - `contact_email` (`text`, Unique, Not Null): Billing/notification email address.
 - `created_at` (`timestamp with time zone`).
+
+#### `public.user_addresses`
+Multi-address book for registered customers.
+- `address_id` (`uuid`, PK, Default: `gen_random_uuid()`): Unique address record.
+- `customer_id` (`uuid`, Not Null, FK ➔ `public.customer(customer_id)` ON DELETE CASCADE): Associated customer.
+- `receiver_name` (`text`, Not Null): Designated recipient full name.
+- `phone` (`text`, Not Null): Recipient phone number for delivery dispatch.
+- `address_line_1` (`text`, Not Null): Street address / building.
+- `address_line_2` (`text`, Nullable): Apartment, suite, unit.
+- `city` (`text`, Not Null): Town or city.
+- `district` (`text`, Not Null): Administrative district for rate calculations.
+- `postal_code` (`text`, Nullable): Postal zip code.
+- `is_primary` (`boolean`, Default: `false`): Primary default shipping address flag.
+- `created_at`, `updated_at` (`timestamp with time zone`).
 
 #### `public.attendance`
 Daily biometric / login attendance ledger for branch employees.
@@ -398,8 +415,23 @@ Logistics and dispatch record for each package.
 - `submitted_at`, `delivered_at`, `updated_at`, `last_tracking_sync_at` (`timestamp with time zone`).
 
 #### `public.delivery_waybill` & `public.delivery_tracking_event`
-- `delivery_waybill`: Stores tracking numbers and facility codes.
-- `delivery_tracking_event`: Detailed milestone events logged automatically by Citypak tracking API webhooks (e.g., "Arrived at Central Sorting Hub", "Out for Delivery", "Delivered").
+- `delivery_waybill`: Stores generated thermal barcode waybills and printable label URLs (`waybill_id`, `delivery_id`, `waybill_number`, `waybill_url`, `generated_at`).
+- `delivery_tracking_event`: Detailed milestone events logged automatically by Citypak tracking API webhooks (`event_id`, `delivery_id`, `event_time`, `status_code`, `status_description`, `location`, `raw_payload`).
+
+#### `public.courier_shipper_profile`
+Configures warehouse sender profiles and pickup addresses per branch and courier.
+- `profile_id` (`uuid`, PK, Default: `gen_random_uuid()`): Unique profile identifier.
+- `branch_id` (`uuid`, Nullable, FK ➔ `public.branch(branch_id)`): Associated store/warehouse branch.
+- `courier_name` (`text`, Default: `'Citypak'`): Courier provider identifier.
+- `shipper_name`, `contact_phone`, `contact_email` (`text`, Not Null): Sender contact credentials.
+- `address_line_1`, `address_line_2`, `address_line_3` (`text`): Physical warehouse pickup address.
+- `city`, `district`, `postal_code` (`text`): Location routing data.
+- `account_number`, `is_default`, `is_active` (`text`/`boolean`): Courier billing and active flags.
+
+#### `public.courier_pickup_request` & `public.courier_pickup_delivery`
+Batch manifest records scheduling courier truck dispatch for groups of packages.
+- `courier_pickup_request`: Stores dispatch requests (`pickup_request_id`, `courier_profile_id`, `pickup_reference`, `scheduled_date`, `status`, `total_packages`, `driver_name`, `driver_phone`).
+- `courier_pickup_delivery`: Junction table mapping individual deliveries into a pickup manifest (`id`, `pickup_request_id`, `delivery_id`).
 
 #### `public.delivery_fee_rules`
 Configurable delivery fees per administrative district in Sri Lanka.
