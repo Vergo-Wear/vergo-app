@@ -490,7 +490,7 @@ export class AdminService {
               quantity: 0,
               reservedQuantity: 0,
               availableQuantity: 0,
-              reorderLevel: 10,
+              reorderLevel: 3,
               lastUpdated: null,
             },
           ];
@@ -512,7 +512,7 @@ export class AdminService {
               0,
               inventory.quantity - reservedQuantity,
             ),
-            reorderLevel: inventory.reorderLevel ?? 10,
+            reorderLevel: inventory.reorderLevel ?? 3,
             lastUpdated: inventory.lastUpdated,
           };
         });
@@ -715,7 +715,7 @@ export class AdminService {
                 create: {
                   quantity: variantDto.quantity,
                   branchId: variantDto.branchId || null,
-                  reorderLevel: variantDto.reorderLevel ?? 10,
+                  reorderLevel: variantDto.reorderLevel ?? 3,
                 },
               },
               ...(imageList.length > 0
@@ -955,7 +955,7 @@ export class AdminService {
                   data: {
                     quantity: variantDto.quantity,
                     branchId: validBranchId,
-                    reorderLevel: variantDto.reorderLevel ?? 10,
+                    reorderLevel: variantDto.reorderLevel ?? 3,
                     lastUpdated: new Date(),
                   },
                 });
@@ -965,7 +965,7 @@ export class AdminService {
                     variantId: existingVar.variantId,
                     quantity: variantDto.quantity,
                     branchId: validBranchId,
-                    reorderLevel: variantDto.reorderLevel ?? 10,
+                    reorderLevel: variantDto.reorderLevel ?? 3,
                   },
                 });
               }
@@ -996,7 +996,7 @@ export class AdminService {
                     create: {
                       quantity: variantDto.quantity,
                       branchId: validBranchId,
-                      reorderLevel: variantDto.reorderLevel ?? 10,
+                      reorderLevel: variantDto.reorderLevel ?? 3,
                     },
                   },
                   ...(imageList.length > 0
@@ -2292,7 +2292,7 @@ export class AdminService {
                 branchId: branchId,
                 employeeId: employee.employeeId,
                 quantity: alloc.quantity,
-                reorderLevel: 10,
+                reorderLevel: 3,
                 lastUpdated: now,
               },
             });

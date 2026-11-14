@@ -819,7 +819,7 @@ export default function InventoryDashboard() {
           priceAdjustment: itemData.priceAdjustment,
           quantity: itemData.quantity,
           branchId: productForm.branchId || undefined,
-          reorderLevel: 10,
+          reorderLevel: 3,
           imageUrl: colorImagesList[0] || colorObj?.imageUrl || undefined,
           images: colorImagesList,
         };

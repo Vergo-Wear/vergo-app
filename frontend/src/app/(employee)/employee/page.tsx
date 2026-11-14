@@ -118,8 +118,8 @@ export default function EmployeeDashboard() {
     ];
 
   const lowStockAlerts = myStock && myStock.length > 0
-    ? myStock.filter((s) => s.qty <= (s.reorderLevel || 10))
-    : stockLevels.filter((s) => s.qty <= (s.lowStockLimit || 10));
+    ? myStock.filter((s) => s.qty <= (s.reorderLevel ? Math.min(s.reorderLevel, 3) : 3))
+    : stockLevels.filter((s) => s.qty <= (s.lowStockLimit ? Math.min(s.lowStockLimit, 3) : 3));
 
   // Employee Metadata for PDF Report
   const employeeInfo = {

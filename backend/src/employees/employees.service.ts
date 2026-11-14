@@ -662,7 +662,7 @@ export class EmployeesService {
         size: sizeName,
         color: colorName,
         qty: item.quantity,
-        reorderLevel: item.reorderLevel ?? 10,
+        reorderLevel: item.reorderLevel ?? 3,
         lastUpdated: item.lastUpdated,
         branchName: item.branch?.name || 'Main Warehouse',
         imageUrl,
