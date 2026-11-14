@@ -279,14 +279,24 @@ export default function PaymentPage() {
             setAsPrimary: shippingInfo?.setAsPrimary ?? false,
           }
         : {}),
-      items: itemsToDisplay.map((item) => ({
-        variantId: item.product.variants.find(
-          (variant) =>
-            variant.size === item.size &&
-            (!item.color || variant.color === item.color),
-        )?.variantId,
-        quantity: item.quantity || 1,
-      })),
+      items: itemsToDisplay.map((item) => {
+        const itemColorLower = item.color ? item.color.toLowerCase().trim() : "";
+        const itemSizeLower = item.size ? item.size.toLowerCase().trim() : "";
+
+        const matched = item.product.variants.find((v) => {
+          const vSize = (v.size || "").toLowerCase().trim();
+          const vColor = (v.color || "").toLowerCase().trim();
+          return vSize === itemSizeLower && (!itemColorLower || vColor === itemColorLower);
+        }) || item.product.variants.find((v) => {
+          const vSize = (v.size || "").toLowerCase().trim();
+          return vSize === itemSizeLower;
+        }) || item.product.variants[0];
+
+        return {
+          variantId: matched?.variantId,
+          quantity: item.quantity || 1,
+        };
+      }),
     }),
     [contactInfo, deliveryFee, isLoggedIn, itemsToDisplay, shippingInfo],
   );
@@ -1034,7 +1044,18 @@ export default function PaymentPage() {
                     <div className="summary-item-image-wrapper">
                       {item.product.image && (
                         <Image
-                          src={item.product.image}
+                          src={
+                            (item.color && item.product.variants.find(
+                              (v) =>
+                                v.color?.toLowerCase() === item.color?.toLowerCase() &&
+                                v.images &&
+                                v.images.length > 0
+                            )?.images?.[0]) ||
+                            (item.color && item.product.colorOptions?.find(
+                              (c) => c.name?.toLowerCase() === item.color?.toLowerCase()
+                            )?.imageUrl) ||
+                            item.product.image
+                          }
                           alt={item.product.name}
                           fill
                           className="summary-item-image"

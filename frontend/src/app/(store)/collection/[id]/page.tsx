@@ -150,14 +150,15 @@ export default function ProductDetailPage({ params }: PageProps) {
   const handleAddToCart = () => {
     if (!product || isProductSoldOut || availableQuantity < 1) return;
     const addedQty = Math.min(quantity, availableQuantity);
+    const chosenColor = selectedColor || selectedVariant?.color || product.colors?.[0] || undefined;
     addToCart(
       product,
       selectedSize,
       addedQty,
-      product.colors?.[0] || undefined,
+      chosenColor,
     );
     setToast(
-      `Added to cart: "${product.name}" × ${addedQty}, (Size ${selectedSize})`,
+      `Added to cart: "${product.name}" × ${addedQty}${chosenColor ? ` (${chosenColor}, Size ${selectedSize})` : ` (Size ${selectedSize})`}`,
     );
     setTimeout(() => {
       setToast(null);

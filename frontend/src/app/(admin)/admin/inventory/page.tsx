@@ -1663,11 +1663,6 @@ export default function InventoryDashboard() {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                   </button>
-                                  {imgIdx === 0 && (
-                                    <span className="absolute bottom-0 inset-x-0 bg-emerald-400 text-black text-[7px] text-center font-extrabold uppercase py-0.2 pointer-events-none">
-                                      MAIN
-                                    </span>
-                                  )}
                                 </div>
                               ))}
 
