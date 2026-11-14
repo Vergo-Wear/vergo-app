@@ -91,15 +91,20 @@ export class EmployeesService {
 
     if (authError || !authData.user) {
       this.logger.error(
-        `Supabase Auth employee creation failed: ${authError?.message}`,
+        `Supabase Auth employee creation failed: ${authError?.message || JSON.stringify(authError)}`,
       );
-      if (authError?.message?.toLowerCase().includes('already')) {
+      if (
+        authError?.message?.toLowerCase().includes('already') ||
+        authError?.message?.toLowerCase().includes('exists') ||
+        (authError as any)?.code === 'email_exists'
+      ) {
         throw new ConflictException(
           'An account with this email already exists.',
         );
       }
       throw new BadRequestException(
-        'Failed to create the employee authentication account.',
+        authError?.message ||
+          'Failed to create the employee authentication account.',
       );
     }
 
@@ -275,17 +280,40 @@ export class EmployeesService {
   }
 
   /**
-   * Generates a 12-character crypto-random password that is easy to read
-   * out and type (no ambiguous characters like 0/O or 1/l).
+   * Generates a secure 16-character crypto-random password that satisfies
+   * all Supabase password complexity requirements (uppercase, lowercase, digits, symbols)
+   * while avoiding easily-confused characters (like 0/O, 1/l).
    */
   private generatePassword(): string {
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    const bytes = randomBytes(12);
-    let password = '';
-    for (const byte of bytes) {
-      password += alphabet[byte % alphabet.length];
-    }
-    return password;
+    const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lowercase = 'abcdefghjkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const symbols = '!@#$%&*+?';
+
+    const pickRandom = (charset: string, count: number): string => {
+      const bytes = randomBytes(count);
+      let res = '';
+      for (let i = 0; i < count; i++) {
+        res += charset[bytes[i] % charset.length];
+      }
+      return res;
+    };
+
+    // Guaranteed characters to strictly satisfy all password policy engines
+    const parts = [
+      pickRandom(uppercase, 4),
+      pickRandom(lowercase, 5),
+      pickRandom(digits, 4),
+      pickRandom(symbols, 3),
+    ].join('');
+
+    // Crypto shuffle
+    const shuffled = parts
+      .split('')
+      .sort(() => (randomBytes(1)[0] % 2 === 0 ? 1 : -1))
+      .join('');
+
+    return shuffled;
   }
 
   /**
