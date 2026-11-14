@@ -490,7 +490,7 @@ export class AdminService {
               quantity: 0,
               reservedQuantity: 0,
               availableQuantity: 0,
-              reorderLevel: 10,
+              reorderLevel: 3,
               lastUpdated: null,
             },
           ];
@@ -512,7 +512,7 @@ export class AdminService {
               0,
               inventory.quantity - reservedQuantity,
             ),
-            reorderLevel: inventory.reorderLevel ?? 10,
+            reorderLevel: inventory.reorderLevel ?? 3,
             lastUpdated: inventory.lastUpdated,
           };
         });
@@ -715,7 +715,7 @@ export class AdminService {
                 create: {
                   quantity: variantDto.quantity,
                   branchId: variantDto.branchId || null,
-                  reorderLevel: variantDto.reorderLevel ?? 10,
+                  reorderLevel: variantDto.reorderLevel ?? 3,
                 },
               },
               ...(imageList.length > 0
@@ -955,7 +955,7 @@ export class AdminService {
                   data: {
                     quantity: variantDto.quantity,
                     branchId: validBranchId,
-                    reorderLevel: variantDto.reorderLevel ?? 10,
+                    reorderLevel: variantDto.reorderLevel ?? 3,
                     lastUpdated: new Date(),
                   },
                 });
@@ -965,7 +965,7 @@ export class AdminService {
                     variantId: existingVar.variantId,
                     quantity: variantDto.quantity,
                     branchId: validBranchId,
-                    reorderLevel: variantDto.reorderLevel ?? 10,
+                    reorderLevel: variantDto.reorderLevel ?? 3,
                   },
                 });
               }
@@ -996,7 +996,7 @@ export class AdminService {
                     create: {
                       quantity: variantDto.quantity,
                       branchId: validBranchId,
-                      reorderLevel: variantDto.reorderLevel ?? 10,
+                      reorderLevel: variantDto.reorderLevel ?? 3,
                     },
                   },
                   ...(imageList.length > 0
@@ -2127,142 +2127,173 @@ export class AdminService {
   }
 
   async distributeStockToEmployees(dto: DistributeStockDto) {
-    const defaultBranch = await this.prisma.branch.findFirst();
-    if (!defaultBranch) {
-      throw new BadRequestException('No warehouse branches configured in system.');
-    }
-
-    let targetEmployees: Array<{ employeeId: string; name: string; branchId: string | null }> = [];
-
-    if (dto.targetMode === 'single') {
-      if (!dto.employeeId) {
-        throw new BadRequestException('Employee ID is required for single distribution mode.');
-      }
-      const employee = await this.prisma.employee.findUnique({
-        where: { employeeId: dto.employeeId },
-        include: { branch: true },
-      });
-      if (!employee) {
-        throw new NotFoundException(`Employee "${dto.employeeId}" not found.`);
-      }
-      targetEmployees = [
-        {
-          employeeId: employee.employeeId,
-          name: `${employee.firstName} ${employee.lastName}`.trim(),
-          branchId: employee.branchId || defaultBranch.branchId,
-        },
-      ];
-    } else {
-      const whereClause: Prisma.EmployeeWhereInput = dto.employeeIds?.length
-        ? { employeeId: { in: dto.employeeIds } }
-        : { profile: { status: 'active' } };
-
-      const employees = await this.prisma.employee.findMany({
-        where: whereClause,
-        include: { branch: true },
+    try {
+      const defaultBranch = await this.prisma.branch.findFirst({
+        orderBy: { name: 'asc' },
       });
 
-      if (employees.length === 0) {
-        throw new BadRequestException('No active employees found to distribute stock to.');
+      let targetEmployees: Array<{
+        employeeId: string;
+        name: string;
+        branchId: string | null;
+      }> = [];
+
+      if (dto.targetMode === 'single') {
+        if (!dto.employeeId) {
+          throw new BadRequestException('Employee ID is required for single distribution mode.');
+        }
+        const employee = await this.prisma.employee.findUnique({
+          where: { employeeId: dto.employeeId },
+          include: { branch: true },
+        });
+        if (!employee) {
+          throw new NotFoundException(`Employee "${dto.employeeId}" not found.`);
+        }
+        targetEmployees = [
+          {
+            employeeId: employee.employeeId,
+            name: `${employee.firstName} ${employee.lastName}`.trim(),
+            branchId: employee.branchId || defaultBranch?.branchId || null,
+          },
+        ];
+      } else {
+        const whereClause: Prisma.EmployeeWhereInput = dto.employeeIds?.length
+          ? { employeeId: { in: dto.employeeIds } }
+          : {
+              OR: [
+                { profile: { status: { in: ['active', 'ACTIVE'] } } },
+                { profile: { status: null } },
+              ],
+            };
+
+        const employees = await this.prisma.employee.findMany({
+          where: whereClause,
+          include: { branch: true },
+        });
+
+        if (employees.length === 0) {
+          throw new BadRequestException('No active employees found to distribute stock to.');
+        }
+
+        targetEmployees = employees.map((emp) => ({
+          employeeId: emp.employeeId,
+          name: `${emp.firstName} ${emp.lastName}`.trim(),
+          branchId: emp.branchId || defaultBranch?.branchId || null,
+        }));
       }
 
-      targetEmployees = employees.map((emp) => ({
-        employeeId: emp.employeeId,
-        name: `${emp.firstName} ${emp.lastName}`.trim(),
-        branchId: emp.branchId || defaultBranch.branchId,
-      }));
-    }
-
-    const variantIds = dto.allocations.map((a) => a.variantId);
-    const variants = await this.prisma.productVariant.findMany({
-      where: { variantId: { in: variantIds } },
-      include: {
-        product: true,
-        color: true,
-        size: true,
-        inventory: {
-          where: { employeeId: null },
-        },
-      },
-    });
-
-    const variantMap = new Map(variants.map((v) => [v.variantId, v]));
-
-    for (const alloc of dto.allocations) {
-      if (alloc.quantity <= 0) continue;
-      const variant = variantMap.get(alloc.variantId);
-      if (!variant) {
-        throw new NotFoundException(`Variant with ID "${alloc.variantId}" not found.`);
-      }
-
-      const totalRequestedForVariant = alloc.quantity * targetEmployees.length;
-      const totalWarehouseStock = variant.inventory.reduce(
-        (sum, inv) => sum + (inv.quantity || 0),
-        0,
+      const validAllocations = (dto.allocations || []).filter(
+        (a) => (a.quantity || 0) > 0,
       );
-
-      if (totalRequestedForVariant > totalWarehouseStock) {
-        const variantLabel = `${variant.product.name} (${variant.color?.name || ''} - ${variant.size?.name || ''})`;
+      if (validAllocations.length === 0) {
         throw new BadRequestException(
-          `Cannot allocate ${totalRequestedForVariant} units of ${variantLabel} across ${targetEmployees.length} employee(s). Only ${totalWarehouseStock} units exist in inventory.`,
+          'Please enter a positive allocation quantity for at least one garment variant.',
         );
       }
-    }
 
-    const totalAllocatedUnits = await this.prisma.$transaction(async (tx) => {
+      const variantIds = validAllocations.map((a) => a.variantId);
+      const variants = await this.prisma.productVariant.findMany({
+        where: { variantId: { in: variantIds } },
+        include: {
+          product: true,
+          color: true,
+          size: true,
+          inventory: {
+            where: { employeeId: null },
+            orderBy: { quantity: 'desc' },
+          },
+        },
+      });
+
+      const variantMap = new Map(variants.map((v) => [v.variantId, v]));
+
+      // 1. Validate requested quantities against total warehouse stock
+      for (const alloc of validAllocations) {
+        const variant = variantMap.get(alloc.variantId);
+        if (!variant) {
+          throw new NotFoundException(`Variant with ID "${alloc.variantId}" not found.`);
+        }
+
+        const totalRequestedForVariant = alloc.quantity * targetEmployees.length;
+        const totalWarehouseStock = variant.inventory.reduce(
+          (sum, inv) => sum + (inv.quantity || 0),
+          0,
+        );
+
+        if (totalRequestedForVariant > totalWarehouseStock) {
+          const variantLabel = `${variant.product.name} (${variant.color?.name || ''} - ${variant.size?.name || ''})`;
+          throw new BadRequestException(
+            `Cannot allocate ${totalRequestedForVariant} units of ${variantLabel} across ${targetEmployees.length} employee(s). Only ${totalWarehouseStock} units exist in warehouse stock.`,
+          );
+        }
+      }
+
+      // 2. Pre-fetch existing employee inventory records in a single query (zero DB round-trips in loop)
+      const targetEmployeeIds = targetEmployees.map((e) => e.employeeId);
+      const existingEmployeeInventories = await this.prisma.inventory.findMany({
+        where: {
+          variantId: { in: variantIds },
+          employeeId: { in: targetEmployeeIds },
+        },
+      });
+
+      const empInventoryMap = new Map<string, (typeof existingEmployeeInventories)[0]>();
+      for (const inv of existingEmployeeInventories) {
+        if (inv.employeeId) {
+          empInventoryMap.set(`${inv.employeeId}_${inv.variantId}`, inv);
+        }
+      }
+
+      // 3. Plan in-memory operations
+      const employeeUpdates: Array<{
+        where: { inventoryId: string };
+        data: { quantity: { increment: number }; lastUpdated: Date };
+      }> = [];
+
+      const employeeCreates: Array<{
+        data: {
+          variantId: string;
+          branchId: string | null;
+          employeeId: string;
+          quantity: number;
+          reorderLevel: number;
+          lastUpdated: Date;
+        };
+      }> = [];
+
+      const warehouseUpdates: Array<{
+        where: { inventoryId: string };
+        data: { quantity: { decrement: number }; lastUpdated: Date };
+      }> = [];
+
+      const now = new Date();
       let totalUnits = 0;
 
+      // Plan employee allocations
       for (const employee of targetEmployees) {
-        const branchId = employee.branchId || defaultBranch.branchId;
+        const branchId = employee.branchId || defaultBranch?.branchId || null;
 
-        for (const alloc of dto.allocations) {
-          if (alloc.quantity <= 0) continue;
+        for (const alloc of validAllocations) {
+          const key = `${employee.employeeId}_${alloc.variantId}`;
+          const existing = empInventoryMap.get(key);
 
-          // 1. Find or create employee-specific inventory record
-          const existingEmployeeInventory = await tx.inventory.findFirst({
-            where: {
-              variantId: alloc.variantId,
-              employeeId: employee.employeeId,
-            },
-          });
-
-          if (existingEmployeeInventory) {
-            await tx.inventory.update({
-              where: { inventoryId: existingEmployeeInventory.inventoryId },
+          if (existing) {
+            employeeUpdates.push({
+              where: { inventoryId: existing.inventoryId },
               data: {
                 quantity: { increment: alloc.quantity },
-                lastUpdated: new Date(),
+                lastUpdated: now,
               },
             });
           } else {
-            await tx.inventory.create({
+            employeeCreates.push({
               data: {
                 variantId: alloc.variantId,
                 branchId: branchId,
                 employeeId: employee.employeeId,
                 quantity: alloc.quantity,
-                reorderLevel: 10,
-                lastUpdated: new Date(),
-              },
-            });
-          }
-
-          // 2. Decrement master warehouse inventory record (where employeeId is null)
-          const warehouseRecord = await tx.inventory.findFirst({
-            where: {
-              variantId: alloc.variantId,
-              employeeId: null,
-            },
-          });
-
-          if (warehouseRecord) {
-            await tx.inventory.update({
-              where: { inventoryId: warehouseRecord.inventoryId },
-              data: {
-                quantity: {
-                  decrement: Math.min(warehouseRecord.quantity, alloc.quantity),
-                },
-                lastUpdated: new Date(),
+                reorderLevel: 3,
+                lastUpdated: now,
               },
             });
           }
@@ -2271,18 +2302,80 @@ export class AdminService {
         }
       }
 
-      return totalUnits;
-    });
+      // Plan warehouse deductions distributed across warehouse inventory rows
+      for (const alloc of validAllocations) {
+        const variant = variantMap.get(alloc.variantId)!;
+        let unitsToDeduct = alloc.quantity * targetEmployees.length;
 
-    return {
-      success: true,
-      message:
-        dto.targetMode === 'single'
-          ? `Successfully allocated ${totalAllocatedUnits} units to ${targetEmployees[0].name}.`
-          : `Successfully distributed ${totalAllocatedUnits} total units across ${targetEmployees.length} active employees.`,
-      targetEmployeesCount: targetEmployees.length,
-      totalUnitsAllocated: totalAllocatedUnits,
-    };
+        for (const warehouseInv of variant.inventory) {
+          if (unitsToDeduct <= 0) break;
+          const currentQty = warehouseInv.quantity || 0;
+          if (currentQty <= 0) continue;
+
+          const deductThis = Math.min(currentQty, unitsToDeduct);
+          warehouseUpdates.push({
+            where: { inventoryId: warehouseInv.inventoryId },
+            data: {
+              quantity: { decrement: deductThis },
+              lastUpdated: now,
+            },
+          });
+          unitsToDeduct -= deductThis;
+        }
+
+        // Fallback: if all warehouse inventory records were 0 or missing, ensure deduction is logged on the first record
+        if (unitsToDeduct > 0 && variant.inventory.length > 0) {
+          warehouseUpdates.push({
+            where: { inventoryId: variant.inventory[0].inventoryId },
+            data: {
+              quantity: { decrement: unitsToDeduct },
+              lastUpdated: now,
+            },
+          });
+        }
+      }
+
+      // 4. Execute atomic batch in transaction with extended timeout for remote database
+      const totalAllocatedUnits = await this.prisma.$transaction(
+        async (tx) => {
+          for (const op of employeeUpdates) {
+            await tx.inventory.update(op);
+          }
+          for (const op of employeeCreates) {
+            await tx.inventory.create(op);
+          }
+          for (const op of warehouseUpdates) {
+            await tx.inventory.update(op);
+          }
+          return totalUnits;
+        },
+        {
+          maxWait: 10000,
+          timeout: 45000,
+        },
+      );
+
+      // 5. Invalidate catalogue caches
+      this.productCatalogueService?.clearCache();
+
+      return {
+        success: true,
+        message:
+          dto.targetMode === 'single'
+            ? `Successfully allocated ${totalAllocatedUnits} units to ${targetEmployees[0].name}.`
+            : `Successfully distributed ${totalAllocatedUnits} total units across ${targetEmployees.length} active employees.`,
+        targetEmployeesCount: targetEmployees.length,
+        totalUnitsAllocated: totalAllocatedUnits,
+      };
+    } catch (error: any) {
+      this.logger.error('distributeStockToEmployees failed:', error?.stack || error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        error?.message || 'Failed to distribute stock to employees.',
+      );
+    }
   }
 
   async getEarningsOverview() {

@@ -103,7 +103,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           overviewData.inventory.map((item: InventoryItem) => ({
             ...item,
             status:
-              item.inStock <= (item.reorderLevel || 0)
+              item.inStock <=
+              (item.reorderLevel !== undefined && item.reorderLevel > 0
+                ? Math.min(item.reorderLevel, 3)
+                : 3)
                 ? "PENDING"
                 : "PROCESSING",
           }))
@@ -258,7 +261,22 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const addEmployee = (id: string, name: string) =>
     setEmployees((current) => [...current, { id, rank: current.length + 1, name, avatar: name.split(" ").map((part) => part[0]).join("").slice(0, 2), status: "ON SHIFT", parcels: 0 }]);
   const shipPendingItem = () => addNotification("Shipment status belongs to an order, not inventory.", "error");
-  const alerts: StockAlert[] = inventory.filter((item) => item.inStock <= (item.reorderLevel || 0)).map((item) => ({ id: item.inventoryId || item.sku, sku: item.sku, name: item.name, node: item.location, units: item.inStock, status: "critical" }));
+  const alerts: StockAlert[] = inventory
+    .filter(
+      (item) =>
+        item.inStock <=
+        (item.reorderLevel !== undefined && item.reorderLevel > 0
+          ? Math.min(item.reorderLevel, 3)
+          : 3)
+    )
+    .map((item) => ({
+      id: item.inventoryId || item.sku,
+      sku: item.sku,
+      name: item.name,
+      node: item.location,
+      units: item.inStock,
+      status: "critical",
+    }));
 
   const adminAlerts = React.useMemo(() => {
     const list: AdminAlert[] = [];
@@ -320,7 +338,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     });
 
     inventory.forEach((item: InventoryItem) => {
-      const limit = item.reorderLevel !== undefined ? item.reorderLevel : 10;
+      const limit =
+        item.reorderLevel !== undefined && item.reorderLevel > 0
+          ? Math.min(item.reorderLevel, 3)
+          : 3;
       if (item.inStock <= limit) {
         list.push({
           id: `low-stock-${item.inventoryId || item.sku}`,

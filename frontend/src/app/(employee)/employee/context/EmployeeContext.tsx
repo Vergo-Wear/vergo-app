@@ -409,7 +409,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
             colorHex,
             imageUrl,
             qty: Math.max(0, Number(rawQty) || 0),
-            lowStockLimit: 10,
+            lowStockLimit: 3,
           });
         });
       } else {
@@ -426,7 +426,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
             (Array.isArray(p.images) && typeof p.images[0] === "string" ? p.images[0] : null) ||
             null,
           qty: 0,
-          lowStockLimit: 10,
+          lowStockLimit: 3,
         });
       }
     });

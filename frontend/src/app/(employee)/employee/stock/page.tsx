@@ -390,7 +390,8 @@ export default function StockManagement() {
                   </thead>
                   <tbody>
                     {filteredMyStock.map((item) => {
-                      const isLow = item.qty <= item.reorderLevel;
+                      const effectiveLimit = item.reorderLevel ? Math.min(item.reorderLevel, 3) : 3;
+                      const isLow = item.qty <= effectiveLimit;
                       const isOut = item.qty === 0;
 
                       return (
@@ -527,9 +528,7 @@ export default function StockManagement() {
                         <td>
                           {stock.qty === 0 ? (
                             <span className="emp-badge red">Out of Stock</span>
-                          ) : stock.qty < 5 ? (
-                            <span className="emp-badge red">Critical Low</span>
-                          ) : stock.qty < 10 ? (
+                          ) : stock.qty <= 3 ? (
                             <span className="emp-badge" style={{ backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>
                               Low Stock
                             </span>
@@ -540,7 +539,7 @@ export default function StockManagement() {
                         <td style={{ textAlign: "right" }}>
                           <button
                             className="emp-prep-btn-secondary"
-                            style={{ padding: "6px 12px", fontSize: "11.5px", borderColor: stock.qty < 10 ? "#ff7800" : "var(--emp-border)" }}
+                            style={{ padding: "6px 12px", fontSize: "11.5px", borderColor: stock.qty <= 3 ? "#ff7800" : "var(--emp-border)" }}
                             onClick={() => handleOpenRequest(stock)}
                           >
                             Request Stock
