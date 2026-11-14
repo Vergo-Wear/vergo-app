@@ -9,14 +9,14 @@ export default function OwnerStory() {
     ownerBadge: "CREATIVE DIRECTION & LEADERSHIP",
     ownerTitle: "THE VISION BEHIND VERGO",
     ownerSubtitle: "Bridging architectural brutalism with elevated Sri Lankan textile craftsmanship.",
-    ownerName: "FOUNDER & ATELIER LEAD",
+    ownerName: "Ranul Jayathilake",
     ownerRole: "Creative Director & Founder",
     ownerBio:
       "Founded in Colombo, VERGO began as an experimental textile studio committed to producing uncompromising streetwear. Rejecting fast production and generic blanks, our creative direction prioritizes heavy draping, archival durability, and transparent small-batch production that elevates South Asian streetwear on the global stage.",
     ownerQuote:
       '"Streetwear is not merely graphic application on fabric; it is structural architecture you live inside. We build garments that outlive seasonal hype."',
     ownerImageUrl:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80",
+      "https://res.cloudinary.com/aql7sojg/image/upload/v1794637065/WhatsApp_Image_2026-11-14_at_11.38.43_AM_d9knes.jpg",
   });
 
   useEffect(() => {
