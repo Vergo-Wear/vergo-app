@@ -31,11 +31,11 @@ export default function OwnerStory() {
               ownerBadge: json.ownerBadge || prev.ownerBadge,
               ownerTitle: json.ownerTitle || prev.ownerTitle,
               ownerSubtitle: json.ownerSubtitle || prev.ownerSubtitle,
-              ownerName: json.ownerName || prev.ownerName,
+              ownerName: prev.ownerName,
               ownerRole: json.ownerRole || prev.ownerRole,
               ownerBio: json.ownerBio || prev.ownerBio,
               ownerQuote: json.ownerQuote || prev.ownerQuote,
-              ownerImageUrl: json.ownerImageUrl || prev.ownerImageUrl,
+              ownerImageUrl: prev.ownerImageUrl,
             }));
           }
         })
