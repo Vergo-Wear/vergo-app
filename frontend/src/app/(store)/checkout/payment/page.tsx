@@ -303,17 +303,8 @@ export default function PaymentPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const handleBeforeUnload = () => {
-        sessionStorage.setItem("vergo_checkout_is_reloading", "true");
-      };
-      window.addEventListener("beforeunload", handleBeforeUnload);
-
-      const isReloading = sessionStorage.getItem("vergo_checkout_is_reloading") === "true";
-      if (isReloading) {
-        sessionStorage.removeItem("vergo_checkout_is_reloading");
-        router.replace("/cart");
-        return;
-      }
+      // Ensure any obsolete reload flags from previous sessions are wiped
+      sessionStorage.removeItem("vergo_checkout_is_reloading");
 
       const forcedGuest =
         localStorage.getItem("vergo_checkout_as_guest") === "true";
