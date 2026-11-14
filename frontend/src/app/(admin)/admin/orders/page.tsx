@@ -283,8 +283,8 @@ export default function OrdersDashboard() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
-  const loadOrders = useCallback(async () => {
-    setIsLoading(true);
+  const loadOrders = useCallback(async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
     try {
       const [ordersResponse, checkoutsResponse] = await Promise.all([
         authenticatedFetch("/orders/manage"),
@@ -292,8 +292,8 @@ export default function OrdersDashboard() {
       ]);
 
       if (!ordersResponse || !checkoutsResponse) {
-        addNotification("Session expired or connection failed loading orders.", "error");
-        setIsLoading(false);
+        if (!isSilent) addNotification("Session expired or connection failed loading orders.", "error");
+        if (!isSilent) setIsLoading(false);
         return;
       }
 
@@ -324,14 +324,16 @@ export default function OrdersDashboard() {
           : null
       );
     } catch (error) {
-      addNotification(
-        error instanceof Error
-          ? error.message
-          : "Unable to load orders from the database.",
-        "error"
-      );
+      if (!isSilent) {
+        addNotification(
+          error instanceof Error
+            ? error.message
+            : "Unable to load orders from the database.",
+          "error"
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   }, [addNotification]);
 
@@ -339,30 +341,30 @@ export default function OrdersDashboard() {
     // 1. Initial load
     void loadOrders();
 
-    // 2. Background polling every 15s when tab is visible
+    // 2. Background polling every 15s when tab is visible (silent update, no screen flicker)
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        void loadOrders();
+        void loadOrders(true);
       }
     }, 15000);
 
-    // 3. Instant refresh on focus / visibility
+    // 3. Instant refresh on focus / visibility (silent update)
     const handleVisibilityOrFocus = () => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        void loadOrders();
+        void loadOrders(true);
       }
     };
     window.addEventListener("focus", handleVisibilityOrFocus);
     window.addEventListener("visibilitychange", handleVisibilityOrFocus);
 
-    // 4. Cross-component updates
+    // 4. Cross-component updates (silent update)
     const handleDataUpdate = () => {
-      void loadOrders();
+      void loadOrders(true);
     };
     window.addEventListener("vergo_admin_data_updated", handleDataUpdate);
     window.addEventListener("vergo_notifications_updated", handleDataUpdate);
 
-    // 5. Supabase Realtime channel
+    // 5. Supabase Realtime channel (silent update)
     let channel: any = null;
     const client = createSupabaseClient();
     if (client) {
@@ -370,10 +372,10 @@ export default function OrdersDashboard() {
         channel = client
           .channel("vergo-admin-orders-realtime")
           .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
-            void loadOrders();
+            void loadOrders(true);
           })
           .on("postgres_changes", { event: "*", schema: "public", table: "pending_checkouts" }, () => {
-            void loadOrders();
+            void loadOrders(true);
           })
           .subscribe();
       } catch {
@@ -860,11 +862,11 @@ export default function OrdersDashboard() {
       {/* MAIN TABLE */}
       <div className="bg-[#09090b] rounded-xl border border-[#27272a] overflow-hidden shadow-lg">
         <div className="overflow-x-auto custom-scrollbar">
-          {isLoading ? (
+          {isLoading && orders.length === 0 ? (
             <div className="py-24 flex flex-col items-center justify-center text-center">
               <div className="w-8 h-8 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4" />
-              <p className="text-xs text-emerald-400 uppercase tracking-widest font-mono">
-                Syncing database orders...
+              <p className="text-xs text-[#8e8e93] uppercase tracking-widest font-mono">
+                Loading orders...
               </p>
             </div>
           ) : filteredOrders.length === 0 ? (
