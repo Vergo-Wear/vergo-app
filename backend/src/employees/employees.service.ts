@@ -37,10 +37,11 @@ export class EmployeesService {
   ) {
     const email = dto.email.trim().toLowerCase();
 
-    // Normalize phone: strip leading 0, prepend +94 (matches AuthService rules)
-    const resolvedPhone = dto.phone.trim().startsWith('+94')
-      ? dto.phone.trim()
-      : '+94' + dto.phone.trim().replace(/^0/, '');
+    // Normalize phone: strip leading 0 and any spaces/dashes, prepend +94 (matches AuthService rules)
+    const cleanedPhone = dto.phone.replace(/[\s-]/g, '').trim();
+    const resolvedPhone = cleanedPhone.startsWith('+94')
+      ? cleanedPhone
+      : '+94' + cleanedPhone.replace(/^0/, '');
 
     // 1. Email uniqueness check against existing Supabase Auth users
     const existingAuthUser = await this.prisma.authUser.findFirst({
