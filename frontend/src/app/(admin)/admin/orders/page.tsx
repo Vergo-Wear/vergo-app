@@ -26,6 +26,8 @@ interface OrderShippingDetails {
 interface PaymentProof {
   status: string;
   receipt_url?: string;
+  file_name?: string;
+  mime_type?: string;
   uploaded_at?: string;
   expires_at?: string;
   rejected_reason?: string;
@@ -87,10 +89,56 @@ interface ApiRecord {
 
 interface ApiProof {
   receiptUrl?: string | null;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
   uploadedAt?: string | null;
   expiresAt?: string | null;
   status?: string;
   adminNotes?: string | null;
+}
+
+function getReceiptDisplayUrls(
+  receiptUrl?: string | null,
+  fileName?: string | null,
+  mimeType?: string | null
+) {
+  if (!receiptUrl) {
+    return { isPdf: false, previewUrl: "", rawUrl: "" };
+  }
+
+  const isPdf =
+    mimeType === "application/pdf" ||
+    Boolean(fileName && /\.pdf$/i.test(fileName)) ||
+    /\.pdf(\?.*)?$/i.test(receiptUrl) ||
+    receiptUrl.toLowerCase().includes("format=pdf");
+
+  let previewUrl = receiptUrl;
+
+  if (isPdf && receiptUrl.includes("cloudinary.com")) {
+    // 1. Ensure asset path uses /image/upload/ for dynamic image transformations
+    let transformed = receiptUrl.replace(/\/raw\/upload\//, "/image/upload/");
+
+    // 2. Rewrite .pdf extension to .jpg (Cloudinary rasterizes page 1 as an image)
+    if (/\.pdf(\?.*)?$/i.test(transformed)) {
+      transformed = transformed.replace(/\.pdf(\?.*)?$/i, ".jpg$1");
+    }
+
+    // 3. Inject page 1 rasterization and auto-quality transformation if not present
+    if (
+      transformed.includes("/image/upload/") &&
+      !transformed.includes("/pg_1")
+    ) {
+      transformed = transformed.replace(
+        "/image/upload/",
+        "/image/upload/pg_1,f_jpg,q_auto/"
+      );
+    }
+
+    previewUrl = transformed;
+  }
+
+  return { isPdf, previewUrl, rawUrl: receiptUrl };
 }
 
 interface ApiItem {
@@ -156,8 +204,19 @@ const mapApiRecord = (record: ApiRecord, pendingCheckout: boolean): Order => {
               : proof?.status || "Approved",
             receipt_url:
               proof?.receiptUrl ||
-              (proof as any)?.fileUrl ||
+              proof?.fileUrl ||
+              (proof as any)?.file_url ||
               (record as any).receiptUrl ||
+              undefined,
+            file_name:
+              proof?.fileName ||
+              (proof as any)?.file_name ||
+              (record as any).fileName ||
+              undefined,
+            mime_type:
+              proof?.mimeType ||
+              (proof as any)?.mime_type ||
+              (record as any).mimeType ||
               undefined,
             uploaded_at:
               proof?.uploadedAt ||
@@ -275,6 +334,13 @@ export default function OrdersDashboard() {
   // Modals & Drawers State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(null);
+  const [receiptImageError, setReceiptImageError] = useState(false);
+  const [receiptViewMode, setReceiptViewMode] = useState<"image" | "pdf">("image");
+
+  useEffect(() => {
+    setReceiptImageError(false);
+    setReceiptViewMode("image");
+  }, [receiptModalOrder?.order_id]);
   const [customerDrawerOrder, setCustomerDrawerOrder] = useState<Order | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
     action: "confirmCOD" | "rejectCOD" | "approvePayment" | "rejectPayment";
@@ -1506,58 +1572,145 @@ export default function OrdersDashboard() {
               </div>
             </div>
 
-            {/* Image Preview Window */}
+            {/* Image / PDF Preview Window */}
             <div className="p-6 pt-3">
-              <div className="relative bg-[#060608] border border-white/10 rounded-xl min-h-[280px] max-h-[460px] flex items-center justify-center p-3 overflow-hidden group">
-                {receiptModalOrder.payment_proofs?.receipt_url ? (
-                  <>
-                    <img
-                      src={receiptModalOrder.payment_proofs.receipt_url}
-                      alt={`Payment receipt for order ${receiptModalOrder.order_id}`}
-                      className="max-h-[420px] w-auto h-auto max-w-full object-contain rounded-lg shadow-lg"
-                      onError={(e) => {
-                        // Fallback if image fails to render inline
-                        const target = e.currentTarget;
-                        target.style.display = "none";
-                        const parent = target.parentElement;
-                        if (parent && !parent.querySelector(".fallback-link")) {
-                          const fallback = document.createElement("div");
-                          fallback.className = "fallback-link text-center p-6 space-y-3";
+              {(() => {
+                const receiptInfo = getReceiptDisplayUrls(
+                  receiptModalOrder.payment_proofs?.receipt_url,
+                  receiptModalOrder.payment_proofs?.file_name,
+                  receiptModalOrder.payment_proofs?.mime_type
+                );
 
-                          const desc = document.createElement("p");
-                          desc.className = "text-zinc-400 text-xs";
-                          desc.textContent = "Receipt file format cannot be displayed inline.";
+                if (!receiptInfo.rawUrl) {
+                  return (
+                    <div className="relative bg-[#060608] border border-white/10 rounded-xl min-h-[280px] max-h-[460px] flex items-center justify-center p-3 overflow-hidden">
+                      <div className="text-center p-8 text-zinc-500 space-y-2">
+                        <p className="text-sm font-medium">No receipt file uploaded</p>
+                        <p className="text-xs text-zinc-600">The customer has not attached a receipt file yet.</p>
+                      </div>
+                    </div>
+                  );
+                }
 
-                          const link = document.createElement("a");
-                          const receiptUrl = receiptModalOrder.payment_proofs?.receipt_url || "#";
-                          link.href = receiptUrl;
-                          link.target = "_blank";
-                          link.rel = "noopener noreferrer";
-                          link.className = "inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold hover:bg-emerald-500/30 transition-colors";
-                          link.textContent = "Open receipt file ↗";
+                return (
+                  <div className="space-y-2.5">
+                    {/* Toolbar for PDFs */}
+                    {receiptInfo.isPdf && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 bg-[#141418] border border-white/10 px-3.5 py-2 rounded-xl text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold uppercase tracking-wider">
+                            PDF Document
+                          </span>
+                          <span className="text-[11px] text-zinc-400 font-mono truncate max-w-[200px] sm:max-w-xs">
+                            {receiptModalOrder.payment_proofs?.file_name || "Payment Receipt PDF"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-[#09090b] p-1 rounded-lg border border-white/5">
+                          <button
+                            type="button"
+                            onClick={() => setReceiptViewMode("image")}
+                            className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                              receiptViewMode === "image"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : "text-zinc-400 hover:text-white"
+                            }`}
+                          >
+                            Image Preview
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReceiptViewMode("pdf")}
+                            className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                              receiptViewMode === "pdf"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : "text-zinc-400 hover:text-white"
+                            }`}
+                          >
+                            PDF View
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
-                          fallback.appendChild(desc);
-                          fallback.appendChild(link);
-                          parent.appendChild(fallback);
-                        }
-                      }}
-                    />
-                    <a
-                      href={receiptModalOrder.payment_proofs.receipt_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="absolute top-3 right-3 opacity-90 group-hover:opacity-100 bg-black/75 hover:bg-black text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all shadow-md backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
-                    >
-                      Open Full Size ↗
-                    </a>
-                  </>
-                ) : (
-                  <div className="text-center p-8 text-zinc-500 space-y-2">
-                    <p className="text-sm font-medium">No receipt image uploaded</p>
-                    <p className="text-xs text-zinc-600">The customer has not attached a receipt file yet.</p>
+                    <div className="relative bg-[#060608] border border-white/10 rounded-xl min-h-[300px] max-h-[480px] flex items-center justify-center p-3 overflow-hidden group">
+                      {/* Top Action Buttons */}
+                      <div className="absolute top-3 right-3 flex items-center gap-2 z-10 opacity-90 group-hover:opacity-100 transition-opacity">
+                        {receiptInfo.isPdf && (
+                          <a
+                            href={receiptInfo.rawUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-black/80 hover:bg-black text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all shadow-md backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
+                            title="Open original PDF directly in a new tab"
+                          >
+                            Original PDF ↗
+                          </a>
+                        )}
+                        <a
+                          href={receiptInfo.previewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-black/80 hover:bg-black text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all shadow-md backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
+                          title="Open high-resolution converted preview in a new tab"
+                        >
+                          {receiptInfo.isPdf ? "Full Image Preview ↗" : "Open Full Size ↗"}
+                        </a>
+                      </div>
+
+                      {receiptInfo.isPdf && receiptViewMode === "pdf" ? (
+                        <div className="w-full h-[440px] flex flex-col">
+                          <iframe
+                            src={receiptInfo.rawUrl}
+                            className="w-full flex-1 rounded-lg border-0 bg-white"
+                            title="Payment Receipt PDF Document"
+                          />
+                        </div>
+                      ) : receiptImageError ? (
+                        <div className="text-center p-8 space-y-3 max-w-sm">
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-sm">
+                            PDF
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-zinc-200">
+                              Receipt Document Attached
+                            </p>
+                            <p className="text-xs text-zinc-400 mt-1">
+                              Inline preview is unavailable. You can open the receipt directly using the links below.
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-center gap-2 pt-2">
+                            <a
+                              href={receiptInfo.previewUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold hover:bg-emerald-500/30 transition-colors"
+                            >
+                              Open Preview Image ↗
+                            </a>
+                            {receiptInfo.isPdf && (
+                              <a
+                                href={receiptInfo.rawUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-bold hover:bg-rose-500/30 transition-colors"
+                              >
+                                Open PDF ↗
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <img
+                          src={receiptInfo.previewUrl}
+                          alt={`Payment receipt for order ${receiptModalOrder.order_id}`}
+                          className="max-h-[440px] w-auto h-auto max-w-full object-contain rounded-lg shadow-lg"
+                          onError={() => setReceiptImageError(true)}
+                        />
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </div>
 
             {/* Actions Footer */}
