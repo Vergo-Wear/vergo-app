@@ -23,14 +23,28 @@ interface ParcelAnalyticsGraphProps {
   showCharts?: boolean;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+// Helper to format date in local YYYY-MM-DD
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export default function ParcelAnalyticsGraph({
   showMetrics = true,
   showCharts = true,
 }: ParcelAnalyticsGraphProps) {
-  const [fromDate, setFromDate] = useState("2026-08-01");
-  const [toDate, setToDate] = useState("2026-08-31");
+  // Always default: Period From = 1st day of current month, Period To = Today
+  const [fromDate, setFromDate] = useState(() => {
+    const now = new Date();
+    return formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  });
+  const [toDate, setToDate] = useState(() => {
+    return formatLocalDate(new Date());
+  });
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
