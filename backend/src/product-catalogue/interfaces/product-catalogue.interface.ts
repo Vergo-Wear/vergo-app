@@ -17,6 +17,8 @@ export interface ProductImage {
 export interface VariantInventory {
   quantity: number;
   reserved_quantity: number;
+  warehouse_quantity?: number;
+  warehouse_reserved?: number;
 }
 
 export interface ProductVariantSummary {
@@ -25,10 +27,14 @@ export interface ProductVariantSummary {
   sku: string;
   size: string;
   colour: string;
+  color?: string;
   color_hex?: string | null;
   price: number;
   inventory: VariantInventory;
   images: ProductImage[];
+  warehouseStock?: number;
+  stockQuantity?: number;
+  availableStock?: number;
 }
 
 export interface ProductCatalogueItem {
