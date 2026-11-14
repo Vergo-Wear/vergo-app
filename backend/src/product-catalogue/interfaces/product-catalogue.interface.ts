@@ -25,6 +25,7 @@ export interface ProductVariantSummary {
   sku: string;
   size: string;
   colour: string;
+  color_hex?: string | null;
   price: number;
   inventory: VariantInventory;
   images: ProductImage[];

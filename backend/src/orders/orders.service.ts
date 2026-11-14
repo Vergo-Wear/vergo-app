@@ -722,7 +722,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       include: this.checkoutInclude,
     });
     if (!created) throw new NotFoundException('Pending checkout not found.');
-    await this.notifications.notifyOrderCreated(checkoutId);
+    if (!isBank) {
+      await this.notifications.notifyOrderCreated(checkoutId);
+    }
     return this.presentCheckout(created);
   }
 
@@ -919,6 +921,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       include: this.checkoutInclude,
     });
     if (!updated) throw new NotFoundException('Pending checkout not found.');
+    await this.notifications.notifyOrderCreated(checkoutId);
     return {
       checkout: this.presentCheckout(updated),
       replacedStoragePublicId,
@@ -1512,10 +1515,35 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return reviewed;
   }
 
-  /** Removes expired holds, marks their checkout expired, and clears DB carts. */
+  /** Removes expired holds, deletes expired checkouts and their details/items, and clears DB carts. */
   async expireOverduePaymentProofs() {
     const now = new Date();
     const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Clean up any existing checkouts already marked as 'Expired' across all related tables and pending_checkout
+      const alreadyExpired = await tx.pendingCheckout.findMany({
+        where: { status: 'Expired' },
+        select: { checkoutId: true },
+      });
+      if (alreadyExpired.length > 0) {
+        const expiredIds = alreadyExpired.map((c) => c.checkoutId);
+        await tx.pendingCheckoutItem.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+        await tx.pendingCheckoutCustomerDetails.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+        await tx.pendingCheckoutShippingDetails.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+        await tx.paymentProof.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+        await tx.pendingCheckout.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+      }
+
+      // 2. Find pending checkouts whose payment reservation has passed expiration
       const candidates = await tx.pendingCheckout.findMany({
         where: { status: 'Awaiting Payment', expiresAt: { lte: now } },
         select: { checkoutId: true, customerId: true },
@@ -1528,24 +1556,37 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             checkout.customerId,
           );
         }
-        const transitioned = await tx.pendingCheckout.updateMany({
+        // Release the reserved stock back to inventory first
+        await this.stockReservations.releasePendingCheckout(
+          tx,
+          checkout.checkoutId,
+        );
+
+        // Delete all child relations
+        await tx.pendingCheckoutItem.deleteMany({
+          where: { checkoutId: checkout.checkoutId },
+        });
+        await tx.pendingCheckoutCustomerDetails.deleteMany({
+          where: { checkoutId: checkout.checkoutId },
+        });
+        await tx.pendingCheckoutShippingDetails.deleteMany({
+          where: { checkoutId: checkout.checkoutId },
+        });
+        await tx.paymentProof.deleteMany({
+          where: { checkoutId: checkout.checkoutId },
+        });
+
+        // Delete the pending checkout record itself
+        const deleted = await tx.pendingCheckout.deleteMany({
           where: {
             checkoutId: checkout.checkoutId,
             status: 'Awaiting Payment',
             expiresAt: { lte: now },
           },
-          data: { status: 'Expired' },
         });
-        if (transitioned.count !== 1) continue;
+        if (deleted.count !== 1) continue;
         checkouts += 1;
-        await tx.paymentProof.updateMany({
-          where: { checkoutId: checkout.checkoutId },
-          data: { status: 'Expired' },
-        });
-        await this.stockReservations.releasePendingCheckout(
-          tx,
-          checkout.checkoutId,
-        );
+
         if (checkout.customerId) {
           const cart = await tx.cart.findUnique({
             where: { customerId: checkout.customerId },
@@ -1559,7 +1600,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }, { timeout: 60000, maxWait: 10000 });
     if (result.expired > 0 || result.checkouts > 0) {
       this.logger.log(
-        `Expired ${result.checkouts} checkout(s) and deleted ${result.expired} orphaned hold(s).`,
+        `Expired & deleted ${result.checkouts} checkout(s) and deleted ${result.expired} orphaned hold(s).`,
       );
     }
     return result;

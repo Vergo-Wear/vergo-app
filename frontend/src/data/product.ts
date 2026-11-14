@@ -3,9 +3,16 @@ export interface ProductVariant {
   sku: string;
   size: string;
   color: string;
+  colorHex?: string | null;
   price: number;
   availableQuantity: number;
   images?: string[];
+}
+
+export interface ColorOption {
+  name: string;
+  hexCode?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface Product {
@@ -24,6 +31,7 @@ export interface Product {
   images?: string[];
   sizes?: string[];
   colors?: string[];
+  colorOptions?: ColorOption[];
   variants: ProductVariant[];
 }
 

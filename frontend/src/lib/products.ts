@@ -6,6 +6,7 @@ interface CatalogueVariant {
   sku: string;
   size: string;
   colour: string;
+  color_hex?: string | null;
   price: number;
   inventory: { quantity: number; reserved_quantity: number };
   images: Array<{ image_id: string; url: string }>;
@@ -61,6 +62,7 @@ export function mapCatalogueItemToProduct(item: CatalogueProduct): Product {
       sku: v.sku,
       size: v.size,
       color: v.colour,
+      colorHex: v.color_hex || null,
       price: v.price,
       availableQuantity:
         item.status === "hold"
@@ -79,6 +81,20 @@ export function mapCatalogueItemToProduct(item: CatalogueProduct): Product {
   const isSoldOut = Boolean(item.is_sold_out);
   const isLive = item.status === "live";
 
+  // Build unique color options with their hex codes
+  const colorMap = new Map<string, string | null>();
+  for (const v of allVariants) {
+    if (!colorMap.has(v.color)) {
+      colorMap.set(v.color, v.colorHex || null);
+    } else if (!colorMap.get(v.color) && v.colorHex) {
+      colorMap.set(v.color, v.colorHex);
+    }
+  }
+  const colorOptions = Array.from(colorMap.entries()).map(([name, hexCode]) => ({
+    name,
+    hexCode,
+  }));
+
   return {
     id: item.product_id,
     name: item.name,
@@ -94,6 +110,7 @@ export function mapCatalogueItemToProduct(item: CatalogueProduct): Product {
     images: allImages.length > 0 ? allImages : ["/images/wlogo.png"],
     sizes: sortSizes([...new Set(allVariants.map((v) => v.size))]),
     colors: [...new Set(allVariants.map((v) => v.color))],
+    colorOptions,
     variants: allVariants,
   };
 }

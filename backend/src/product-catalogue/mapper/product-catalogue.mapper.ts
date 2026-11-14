@@ -64,6 +64,7 @@ function mapVariant(
     sku: variant.sku,
     size: variant.size?.name || 'Standard',
     colour: variant.color?.name || 'Standard',
+    color_hex: variant.color?.hexCode || null,
     price,
     inventory: {
       quantity,

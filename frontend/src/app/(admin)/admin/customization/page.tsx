@@ -12,6 +12,18 @@ interface StandardFeature {
   description: string;
 }
 
+interface FeaturedFeedback {
+  id?: string;
+  name: string;
+  location?: string;
+  verified?: boolean;
+  garment: string;
+  rating: number;
+  date?: string;
+  comment: string;
+  showOnHome?: boolean;
+}
+
 interface CustomizationSettings {
   heroBadge: string;
   heroTitle: string;
@@ -51,6 +63,7 @@ interface CustomizationSettings {
   standardTitle?: string;
   standardSubtitle?: string;
   standardFeatures?: StandardFeature[];
+  featuredFeedbacks?: FeaturedFeedback[];
   feedbackBadge?: string;
   feedbackTitle?: string;
   feedbackSubtitle?: string;
@@ -78,6 +91,7 @@ export default function CustomizationPage() {
 
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [activeSection, setActiveSection] = useState<'home' | 'collection' | 'about' | 'general'>('home');
   const [highlightTab, setHighlightTab] = useState<"all" | "selected" | "unselected">("all");
 
   useEffect(() => {
@@ -277,16 +291,89 @@ export default function CustomizationPage() {
   const isBrandDescriptionInvalid = settings.brandStatementDescription.length > 1 && settings.brandStatementDescription.trim().length < 5;
 
   return (
-    <div className="space-y-8 select-none text-xs">
-      <div>
-        <h2 className="text-sm font-bold tracking-widest text-white uppercase">WEBSITE CUSTOMIZATION</h2>
-        <p className="text-[10px] text-[#8e8e93] mt-1 uppercase font-semibold">Manage landing page layout headers, titles, newsletter forms and philosophy statements</p>
+    <div className="space-y-6 select-none text-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/5">
+        <div>
+          <h2 className="text-sm font-bold tracking-widest text-white uppercase">WEBSITE CUSTOMIZATION</h2>
+          <p className="text-[10px] text-[#8e8e93] mt-1 uppercase font-semibold">Organized by section for fast and intuitive storefront management</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving || isHeroTitleInvalid || isHeroSubtitleInvalid || isAboutTitleInvalid || isBrandDescriptionInvalid}
+          className="self-start sm:self-auto bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] disabled:bg-white/20 disabled:text-[#8e8e93] disabled:cursor-not-allowed font-bold tracking-widest px-5 py-2 rounded text-xs transition-all uppercase cursor-pointer shadow-sm"
+        >
+          {isSaving ? "PUBLISHING..." : "PUBLISH CHANGES"}
+        </button>
       </div>
 
+      {/* Clear Category Tabs */}
+      <div className="flex items-center gap-1.5 p-1 bg-[#0a0a0a] border border-white/10 rounded-xl overflow-x-auto scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setActiveSection('home')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition-all whitespace-nowrap cursor-pointer ${
+            activeSection === 'home'
+              ? 'bg-[#1f1f23] text-white border border-white/15 shadow-sm'
+              : 'text-[#8e8e93] hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${activeSection === 'home' ? 'bg-emerald-400' : 'bg-[#555]'}`} />
+          HOMEPAGE
+          <span className="text-[9px] font-normal px-1.5 py-0.5 rounded bg-white/5 text-[#aaa]">Hero, Feedback, Longevity, Drops</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSection('collection')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition-all whitespace-nowrap cursor-pointer ${
+            activeSection === 'collection'
+              ? 'bg-[#1f1f23] text-white border border-white/15 shadow-sm'
+              : 'text-[#8e8e93] hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${activeSection === 'collection' ? 'bg-emerald-400' : 'bg-[#555]'}`} />
+          COLLECTION / CATALOGUE
+          <span className="text-[9px] font-normal px-1.5 py-0.5 rounded bg-white/5 text-[#aaa]">Titles & Badges</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSection('about')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition-all whitespace-nowrap cursor-pointer ${
+            activeSection === 'about'
+              ? 'bg-[#1f1f23] text-white border border-white/15 shadow-sm'
+              : 'text-[#8e8e93] hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${activeSection === 'about' ? 'bg-emerald-400' : 'bg-[#555]'}`} />
+          ABOUT US PAGE
+          <span className="text-[9px] font-normal px-1.5 py-0.5 rounded bg-white/5 text-[#aaa]">Origins & Direction</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSection('general')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold tracking-wider uppercase transition-all whitespace-nowrap cursor-pointer ${
+            activeSection === 'general'
+              ? 'bg-[#1f1f23] text-white border border-white/15 shadow-sm'
+              : 'text-[#8e8e93] hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${activeSection === 'general' ? 'bg-emerald-400' : 'bg-[#555]'}`} />
+          GENERAL / CHANNELS
+          <span className="text-[9px] font-normal px-1.5 py-0.5 rounded bg-white/5 text-[#aaa]">Bank, WhatsApp, Newsletter</span>
+        </button>
+      </div>
+
+
       <form onSubmit={handleSave} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Landing Page Settings */}
+        {/* TAB 1: HOMEPAGE */}
+        {activeSection === "home" && (
           <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-6">
             <div className="admin-card p-6">
               <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
                 <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">HERO BANNER CONFIGURATION</h3>
@@ -343,7 +430,531 @@ export default function CustomizationPage() {
               </div>
             </div>
 
-            {/* Newly Released Section Header & Product Picker */}
+            <div className="admin-card p-6">
+              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)] flex items-center justify-between">
+                <div>
+                  <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">THE VERGO STANDARD (LONGEVITY SECTION)</h3>
+                  <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">Homepage craftsmanship showcase & 4 feature pillars</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Badge</label>
+                  <input
+                    type="text"
+                    value={settings.standardBadge ?? "THE VERGO STANDARD"}
+                    onChange={(e) => setSettings({ ...settings, standardBadge: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. THE VERGO STANDARD"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Title</label>
+                  <input
+                    type="text"
+                    value={settings.standardTitle ?? "ENGINEERED FOR LONGEVITY."}
+                    onChange={(e) => setSettings({ ...settings, standardTitle: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white font-semibold"
+                    placeholder="e.g. ENGINEERED FOR LONGEVITY."
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Subtitle</label>
+                  <textarea
+                    rows={2}
+                    value={settings.standardSubtitle ?? "Heavyweight construction, reinforced tension points, and authentic materials."}
+                    onChange={(e) => setSettings({ ...settings, standardSubtitle: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="Description text under section heading"
+                  />
+                </div>
+
+                {/* 4 Feature Pillars Customization */}
+                <div className="pt-2">
+                  <span className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-3">Feature Pillars (Cards 01 - 04)</span>
+                  <div className="space-y-3">
+                    {(settings.standardFeatures || [
+                      { number: "01", tag: "CUSTOM DENSE WEAVE", title: "280 GSM Luxury Combed Cotton", description: "Structured heavyweight drape that holds shape wash after wash." },
+                      { number: "02", tag: "ARCHIVAL TAILORING", title: "Reinforced Micro-Rib Collar", description: "Double-needle neckband binding for zero collar stretching." },
+                      { number: "03", tag: "DECENTRALIZED PROOF", title: "100% Verified Authenticity", description: "Cryptographic ledger verification on every individual SKU." },
+                      { number: "04", tag: "CITYPAK LOGISTICS", title: "Express Nationwide Dispatch", description: "24–48h courier delivery via Citypak with live SMS tracking." },
+                    ]).map((feat, index) => (
+                      <div key={index} className="p-3 bg-[#0d0d0d] border border-[rgba(255,255,255,0.06)] rounded space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-emerald-400 tracking-wider">PILLAR {feat.number || `0${index + 1}`}</span>
+                          <input
+                            type="text"
+                            value={feat.number}
+                            onChange={(e) => {
+                              const updated = [...(settings.standardFeatures || [])];
+                              if (!updated[index]) updated[index] = { ...feat };
+                              updated[index] = { ...updated[index], number: e.target.value };
+                              setSettings({ ...settings, standardFeatures: updated });
+                            }}
+                            className="w-16 bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2 py-0.5 text-center text-xs text-white"
+                            placeholder="01"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-0.5">Tag / Category</label>
+                            <input
+                              type="text"
+                              value={feat.tag}
+                              onChange={(e) => {
+                                const updated = [...(settings.standardFeatures || [])];
+                                if (!updated[index]) updated[index] = { ...feat };
+                                updated[index] = { ...updated[index], tag: e.target.value };
+                                setSettings({ ...settings, standardFeatures: updated });
+                              }}
+                              className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2 py-1 text-xs text-white"
+                              placeholder="e.g. CUSTOM DENSE WEAVE"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-0.5">Feature Title</label>
+                            <input
+                              type="text"
+                              value={feat.title}
+                              onChange={(e) => {
+                                const updated = [...(settings.standardFeatures || [])];
+                                if (!updated[index]) updated[index] = { ...feat };
+                                updated[index] = { ...updated[index], title: e.target.value };
+                                setSettings({ ...settings, standardFeatures: updated });
+                              }}
+                              className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2 py-1 text-xs text-white font-medium"
+                              placeholder="e.g. 280 GSM Luxury Combed Cotton"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-0.5">Description</label>
+                          <textarea
+                            rows={2}
+                            value={feat.description}
+                            onChange={(e) => {
+                              const updated = [...(settings.standardFeatures || [])];
+                              if (!updated[index]) updated[index] = { ...feat };
+                              updated[index] = { ...updated[index], description: e.target.value };
+                              setSettings({ ...settings, standardFeatures: updated });
+                            }}
+                            className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2 py-1 text-xs text-white"
+                            placeholder="Structured heavyweight drape that holds shape..."
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+              </div>
+              <div className="space-y-6">
+            <div className="admin-card p-6">
+              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
+                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">COMMUNITY FEEDBACK HEADER</h3>
+                <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">Headline and description for "Tested on the Streets" section</p>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Eyebrow Badge</label>
+                  <input
+                    type="text"
+                    value={settings.feedbackBadge ?? "VERIFIED COMMUNITY"}
+                    onChange={(e) => setSettings({ ...settings, feedbackBadge: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. VERIFIED COMMUNITY"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Title</label>
+                  <input
+                    type="text"
+                    value={settings.feedbackTitle ?? "TESTED ON THE STREETS."}
+                    onChange={(e) => setSettings({ ...settings, feedbackTitle: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white font-semibold"
+                    placeholder="e.g. TESTED ON THE STREETS."
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Subtitle</label>
+                  <input
+                    type="text"
+                    value={settings.feedbackSubtitle ?? "Authentic feedback from verified collectors across the island."}
+                    onChange={(e) => setSettings({ ...settings, feedbackSubtitle: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. Authentic feedback from verified collectors across the island."
+                  />
+                </div>
+              </div>
+            </div>
+            {/* Featured Customer Feedbacks (3 Cards on Homepage) */}
+            <div className="admin-card p-6">
+              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)] flex items-center justify-between">
+                <div>
+                  <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">HOMEPAGE CUSTOMER FEEDBACKS</h3>
+                  <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">Customise the sample customer feedback cards displayed on the storefront</p>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[rgba(16,185,129,0.1)] text-emerald-400 border border-[rgba(16,185,129,0.2)]">
+                  3 ACTIVE CARDS
+                </span>
+              </div>
+
+              <div className="space-y-6">
+                {(
+                  settings.featuredFeedbacks && settings.featuredFeedbacks.length > 0
+                    ? settings.featuredFeedbacks
+                    : [
+                        {
+                          id: "fb-1",
+                          name: "Pamuda U.",
+                          location: "Colombo",
+                          verified: true,
+                          garment: "Vergo Heavyweight Tee (Jet Black - Size L)",
+                          rating: 5,
+                          date: "Verified Drop",
+                          comment:
+                            "The drape on this 280 GSM tee is genuinely unmatched in Sri Lanka. It holds its boxy structure throughout the day without clinging or stretching at the collar. Best streetwear purchase this year.",
+                          showOnHome: true,
+                        },
+                        {
+                          id: "fb-2",
+                          name: "Aakash R.",
+                          location: "Kandy",
+                          verified: true,
+                          garment: "Vergo Heavyweight Tee (Crimson Red - Size XL)",
+                          rating: 5,
+                          date: "Verified Drop",
+                          comment:
+                            "Delivery via Citypak arrived in less than 36 hours. The packaging and unboxing feel like a luxury boutique drop. The high-density branding and heavy cotton weight are 10/10.",
+                          showOnHome: true,
+                        },
+                        {
+                          id: "fb-3",
+                          name: "Dinuka M.",
+                          location: "Galle",
+                          verified: true,
+                          garment: "Vergo Archival Tee (Desert Sage - Size M)",
+                          rating: 5,
+                          date: "Verified Drop",
+                          comment:
+                            "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
+                          showOnHome: true,
+                        },
+                      ]
+                ).map((feedback, idx) => (
+                  <div
+                    key={feedback.id || idx}
+                    className="p-4 bg-[#0d0d0d] border border-[rgba(255,255,255,0.06)] rounded space-y-3"
+                  >
+                    <div className="flex items-center justify-between pb-2 border-b border-[rgba(255,255,255,0.04)]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-emerald-400 tracking-wider">
+                          FEEDBACK #{idx + 1}
+                        </span>
+                        <span className="text-[10px] text-[#8e8e93]">
+                          ({feedback.name || "Customer"})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={feedback.showOnHome !== false}
+                            onChange={(e) => {
+                              const list = [
+                                ...(settings.featuredFeedbacks && settings.featuredFeedbacks.length > 0
+                                  ? settings.featuredFeedbacks
+                                  : [
+                                      {
+                                        id: "fb-1",
+                                        name: "Pamuda U.",
+                                        location: "Colombo",
+                                        verified: true,
+                                        garment: "Vergo Heavyweight Tee (Jet Black - Size L)",
+                                        rating: 5,
+                                        date: "Verified Drop",
+                                        comment:
+                                          "The drape on this 280 GSM tee is genuinely unmatched in Sri Lanka. It holds its boxy structure throughout the day without clinging or stretching at the collar. Best streetwear purchase this year.",
+                                        showOnHome: true,
+                                      },
+                                      {
+                                        id: "fb-2",
+                                        name: "Aakash R.",
+                                        location: "Kandy",
+                                        verified: true,
+                                        garment: "Vergo Heavyweight Tee (Crimson Red - Size XL)",
+                                        rating: 5,
+                                        date: "Verified Drop",
+                                        comment:
+                                          "Delivery via Citypak arrived in less than 36 hours. The packaging and unboxing feel like a luxury boutique drop. The high-density branding and heavy cotton weight are 10/10.",
+                                        showOnHome: true,
+                                      },
+                                      {
+                                        id: "fb-3",
+                                        name: "Dinuka M.",
+                                        location: "Galle",
+                                        verified: true,
+                                        garment: "Vergo Archival Tee (Desert Sage - Size M)",
+                                        rating: 5,
+                                        date: "Verified Drop",
+                                        comment:
+                                          "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
+                                        showOnHome: true,
+                                      },
+                                    ]),
+                              ];
+                              if (!list[idx]) list[idx] = { ...feedback };
+                              list[idx] = { ...list[idx], showOnHome: e.target.checked };
+                              setSettings({ ...settings, featuredFeedbacks: list });
+                            }}
+                            className="w-3.5 h-3.5 accent-emerald-500 rounded cursor-pointer"
+                          />
+                          <span className="text-[10px] text-[#8e8e93] uppercase">Show on Home</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-1">Customer Name</label>
+                        <input
+                          type="text"
+                          value={feedback.name}
+                          onChange={(e) => {
+                            const list = [
+                              ...(settings.featuredFeedbacks && settings.featuredFeedbacks.length > 0
+                                ? settings.featuredFeedbacks
+                                : [
+                                    {
+                                      id: "fb-1",
+                                      name: "Pamuda U.",
+                                      location: "Colombo",
+                                      verified: true,
+                                      garment: "Vergo Heavyweight Tee (Jet Black - Size L)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "The drape on this 280 GSM tee is genuinely unmatched in Sri Lanka. It holds its boxy structure throughout the day without clinging or stretching at the collar. Best streetwear purchase this year.",
+                                      showOnHome: true,
+                                    },
+                                    {
+                                      id: "fb-2",
+                                      name: "Aakash R.",
+                                      location: "Kandy",
+                                      verified: true,
+                                      garment: "Vergo Heavyweight Tee (Crimson Red - Size XL)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "Delivery via Citypak arrived in less than 36 hours. The packaging and unboxing feel like a luxury boutique drop. The high-density branding and heavy cotton weight are 10/10.",
+                                      showOnHome: true,
+                                    },
+                                    {
+                                      id: "fb-3",
+                                      name: "Dinuka M.",
+                                      location: "Galle",
+                                      verified: true,
+                                      garment: "Vergo Archival Tee (Desert Sage - Size M)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
+                                      showOnHome: true,
+                                    },
+                                  ]),
+                            ];
+                            if (!list[idx]) list[idx] = { ...feedback };
+                            list[idx] = { ...list[idx], name: e.target.value };
+                            setSettings({ ...settings, featuredFeedbacks: list });
+                          }}
+                          className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2.5 py-1.5 text-xs text-white"
+                          placeholder="e.g. Pamuda U."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-1">Purchased Garment / Variant</label>
+                        <input
+                          type="text"
+                          value={feedback.garment}
+                          onChange={(e) => {
+                            const list = [
+                              ...(settings.featuredFeedbacks && settings.featuredFeedbacks.length > 0
+                                ? settings.featuredFeedbacks
+                                : [
+                                    {
+                                      id: "fb-1",
+                                      name: "Pamuda U.",
+                                      location: "Colombo",
+                                      verified: true,
+                                      garment: "Vergo Heavyweight Tee (Jet Black - Size L)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "The drape on this 280 GSM tee is genuinely unmatched in Sri Lanka. It holds its boxy structure throughout the day without clinging or stretching at the collar. Best streetwear purchase this year.",
+                                      showOnHome: true,
+                                    },
+                                    {
+                                      id: "fb-2",
+                                      name: "Aakash R.",
+                                      location: "Kandy",
+                                      verified: true,
+                                      garment: "Vergo Heavyweight Tee (Crimson Red - Size XL)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "Delivery via Citypak arrived in less than 36 hours. The packaging and unboxing feel like a luxury boutique drop. The high-density branding and heavy cotton weight are 10/10.",
+                                      showOnHome: true,
+                                    },
+                                    {
+                                      id: "fb-3",
+                                      name: "Dinuka M.",
+                                      location: "Galle",
+                                      verified: true,
+                                      garment: "Vergo Archival Tee (Desert Sage - Size M)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
+                                      showOnHome: true,
+                                    },
+                                  ]),
+                            ];
+                            if (!list[idx]) list[idx] = { ...feedback };
+                            list[idx] = { ...list[idx], garment: e.target.value };
+                            setSettings({ ...settings, featuredFeedbacks: list });
+                          }}
+                          className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2.5 py-1.5 text-xs text-white"
+                          placeholder="e.g. Vergo Heavyweight Tee (Jet Black - Size L)"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-1">Star Rating (1 - 5)</label>
+                        <select
+                          value={feedback.rating || 5}
+                          onChange={(e) => {
+                            const list = [
+                              ...(settings.featuredFeedbacks && settings.featuredFeedbacks.length > 0
+                                ? settings.featuredFeedbacks
+                                : [
+                                    {
+                                      id: "fb-1",
+                                      name: "Pamuda U.",
+                                      location: "Colombo",
+                                      verified: true,
+                                      garment: "Vergo Heavyweight Tee (Jet Black - Size L)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "The drape on this 280 GSM tee is genuinely unmatched in Sri Lanka. It holds its boxy structure throughout the day without clinging or stretching at the collar. Best streetwear purchase this year.",
+                                      showOnHome: true,
+                                    },
+                                    {
+                                      id: "fb-2",
+                                      name: "Aakash R.",
+                                      location: "Kandy",
+                                      verified: true,
+                                      garment: "Vergo Heavyweight Tee (Crimson Red - Size XL)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "Delivery via Citypak arrived in less than 36 hours. The packaging and unboxing feel like a luxury boutique drop. The high-density branding and heavy cotton weight are 10/10.",
+                                      showOnHome: true,
+                                    },
+                                    {
+                                      id: "fb-3",
+                                      name: "Dinuka M.",
+                                      location: "Galle",
+                                      verified: true,
+                                      garment: "Vergo Archival Tee (Desert Sage - Size M)",
+                                      rating: 5,
+                                      date: "Verified Drop",
+                                      comment:
+                                        "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
+                                      showOnHome: true,
+                                    },
+                                  ]),
+                            ];
+                            if (!list[idx]) list[idx] = { ...feedback };
+                            list[idx] = { ...list[idx], rating: Number(e.target.value) };
+                            setSettings({ ...settings, featuredFeedbacks: list });
+                          }}
+                          className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2.5 py-1.5 text-xs text-white"
+                        >
+                          <option value={5}>★★★★★ (5 Stars)</option>
+                          <option value={4}>★★★★☆ (4 Stars)</option>
+                          <option value={3}>★★★☆☆ (3 Stars)</option>
+                          <option value={2}>★★☆☆☆ (2 Stars)</option>
+                          <option value={1}>★☆☆☆☆ (1 Star)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-1">Customer Testimonial / Review Text</label>
+                      <textarea
+                        rows={3}
+                        value={feedback.comment}
+                        onChange={(e) => {
+                          const list = [
+                            ...(settings.featuredFeedbacks && settings.featuredFeedbacks.length > 0
+                              ? settings.featuredFeedbacks
+                              : [
+                                  {
+                                    id: "fb-1",
+                                    name: "Pamuda U.",
+                                    location: "Colombo",
+                                    verified: true,
+                                    garment: "Vergo Heavyweight Tee (Jet Black - Size L)",
+                                    rating: 5,
+                                    date: "Verified Drop",
+                                    comment:
+                                      "The drape on this 280 GSM tee is genuinely unmatched in Sri Lanka. It holds its boxy structure throughout the day without clinging or stretching at the collar. Best streetwear purchase this year.",
+                                    showOnHome: true,
+                                  },
+                                  {
+                                    id: "fb-2",
+                                    name: "Aakash R.",
+                                    location: "Kandy",
+                                    verified: true,
+                                    garment: "Vergo Heavyweight Tee (Crimson Red - Size XL)",
+                                    rating: 5,
+                                    date: "Verified Drop",
+                                    comment:
+                                      "Delivery via Citypak arrived in less than 36 hours. The packaging and unboxing feel like a luxury boutique drop. The high-density branding and heavy cotton weight are 10/10.",
+                                    showOnHome: true,
+                                  },
+                                  {
+                                    id: "fb-3",
+                                    name: "Dinuka M.",
+                                    location: "Galle",
+                                    verified: true,
+                                    garment: "Vergo Archival Tee (Desert Sage - Size M)",
+                                    rating: 5,
+                                    date: "Verified Drop",
+                                    comment:
+                                      "Washed it twice already and zero shrinkage or collar distortion. True dropped-shoulder cut that fits like luxury overseas streetwear brands. Already waiting for the hoodie drop.",
+                                    showOnHome: true,
+                                  },
+                                ]),
+                          ];
+                          if (!list[idx]) list[idx] = { ...feedback };
+                          list[idx] = { ...list[idx], comment: e.target.value };
+                          setSettings({ ...settings, featuredFeedbacks: list });
+                        }}
+                        className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-xs text-white leading-relaxed"
+                        placeholder="Customer review statement..."
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+              </div>
+            </div>
             <div className="admin-card p-6 space-y-5">
               <div className="pb-2 border-b border-[rgba(255,255,255,0.05)] flex justify-between items-center">
                 <div>
@@ -675,7 +1286,12 @@ export default function CustomizationPage() {
               </div>
             </div>
 
-            {/* Collection Page Section Header & Subtitle */}
+          </div>
+        )}
+
+        {/* TAB 2: COLLECTION / CATALOGUE */}
+        {activeSection === "collection" && (
+          <div className="space-y-6 max-w-4xl">
             <div className="admin-card p-6 space-y-5">
               <div className="pb-2 border-b border-[rgba(255,255,255,0.05)] flex justify-between items-center">
                 <div>
@@ -750,269 +1366,14 @@ export default function CustomizationPage() {
               </div>
             </div>
 
-            {/* Engineered for Longevity (The Vergo Standard) */}
-            <div className="admin-card p-6">
-              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)] flex items-center justify-between">
-                <div>
-                  <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">THE VERGO STANDARD (LONGEVITY SECTION)</h3>
-                  <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">Homepage craftsmanship showcase & 4 feature pillars</p>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Badge</label>
-                  <input
-                    type="text"
-                    value={settings.standardBadge ?? "THE VERGO STANDARD"}
-                    onChange={(e) => setSettings({ ...settings, standardBadge: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                    placeholder="e.g. THE VERGO STANDARD"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Title</label>
-                  <input
-                    type="text"
-                    value={settings.standardTitle ?? "ENGINEERED FOR LONGEVITY."}
-                    onChange={(e) => setSettings({ ...settings, standardTitle: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white font-semibold"
-                    placeholder="e.g. ENGINEERED FOR LONGEVITY."
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Subtitle</label>
-                  <textarea
-                    rows={2}
-                    value={settings.standardSubtitle ?? "Heavyweight construction, reinforced tension points, and authentic materials."}
-                    onChange={(e) => setSettings({ ...settings, standardSubtitle: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                    placeholder="Description text under section heading"
-                  />
-                </div>
-
-                {/* 4 Feature Pillars Customization */}
-                <div className="pt-2">
-                  <span className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-3">Feature Pillars (Cards 01 - 04)</span>
-                  <div className="space-y-3">
-                    {(settings.standardFeatures || [
-                      { number: "01", tag: "CUSTOM DENSE WEAVE", title: "280 GSM Luxury Combed Cotton", description: "Structured heavyweight drape that holds shape wash after wash." },
-                      { number: "02", tag: "ARCHIVAL TAILORING", title: "Reinforced Micro-Rib Collar", description: "Double-needle neckband binding for zero collar stretching." },
-                      { number: "03", tag: "DECENTRALIZED PROOF", title: "100% Verified Authenticity", description: "Cryptographic ledger verification on every individual SKU." },
-                      { number: "04", tag: "CITYPAK LOGISTICS", title: "Express Nationwide Dispatch", description: "24–48h courier delivery via Citypak with live SMS tracking." },
-                    ]).map((feat, index) => (
-                      <div key={index} className="p-3 bg-[#0d0d0d] border border-[rgba(255,255,255,0.06)] rounded space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-emerald-400 tracking-wider">PILLAR {feat.number || `0${index + 1}`}</span>
-                          <input
-                            type="text"
-                            value={feat.number}
-                            onChange={(e) => {
-                              const updated = [...(settings.standardFeatures || [])];
-                              if (!updated[index]) updated[index] = { ...feat };
-                              updated[index] = { ...updated[index], number: e.target.value };
-                              setSettings({ ...settings, standardFeatures: updated });
-                            }}
-                            className="w-16 bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2 py-0.5 text-center text-xs text-white"
-                            placeholder="01"
-                          />
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-0.5">Tag / Category</label>
-                            <input
-                              type="text"
-                              value={feat.tag}
-                              onChange={(e) => {
-                                const updated = [...(settings.standardFeatures || [])];
-                                if (!updated[index]) updated[index] = { ...feat };
-                                updated[index] = { ...updated[index], tag: e.target.value };
-                                setSettings({ ...settings, standardFeatures: updated });
-                              }}
-                              className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2 py-1 text-xs text-white"
-                              placeholder="e.g. CUSTOM DENSE WEAVE"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-0.5">Feature Title</label>
-                            <input
-                              type="text"
-                              value={feat.title}
-                              onChange={(e) => {
-                                const updated = [...(settings.standardFeatures || [])];
-                                if (!updated[index]) updated[index] = { ...feat };
-                                updated[index] = { ...updated[index], title: e.target.value };
-                                setSettings({ ...settings, standardFeatures: updated });
-                              }}
-                              className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2 py-1 text-xs text-white font-medium"
-                              placeholder="e.g. 280 GSM Luxury Combed Cotton"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-medium text-[#8e8e93] uppercase mb-0.5">Description</label>
-                          <textarea
-                            rows={2}
-                            value={feat.description}
-                            onChange={(e) => {
-                              const updated = [...(settings.standardFeatures || [])];
-                              if (!updated[index]) updated[index] = { ...feat };
-                              updated[index] = { ...updated[index], description: e.target.value };
-                              setSettings({ ...settings, standardFeatures: updated });
-                            }}
-                            className="w-full bg-[#161616] border border-[rgba(255,255,255,0.08)] rounded px-2 py-1 text-xs text-white"
-                            placeholder="Structured heavyweight drape that holds shape..."
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Verified Community / Feedback Section Header */}
-            <div className="admin-card p-6">
-              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
-                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">COMMUNITY FEEDBACK HEADER</h3>
-                <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">Headline and description for "Tested on the Streets" section</p>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Eyebrow Badge</label>
-                  <input
-                    type="text"
-                    value={settings.feedbackBadge ?? "VERIFIED COMMUNITY"}
-                    onChange={(e) => setSettings({ ...settings, feedbackBadge: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                    placeholder="e.g. VERIFIED COMMUNITY"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Title</label>
-                  <input
-                    type="text"
-                    value={settings.feedbackTitle ?? "TESTED ON THE STREETS."}
-                    onChange={(e) => setSettings({ ...settings, feedbackTitle: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white font-semibold"
-                    placeholder="e.g. TESTED ON THE STREETS."
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Section Subtitle</label>
-                  <input
-                    type="text"
-                    value={settings.feedbackSubtitle ?? "Authentic feedback from verified collectors across the island."}
-                    onChange={(e) => setSettings({ ...settings, feedbackSubtitle: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                    placeholder="e.g. Authentic feedback from verified collectors across the island."
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Newsletter Setup */}
-            <div className="admin-card p-6">
-              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
-                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">NEWSLETTER CALLOUT</h3>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Header Title</label>
-                  <input
-                    type="text"
-                    value={settings.newsletterTitle}
-                    onChange={(e) => setSettings({ ...settings, newsletterTitle: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Description Text</label>
-                  <textarea
-                    rows={2}
-                    value={settings.newsletterSubtitle}
-                    onChange={(e) => setSettings({ ...settings, newsletterSubtitle: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="admin-card p-6">
-              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
-                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">BANK TRANSFER DETAILS</h3>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Bank Name</label>
-                  <input
-                    type="text"
-                    value={settings.bankName}
-                    onChange={(e) => setSettings({ ...settings, bankName: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                    placeholder="e.g. Commercial Bank"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Branch</label>
-                  <input
-                    type="text"
-                    value={settings.bankBranch}
-                    onChange={(e) => setSettings({ ...settings, bankBranch: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                    placeholder="e.g. Colombo Main Branch"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Account Name</label>
-                  <input
-                    type="text"
-                    value={settings.bankAccountName ?? ""}
-                    onChange={(e) => setSettings({ ...settings, bankAccountName: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                    placeholder="e.g. VERGO ATELIER PVT LTD"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Account Number</label>
-                  <input
-                    type="text"
-                    value={settings.bankAccountNumber}
-                    onChange={(e) => setSettings({ ...settings, bankAccountNumber: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
-                    placeholder="e.g. 1234 - 5678 - 9012"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Customer Concierge WhatsApp Settings */}
-            <div className="admin-card p-6">
-              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
-                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">WHATSAPP CONCIERGE</h3>
-                <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">Floating WhatsApp contact button displayed on Home, Collection, and About Us pages</p>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
-                    WhatsApp Phone Number (with Country Code)
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.whatsappNumber ?? "+94771234567"}
-                    onChange={(e) => setSettings({ ...settings, whatsappNumber: e.target.value })}
-                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white font-mono"
-                    placeholder="e.g. +94771234567 or 0771234567"
-                  />
-                  <p className="text-[11px] text-[#8e8e93] mt-1.5">
-                    Customers clicking the floating button on the website will be directed to this number on WhatsApp.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
+        )}
 
-          {/* About Page Settings */}
+        {/* TAB 3: ABOUT US */}
+        {activeSection === "about" && (
           <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-6">
             <div className="admin-card p-6">
               <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
                 <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">ABOUT PAGE HERO</h3>
@@ -1054,7 +1415,6 @@ export default function CustomizationPage() {
               </div>
             </div>
 
-            {/* Brand Statement Settings */}
             <div className="admin-card p-6">
               <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
                 <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">BRAND STATEMENT & ORIGINS</h3>
@@ -1138,7 +1498,8 @@ export default function CustomizationPage() {
               </div>
             </div>
 
-            {/* Founder / Creative Direction Settings */}
+              </div>
+              <div className="space-y-6">
             <div className="admin-card p-6">
               <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
                 <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">FOUNDER & LEADERSHIP</h3>
@@ -1232,7 +1593,6 @@ export default function CustomizationPage() {
               </div>
             </div>
 
-            {/* Signature Collections Showcase Settings */}
             <div className="admin-card p-6">
               <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
                 <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">ABOUT PAGE SIGNATURE COLLECTIONS</h3>
@@ -1353,15 +1713,132 @@ export default function CustomizationPage() {
                 </div>
               </div>
             </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Form Actions */}
-        <div className="flex justify-end pt-4 border-t border-[rgba(255,255,255,0.05)]">
+        {/* TAB 4: GENERAL & CHANNELS */}
+        {activeSection === "general" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-6">
+            <div className="admin-card p-6">
+              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
+                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">BANK TRANSFER DETAILS</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Bank Name</label>
+                  <input
+                    type="text"
+                    value={settings.bankName}
+                    onChange={(e) => setSettings({ ...settings, bankName: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. Commercial Bank"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Branch</label>
+                  <input
+                    type="text"
+                    value={settings.bankBranch}
+                    onChange={(e) => setSettings({ ...settings, bankBranch: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. Colombo Main Branch"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Account Name</label>
+                  <input
+                    type="text"
+                    value={settings.bankAccountName ?? ""}
+                    onChange={(e) => setSettings({ ...settings, bankAccountName: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. VERGO ATELIER PVT LTD"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Account Number</label>
+                  <input
+                    type="text"
+                    value={settings.bankAccountNumber}
+                    onChange={(e) => setSettings({ ...settings, bankAccountNumber: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                    placeholder="e.g. 1234 - 5678 - 9012"
+                  />
+                </div>
+              </div>
+            </div>
+
+              </div>
+              <div className="space-y-6">
+            <div className="admin-card p-6">
+              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
+                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">WHATSAPP CONCIERGE</h3>
+                <p className="text-[10px] text-[#8e8e93] mt-0.5 uppercase">Floating WhatsApp contact button displayed on Home, Collection, and About Us pages</p>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">
+                    WhatsApp Phone Number (with Country Code)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.whatsappNumber ?? "+94771234567"}
+                    onChange={(e) => setSettings({ ...settings, whatsappNumber: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white font-mono"
+                    placeholder="e.g. +94771234567 or 0771234567"
+                  />
+                  <p className="text-[11px] text-[#8e8e93] mt-1.5">
+                    Customers clicking the floating button on the website will be directed to this number on WhatsApp.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="admin-card p-6">
+              <div className="mb-6 pb-2 border-b border-[rgba(255,255,255,0.05)]">
+                <h3 className="text-[10px] font-bold tracking-widest uppercase text-white">NEWSLETTER CALLOUT</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Header Title</label>
+                  <input
+                    type="text"
+                    value={settings.newsletterTitle}
+                    onChange={(e) => setSettings({ ...settings, newsletterTitle: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase mb-1.5">Description Text</label>
+                  <textarea
+                    rows={2}
+                    value={settings.newsletterSubtitle}
+                    onChange={(e) => setSettings({ ...settings, newsletterSubtitle: e.target.value })}
+                    className="w-full bg-[#121212] border border-[rgba(255,255,255,0.08)] rounded px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+            </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Form Actions (Sticky Bottom Bar) */}
+        <div className="flex items-center justify-between pt-4 border-t border-[rgba(255,255,255,0.05)]">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-[#8e8e93] uppercase font-semibold">Editing Section:</span>
+            <span className="text-[10px] font-bold text-white uppercase px-2.5 py-1 rounded bg-white/5 border border-white/10">
+              {activeSection === "home" ? "Homepage (Hero, Feedback, Longevity, Drops)" : activeSection === "collection" ? "Collection / Catalogue Headings" : activeSection === "about" ? "About Us Page (Philosophy, Founder, Collections)" : "General / Channels (Bank, WhatsApp, Newsletter)"}
+            </span>
+          </div>
+
           <button
             type="submit"
             disabled={isSaving || isHeroTitleInvalid || isHeroSubtitleInvalid || isAboutTitleInvalid || isBrandDescriptionInvalid}
-            className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] disabled:bg-white/20 disabled:text-[#8e8e93] disabled:cursor-not-allowed font-bold tracking-widest px-6 py-2.5 rounded transition-all uppercase cursor-pointer"
+            className="bg-white text-black hover:bg-[#eaeaea] active:bg-[#d9d9d9] disabled:bg-white/20 disabled:text-[#8e8e93] disabled:cursor-not-allowed font-bold tracking-widest px-6 py-2.5 rounded transition-all uppercase cursor-pointer shadow-sm"
           >
             {isSaving ? "PUBLISHING..." : "PUBLISH CHANGES"}
           </button>
