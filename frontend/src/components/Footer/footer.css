@@ -40,6 +40,14 @@
   color: var(--accent);
 }
 
+.footer-social-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  margin-top: 4px;
+}
+
 .footer-bottom {
   text-align: center;
   margin-top: 16px;

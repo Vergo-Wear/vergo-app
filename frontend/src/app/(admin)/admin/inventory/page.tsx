@@ -142,17 +142,17 @@ export default function InventoryDashboard() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   // ================= DATA FETCHING =================
-  const fetchAllData = useCallback(async () => {
-    setLoading(true);
+  const fetchAllData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const response = await authenticatedFetch("/admin/inventory/catalog");
       if (!response) {
-        setLoading(false);
+        if (!isSilent) setLoading(false);
         return;
       }
       if (!response.ok) {
-        showToast(await responseMessage(response, "Failed to fetch inventory data"), "error");
-        setLoading(false);
+        if (!isSilent) showToast(await responseMessage(response, "Failed to fetch inventory data"), "error");
+        if (!isSilent) setLoading(false);
         return;
       }
 
@@ -164,14 +164,21 @@ export default function InventoryDashboard() {
       setBranches(data.branches || []);
       setMasterCatalog(data.items || []);
     } catch (err: any) {
-      showToast(err.message || "Connection error fetching inventory", "error");
+      if (!isSilent) showToast(err.message || "Connection error fetching inventory", "error");
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void fetchAllData();
+    const handleUpdate = () => {
+      void fetchAllData(true);
+    };
+    window.addEventListener("vergo_admin_data_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("vergo_admin_data_updated", handleUpdate);
+    };
   }, [fetchAllData]);
 
   // ================= GROUP CATALOG ITEMS INTO PRODUCT BOX CARDS =================
@@ -911,17 +918,17 @@ export default function InventoryDashboard() {
 
       {renderNav()}
 
-      {loading && (
+      {loading && masterCatalog.length === 0 && (
         <div className="py-20 text-center text-white font-mono text-xs uppercase tracking-widest animate-pulse flex items-center justify-center gap-3">
           <div className="w-2 h-2 rounded-full bg-white animate-ping"></div>
-          SYNCING INVENTORY RECORDS...
+          LOADING INVENTORY...
         </div>
       )}
 
       {/* ========================================================================= */}
       {/* ======================= TAB: MASTER CATALOG BOX CARDS ==================== */}
       {/* ========================================================================= */}
-      {!loading && activeTab === "catalog" && (
+      {(!loading || masterCatalog.length > 0) && activeTab === "catalog" && (
         <section className="space-y-6">
           {/* Top Filter & Add Toolbar */}
           <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center bg-[#0d0d0d] border border-[rgba(255,255,255,0.08)] p-4 sm:p-5 rounded-xl gap-4 shadow-sm">
@@ -1156,7 +1163,7 @@ export default function InventoryDashboard() {
       )}
 
       {/* --- TAB: COLLECTIONS --- */}
-      {!loading && activeTab === "collections" && (
+      {(!loading || masterCatalog.length > 0) && activeTab === "collections" && (
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-5 sm:p-7 shadow-sm">
             <h2 className="text-xs font-bold tracking-[0.2em] text-white uppercase mb-6 border-b border-[#18181b] pb-4">
@@ -1240,7 +1247,7 @@ export default function InventoryDashboard() {
       )}
 
       {/* --- TAB: COLORS --- */}
-      {!loading && activeTab === "colors" && (
+      {(!loading || masterCatalog.length > 0) && activeTab === "colors" && (
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-5 sm:p-7 shadow-sm">
             <h2 className="text-xs font-bold tracking-[0.2em] text-white uppercase mb-6 border-b border-[#18181b] pb-4">
