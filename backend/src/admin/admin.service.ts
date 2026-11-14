@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   Optional,
@@ -54,26 +56,39 @@ export class AdminService {
     current?: { colorId: string; sizeId: string },
   ) {
     const color = variant.colorId
-      ? await tx.color.findFirst({
-        where: {
-          colorId: variant.colorId,
-          ...(current?.colorId === variant.colorId
-            ? {}
-            : { status: 'Active' }),
-        },
-        select: { colorId: true },
-      })
-      : variant.color?.trim()
-        ? await tx.color.findFirst({
+      ? (await tx.color.findFirst({
           where: {
-            name: {
-              equals: variant.color.trim(),
-              mode: 'insensitive',
-            },
-            status: 'Active',
+            colorId: variant.colorId,
+            ...(current?.colorId === variant.colorId
+              ? {}
+              : { status: 'Active' }),
           },
           select: { colorId: true },
-        })
+        })) ||
+        (await tx.color.findFirst({
+          where: { colorId: variant.colorId },
+          select: { colorId: true },
+        }))
+      : variant.color?.trim()
+        ? (await tx.color.findFirst({
+            where: {
+              name: {
+                equals: variant.color.trim(),
+                mode: 'insensitive',
+              },
+              status: 'Active',
+            },
+            select: { colorId: true },
+          })) ||
+          (await tx.color.findFirst({
+            where: {
+              name: {
+                equals: variant.color.trim(),
+                mode: 'insensitive',
+              },
+            },
+            select: { colorId: true },
+          }))
         : null;
     if (!color) {
       throw new BadRequestException(
@@ -82,24 +97,37 @@ export class AdminService {
     }
 
     const size = variant.sizeId
-      ? await tx.size.findFirst({
-        where: {
-          sizeId: variant.sizeId,
-          ...(current?.sizeId === variant.sizeId ? {} : { status: 'Active' }),
-        },
-        select: { sizeId: true },
-      })
-      : variant.size?.trim()
-        ? await tx.size.findFirst({
+      ? (await tx.size.findFirst({
           where: {
-            name: {
-              equals: variant.size.trim(),
-              mode: 'insensitive',
-            },
-            status: 'Active',
+            sizeId: variant.sizeId,
+            ...(current?.sizeId === variant.sizeId ? {} : { status: 'Active' }),
           },
           select: { sizeId: true },
-        })
+        })) ||
+        (await tx.size.findFirst({
+          where: { sizeId: variant.sizeId },
+          select: { sizeId: true },
+        }))
+      : variant.size?.trim()
+        ? (await tx.size.findFirst({
+            where: {
+              name: {
+                equals: variant.size.trim(),
+                mode: 'insensitive',
+              },
+              status: 'Active',
+            },
+            select: { sizeId: true },
+          })) ||
+          (await tx.size.findFirst({
+            where: {
+              name: {
+                equals: variant.size.trim(),
+                mode: 'insensitive',
+              },
+            },
+            select: { sizeId: true },
+          }))
         : null;
     if (!size) {
       throw new BadRequestException(
@@ -660,13 +688,13 @@ export class AdminService {
             },
           });
 
-          const colorRows: any[] = refs.colorId
-            ? await tx.$queryRawUnsafe(
-                'SELECT image_url FROM color WHERE color_id = $1::uuid',
-                refs.colorId,
-              )
-            : [];
-          const colorImgUrl = colorRows[0]?.image_url;
+          const colorRecord = refs.colorId
+            ? await tx.color.findUnique({
+                where: { colorId: refs.colorId },
+                select: { imageUrl: true },
+              })
+            : null;
+          const colorImgUrl = colorRecord?.imageUrl;
           const explicitImgUrl = variantDto.imageUrl?.trim();
           const mainProductImgUrl = dto.imageUrl?.trim();
           const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
@@ -741,16 +769,39 @@ export class AdminService {
           throw new NotFoundException('Product not found.');
         }
 
+        const isValidUuid = (id?: string | null): boolean => {
+          if (!id) return false;
+          return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+        };
+
+        let validCategoryId: string | null = null;
+        if (dto.categoryId && isValidUuid(dto.categoryId)) {
+          const cat = await tx.category.findUnique({
+            where: { categoryId: dto.categoryId },
+            select: { categoryId: true },
+          });
+          if (cat) validCategoryId = cat.categoryId;
+        }
+
+        let validSupplierId: string | null = null;
+        if (dto.supplierId && isValidUuid(dto.supplierId)) {
+          const sup = await tx.supplier.findUnique({
+            where: { supplierId: dto.supplierId },
+            select: { supplierId: true },
+          });
+          if (sup) validSupplierId = sup.supplierId;
+        }
+
         // 1. Update product base info
         await tx.product.update({
           where: { productId },
           data: {
             name: dto.name.trim(),
             description: dto.description?.trim(),
-            categoryId: dto.categoryId || null,
-            supplierId: dto.supplierId || null,
+            categoryId: validCategoryId,
+            supplierId: validSupplierId,
             basePrice: dto.basePrice,
-            status: dto.status,
+            status: dto.status || 'live',
             ...(dto.isSoldOut !== undefined ? { isSoldOut: Boolean(dto.isSoldOut) } : {}),
           },
         });
@@ -779,17 +830,29 @@ export class AdminService {
           const refs = references[i];
           const key = `${refs.colorId || ''}_${refs.sizeId || ''}`;
 
-          const existingVar =
+          let existingVar =
             existingVariantMap.get(key) ||
-            existingVariantMap.get(variantDto.sku.trim().toLowerCase());
+            existingVariantMap.get(variantDto.sku?.trim().toLowerCase());
 
-          const colorRows: any[] = refs.colorId
-            ? await tx.$queryRawUnsafe(
-                'SELECT image_url FROM color WHERE color_id = $1::uuid',
-                refs.colorId,
-              )
-            : [];
-          const colorImgUrl = colorRows[0]?.image_url;
+          // If not found in map, check database for unique combination on this product
+          if (!existingVar) {
+            existingVar = await tx.productVariant.findFirst({
+              where: {
+                productId,
+                colorId: refs.colorId,
+                sizeId: refs.sizeId,
+              },
+              include: { images: true, inventory: true },
+            });
+          }
+
+          const colorRecord = refs.colorId
+            ? await tx.color.findUnique({
+                where: { colorId: refs.colorId },
+                select: { imageUrl: true },
+              })
+            : null;
+          const colorImgUrl = colorRecord?.imageUrl;
           const explicitImgUrl = variantDto.imageUrl?.trim();
           const mainProductImgUrl = dto.imageUrl?.trim();
           const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
@@ -801,6 +864,31 @@ export class AdminService {
                 ? [targetImgUrl]
                 : [];
 
+          let validBranchId: string | null = null;
+          if (variantDto.branchId && isValidUuid(variantDto.branchId)) {
+            const branchExists = await tx.branch.findUnique({
+              where: { branchId: variantDto.branchId },
+              select: { branchId: true },
+            });
+            if (branchExists) validBranchId = branchExists.branchId;
+          }
+
+          // Ensure SKU uniqueness
+          let targetSku = variantDto.sku?.trim();
+          if (!targetSku) {
+            targetSku = `VG-${productId.slice(0, 4)}-${refs.colorId.slice(0, 3)}-${refs.sizeId.slice(0, 3)}`;
+          }
+          const skuConflict = await tx.productVariant.findFirst({
+            where: {
+              sku: { equals: targetSku, mode: 'insensitive' },
+              ...(existingVar ? { variantId: { not: existingVar.variantId } } : {}),
+            },
+            select: { variantId: true },
+          });
+          if (skuConflict) {
+            targetSku = `${targetSku}-${Math.floor(1000 + Math.random() * 9000)}`;
+          }
+
           if (existingVar) {
             processedVariantIds.add(existingVar.variantId);
 
@@ -808,20 +896,23 @@ export class AdminService {
             await tx.productVariant.update({
               where: { variantId: existingVar.variantId },
               data: {
-                sku: variantDto.sku.trim(),
+                sku: targetSku,
                 status: variantDto.status || 'show',
                 priceAdjustment: variantDto.priceAdjustment,
               },
             });
 
-            // Update or create inventory for existing variant
-            const existingInv = existingVar.inventory?.[0];
-            if (existingInv) {
+            // Update or create inventory for existing variant (target warehouse inventory row or first)
+            const warehouseInv =
+              existingVar.inventory?.find((inv: any) => !inv.employeeId) ||
+              existingVar.inventory?.[0];
+
+            if (warehouseInv) {
               await tx.inventory.update({
-                where: { inventoryId: existingInv.inventoryId },
+                where: { inventoryId: warehouseInv.inventoryId },
                 data: {
                   quantity: variantDto.quantity,
-                  branchId: variantDto.branchId || null,
+                  branchId: validBranchId,
                   reorderLevel: variantDto.reorderLevel ?? 10,
                   lastUpdated: new Date(),
                 },
@@ -831,7 +922,7 @@ export class AdminService {
                 data: {
                   variantId: existingVar.variantId,
                   quantity: variantDto.quantity,
-                  branchId: variantDto.branchId || null,
+                  branchId: validBranchId,
                   reorderLevel: variantDto.reorderLevel ?? 10,
                 },
               });
@@ -854,7 +945,7 @@ export class AdminService {
             const newVar = await tx.productVariant.create({
               data: {
                 productId: productId,
-                sku: variantDto.sku.trim(),
+                sku: targetSku,
                 status: variantDto.status || 'show',
                 sizeId: refs.sizeId,
                 colorId: refs.colorId,
@@ -862,7 +953,7 @@ export class AdminService {
                 inventory: {
                   create: {
                     quantity: variantDto.quantity,
-                    branchId: variantDto.branchId || null,
+                    branchId: validBranchId,
                     reorderLevel: variantDto.reorderLevel ?? 10,
                   },
                 },
@@ -881,14 +972,32 @@ export class AdminService {
           }
         }
 
-        // 4. Handle removed variants gracefully
+        // 4. Handle removed variants gracefully without aborting transaction
         const removedVariantIds = existingProduct.variants
           .map((v) => v.variantId)
           .filter((id) => !processedVariantIds.has(id));
 
         if (removedVariantIds.length > 0) {
           for (const remId of removedVariantIds) {
-            try {
+            const [orderItemCount, commitmentCount] = await Promise.all([
+              tx.orderItem.count({ where: { variantId: remId } }),
+              tx.inventoryCommitment.count({
+                where: { inventory: { variantId: remId } },
+              }),
+            ]);
+
+            if (orderItemCount > 0 || commitmentCount > 0) {
+              // Historical orders exist; soft-hide to preserve order integrity
+              await tx.productVariant.update({
+                where: { variantId: remId },
+                data: { status: 'hidden' },
+              });
+              await tx.inventory.updateMany({
+                where: { variantId: remId },
+                data: { quantity: 0 },
+              });
+            } else {
+              // Safe to clean up and delete
               await tx.cartItem.deleteMany({ where: { variantId: remId } });
               await tx.pendingCheckoutItem.deleteMany({
                 where: { variantId: remId },
@@ -902,11 +1011,6 @@ export class AdminService {
               await tx.images.deleteMany({ where: { variantId: remId } });
               await tx.inventory.deleteMany({ where: { variantId: remId } });
               await tx.productVariant.delete({ where: { variantId: remId } });
-            } catch (err) {
-              await tx.productVariant.update({
-                where: { variantId: remId },
-                data: { status: 'hidden' },
-              });
             }
           }
         }
@@ -921,15 +1025,21 @@ export class AdminService {
         });
       });
       this.cachedOverview = null;
-    this.productCatalogueService?.clearCache();
+      this.productCatalogueService?.clearCache();
       return result;
     } catch (e: any) {
+      this.logger.error('Product update failed:', e?.stack || e);
       if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
         throw new ConflictException(
           'A product variant with this SKU already exists.',
         );
       }
-      throw e;
+      if (e instanceof HttpException) {
+        throw e;
+      }
+      throw new InternalServerErrorException(
+        e?.message || 'Failed to update product',
+      );
     }
   }
 

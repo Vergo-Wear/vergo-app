@@ -1328,12 +1328,28 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     if (!items || items.length === 0) return true;
 
+    // 1. If this checkout already holds active or pending stock reservations for all items
+    // (whether in warehouse stock where employeeId is null, or in employee stock), stock is guaranteed!
     const reservations = await tx.stockReservation.findMany({
       where: { checkoutId, status: { in: ['Active', 'Pending Verification'] } },
       include: { inventory: true },
     });
 
     if (reservations.length > 0) {
+      const reservedMap = new Map<string, number>();
+      for (const res of reservations) {
+        const vId = res.inventory?.variantId || (res as any).variantId;
+        if (vId) {
+          reservedMap.set(vId, (reservedMap.get(vId) ?? 0) + res.quantity);
+        }
+      }
+
+      const holdsAll = items.every(
+        (item) => (reservedMap.get(item.variantId) ?? 0) >= item.quantity,
+      );
+      if (holdsAll) return true;
+
+      // Also check if any single employee holds all reservations
       const empReservationMap = new Map<string, Map<string, number>>();
       for (const res of reservations) {
         const empId = res.inventory?.employeeId;
@@ -1347,13 +1363,44 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       }
 
       for (const [, varMap] of empReservationMap.entries()) {
-        const holdsAll = items.every(
+        const holdsAllEmp = items.every(
           (item) => (varMap.get(item.variantId) ?? 0) >= item.quantity,
         );
-        if (holdsAll) return true;
+        if (holdsAllEmp) return true;
       }
     }
 
+    // 2. Check if total available stock in warehouse / branches can fulfill all items
+    let totalStockAvailable = true;
+    for (const item of items) {
+      const invRows = await tx.inventory.findMany({
+        where: { variantId: item.variantId },
+        select: { inventoryId: true, quantity: true },
+      });
+
+      let available = 0;
+      for (const inv of invRows) {
+        const held = await tx.stockReservation.aggregate({
+          where: {
+            inventoryId: inv.inventoryId,
+            checkoutId: { not: checkoutId },
+            status: { in: ['Active', 'Pending Verification'] },
+          },
+          _sum: { quantity: true },
+        });
+        const heldQty = held._sum.quantity ?? 0;
+        available += Math.max(0, inv.quantity - heldQty);
+      }
+
+      if (available < item.quantity) {
+        totalStockAvailable = false;
+        break;
+      }
+    }
+
+    if (totalStockAvailable) return true;
+
+    // 3. Check if any specific employee has sufficient stock in their inventory
     const employees = await tx.inventory.findMany({
       where: { employeeId: { not: null }, quantity: { gt: 0 } },
       select: { employeeId: true },

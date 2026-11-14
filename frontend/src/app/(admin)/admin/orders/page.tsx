@@ -394,11 +394,9 @@ export default function OrdersDashboard() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(null);
   const [receiptImageError, setReceiptImageError] = useState(false);
-  const [receiptViewMode, setReceiptViewMode] = useState<"image" | "pdf">("image");
 
   useEffect(() => {
     setReceiptImageError(false);
-    setReceiptViewMode("image");
   }, [receiptModalOrder?.order_id]);
   const [customerDrawerOrder, setCustomerDrawerOrder] = useState<Order | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -1706,88 +1704,43 @@ export default function OrdersDashboard() {
 
                 return (
                   <div className="space-y-2.5">
-                    {/* Toolbar for PDFs */}
+                    {/* Header Badge for PDFs */}
                     {receiptInfo.isPdf && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 bg-[#141418] border border-white/10 px-3.5 py-2 rounded-xl text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold uppercase tracking-wider">
-                            PDF Document
-                          </span>
-                          <span className="text-[11px] text-zinc-400 font-mono truncate max-w-[200px] sm:max-w-xs">
-                            {receiptModalOrder.payment_proofs?.file_name || "Payment Receipt PDF"}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 bg-[#09090b] p-1 rounded-lg border border-white/5">
-                          <button
-                            type="button"
-                            onClick={() => setReceiptViewMode("image")}
-                            className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                              receiptViewMode === "image"
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                : "text-zinc-400 hover:text-white"
-                            }`}
-                          >
-                            Image Preview
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setReceiptViewMode("pdf")}
-                            className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                              receiptViewMode === "pdf"
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                : "text-zinc-400 hover:text-white"
-                            }`}
-                          >
-                            PDF View
-                          </button>
-                        </div>
+                      <div className="flex items-center gap-2 bg-[#141418] border border-white/10 px-3.5 py-2 rounded-xl text-xs">
+                        <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold uppercase tracking-wider">
+                          PDF Document
+                        </span>
+                        <span className="text-[11px] text-zinc-400 font-mono truncate max-w-[280px] sm:max-w-md">
+                          {receiptModalOrder.payment_proofs?.file_name || "Payment Receipt PDF"}
+                        </span>
                       </div>
                     )}
 
                     <div className="relative bg-[#060608] border border-white/10 rounded-xl min-h-[300px] max-h-[480px] flex items-center justify-center p-3 overflow-hidden group">
-                      {/* Top Action Buttons */}
+                      {/* Top Action Button */}
                       <div className="absolute top-3 right-3 flex items-center gap-2 z-10 opacity-90 group-hover:opacity-100 transition-opacity">
-                        {receiptInfo.isPdf && (
-                          <a
-                            href={receiptInfo.rawUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-black/80 hover:bg-black text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all shadow-md backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
-                            title="Open original PDF directly in a new tab"
-                          >
-                            Original PDF ↗
-                          </a>
-                        )}
                         <a
                           href={receiptInfo.previewUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="bg-black/80 hover:bg-black text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all shadow-md backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
-                          title="Open high-resolution converted preview in a new tab"
+                          title="Open full size image preview in a new tab"
                         >
                           {receiptInfo.isPdf ? "Full Image Preview ↗" : "Open Full Size ↗"}
                         </a>
                       </div>
 
-                      {receiptInfo.isPdf && receiptViewMode === "pdf" ? (
-                        <div className="w-full h-[440px] flex flex-col">
-                          <iframe
-                            src={receiptInfo.rawUrl}
-                            className="w-full flex-1 rounded-lg border-0 bg-white"
-                            title="Payment Receipt PDF Document"
-                          />
-                        </div>
-                      ) : receiptImageError ? (
+                      {receiptImageError ? (
                         <div className="text-center p-8 space-y-3 max-w-sm">
                           <div className="w-12 h-12 mx-auto rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-sm">
                             PDF
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-zinc-200">
-                              Receipt Document Attached
+                              Receipt Preview Unavailable
                             </p>
                             <p className="text-xs text-zinc-400 mt-1">
-                              Inline preview is unavailable. You can open the receipt directly using the links below.
+                              Inline preview could not be displayed. You can try opening the full preview image below.
                             </p>
                           </div>
                           <div className="flex items-center justify-center gap-2 pt-2">
@@ -1797,18 +1750,8 @@ export default function OrdersDashboard() {
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold hover:bg-emerald-500/30 transition-colors"
                             >
-                              Open Preview Image ↗
+                              Open Full Image Preview ↗
                             </a>
-                            {receiptInfo.isPdf && (
-                              <a
-                                href={receiptInfo.rawUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-bold hover:bg-rose-500/30 transition-colors"
-                              >
-                                Open PDF ↗
-                              </a>
-                            )}
                           </div>
                         </div>
                       ) : (
