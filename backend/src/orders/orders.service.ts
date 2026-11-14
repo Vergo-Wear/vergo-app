@@ -1086,7 +1086,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return Promise.all(
       orders.map(async (order) => ({
         ...this.presentOrder(order),
-        ...(await this.checkParcelStock(order.orderItems, branchId)),
+        ...(await this.checkParcelStock(
+          order.orderItems,
+          branchId,
+          employeeId,
+          isDbAdmin,
+        )),
       })),
     );
   }
@@ -1094,34 +1099,48 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private async checkParcelStock(
     items: StockCheckItem[],
     branchId: string | null,
+    employeeId?: string | null,
+    isAdmin = false,
   ) {
-    if (!branchId) {
+    if (!isAdmin && !employeeId) {
       return {
         stockAvailable: false,
-        stockShortages: ['Employee is not assigned to a stock branch.'],
+        stockShortages: ['Employee profile not found.'],
       };
     }
     const shortages: string[] = [];
     for (const item of items) {
-      const inventory = await this.prisma.inventory.findFirst({
-        where: { branchId, variantId: item.variantId },
-      });
-      const held = inventory
-        ? await this.prisma.stockReservation.aggregate({
-            where: {
-              inventoryId: inventory.inventoryId,
-              status: { in: ['Active', 'Pending Verification'] },
-            },
-            _sum: { quantity: true },
-          })
-        : null;
-      const available = Math.max(
-        0,
-        (inventory?.quantity ?? 0) - (held?._sum.quantity ?? 0),
-      );
+      let available = 0;
+      if (!isAdmin && employeeId) {
+        // Employee must fulfill from their specifically allocated stock
+        const empInventory = await this.prisma.inventory.findFirst({
+          where: { employeeId, variantId: item.variantId },
+        });
+        available = empInventory?.quantity ?? 0;
+      } else if (branchId) {
+        // Warehouse inventory check for Admin
+        const inventory = await this.prisma.inventory.findFirst({
+          where: { branchId, variantId: item.variantId, employeeId: null },
+        });
+        const held = inventory
+          ? await this.prisma.stockReservation.aggregate({
+              where: {
+                inventoryId: inventory.inventoryId,
+                status: { in: ['Active', 'Pending Verification'] },
+              },
+              _sum: { quantity: true },
+            })
+          : null;
+        available = Math.max(
+          0,
+          (inventory?.quantity ?? 0) - (held?._sum.quantity ?? 0),
+        );
+      }
+
       if (available < item.quantity) {
+        const skuLabel = item.variant?.sku ?? item.variantId;
         shortages.push(
-          `${item.variant?.sku ?? item.variantId}: needs ${item.quantity}, ${available} available`,
+          `${skuLabel}: needs ${item.quantity}, ${available} available in your allocated stock`,
         );
       }
     }
@@ -1184,6 +1203,22 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           throw new ForbiddenException(
             'You cannot claim a new order until your current order in Product Preparation is completed and moved to Delivery Prep stage.',
           );
+        }
+
+        // Enforce employee stock requirement: Employee must have sufficient allocated inventory
+        for (const item of order.orderItems) {
+          const empInventory = await this.prisma.inventory.findFirst({
+            where: {
+              employeeId: employee.employeeId,
+              variantId: item.variantId,
+            },
+          });
+          const availableStock = empInventory?.quantity ?? 0;
+          if (availableStock < item.quantity) {
+            throw new BadRequestException(
+              `Cannot claim order: You do not have sufficient stock allocated for this order (${item.quantity} required, ${availableStock} available in your stock). Please request stock from admin first.`,
+            );
+          }
         }
 
         const claimedAt = new Date();

@@ -9,6 +9,7 @@ export default function StockManagement() {
     myStock,
     loadingMyStock,
     fetchMyStock,
+    fetchStockLevels,
     stockRequests,
     requestStockFromAdmin,
     searchQuery,
@@ -130,7 +131,10 @@ export default function StockManagement() {
               gap: "6px",
               cursor: "pointer",
             }}
-            onClick={() => fetchMyStock && fetchMyStock()}
+            onClick={() => {
+              if (fetchMyStock) void fetchMyStock();
+              if (fetchStockLevels) void fetchStockLevels();
+            }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -481,10 +485,36 @@ export default function StockManagement() {
                     return (
                       <tr key={stock.id}>
                         <td>
-                          <div>
-                            <span style={{ fontWeight: 700 }}>{stock.name}</span>
-                            <div style={{ fontSize: "11px", color: "var(--emp-text-muted)", marginTop: "2px" }}>
-                              Size: {stock.size} | Color: {stock.color}
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            {stock.imageUrl ? (
+                              <img
+                                src={stock.imageUrl}
+                                alt={stock.name}
+                                style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }}
+                              />
+                            ) : null}
+                            <div>
+                              <span style={{ fontWeight: 700 }}>{stock.name}</span>
+                              <div style={{ fontSize: "11px", color: "var(--emp-text-muted)", marginTop: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span>Size: <strong style={{ color: "#fff" }}>{stock.size}</strong></span>
+                                <span>|</span>
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  Color:{" "}
+                                  {stock.colorHex ? (
+                                    <span
+                                      style={{
+                                        display: "inline-block",
+                                        width: "10px",
+                                        height: "10px",
+                                        borderRadius: "50%",
+                                        backgroundColor: stock.colorHex,
+                                        border: "1px solid rgba(255,255,255,0.4)",
+                                      }}
+                                    />
+                                  ) : null}
+                                  <strong style={{ color: "#fff" }}>{stock.color}</strong>
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -495,8 +525,10 @@ export default function StockManagement() {
                           {stock.qty} units
                         </td>
                         <td>
-                          {stock.qty < 5 ? (
-                            <span className="emp-badge red">Low Stock</span>
+                          {stock.qty === 0 ? (
+                            <span className="emp-badge red">Out of Stock</span>
+                          ) : stock.qty < 5 ? (
+                            <span className="emp-badge red">Critical Low</span>
                           ) : stock.qty < 10 ? (
                             <span className="emp-badge" style={{ backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>
                               Low Stock
@@ -590,7 +622,7 @@ export default function StockManagement() {
             <form onSubmit={handleSubmitRequest}>
               <div className="emp-modal-body">
                 <div style={{ fontSize: "13px", color: "var(--emp-text-muted)", marginBottom: "12px" }}>
-                  SKU: <span style={{ color: "#ffffff", fontWeight: 600 }}>{selectedStock.sku}</span> | Size: <span style={{ color: "#ffffff" }}>{selectedStock.size}</span> | Current Stock: <span style={{ color: "var(--emp-neon-green)", fontWeight: 700 }}>{selectedStock.qty} units</span>
+                  SKU: <span style={{ color: "#ffffff", fontWeight: 600 }}>{selectedStock.sku}</span> | Size: <span style={{ color: "#ffffff" }}>{selectedStock.size}</span> | Color: <span style={{ color: "#ffffff" }}>{selectedStock.color}</span> | Current Stock: <span style={{ color: "var(--emp-neon-green)", fontWeight: 700 }}>{selectedStock.qty} units</span>
                 </div>
 
                 <div className="emp-form-control" style={{ marginBottom: "12px" }}>
