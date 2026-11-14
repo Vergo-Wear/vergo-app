@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   Optional,
@@ -35,6 +37,7 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
+  private cachedOverview: { data: any; expiresAt: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -53,26 +56,39 @@ export class AdminService {
     current?: { colorId: string; sizeId: string },
   ) {
     const color = variant.colorId
-      ? await tx.color.findFirst({
-        where: {
-          colorId: variant.colorId,
-          ...(current?.colorId === variant.colorId
-            ? {}
-            : { status: 'Active' }),
-        },
-        select: { colorId: true },
-      })
-      : variant.color?.trim()
-        ? await tx.color.findFirst({
+      ? (await tx.color.findFirst({
           where: {
-            name: {
-              equals: variant.color.trim(),
-              mode: 'insensitive',
-            },
-            status: 'Active',
+            colorId: variant.colorId,
+            ...(current?.colorId === variant.colorId
+              ? {}
+              : { status: 'Active' }),
           },
           select: { colorId: true },
-        })
+        })) ||
+        (await tx.color.findFirst({
+          where: { colorId: variant.colorId },
+          select: { colorId: true },
+        }))
+      : variant.color?.trim()
+        ? (await tx.color.findFirst({
+            where: {
+              name: {
+                equals: variant.color.trim(),
+                mode: 'insensitive',
+              },
+              status: 'Active',
+            },
+            select: { colorId: true },
+          })) ||
+          (await tx.color.findFirst({
+            where: {
+              name: {
+                equals: variant.color.trim(),
+                mode: 'insensitive',
+              },
+            },
+            select: { colorId: true },
+          }))
         : null;
     if (!color) {
       throw new BadRequestException(
@@ -81,24 +97,37 @@ export class AdminService {
     }
 
     const size = variant.sizeId
-      ? await tx.size.findFirst({
-        where: {
-          sizeId: variant.sizeId,
-          ...(current?.sizeId === variant.sizeId ? {} : { status: 'Active' }),
-        },
-        select: { sizeId: true },
-      })
-      : variant.size?.trim()
-        ? await tx.size.findFirst({
+      ? (await tx.size.findFirst({
           where: {
-            name: {
-              equals: variant.size.trim(),
-              mode: 'insensitive',
-            },
-            status: 'Active',
+            sizeId: variant.sizeId,
+            ...(current?.sizeId === variant.sizeId ? {} : { status: 'Active' }),
           },
           select: { sizeId: true },
-        })
+        })) ||
+        (await tx.size.findFirst({
+          where: { sizeId: variant.sizeId },
+          select: { sizeId: true },
+        }))
+      : variant.size?.trim()
+        ? (await tx.size.findFirst({
+            where: {
+              name: {
+                equals: variant.size.trim(),
+                mode: 'insensitive',
+              },
+              status: 'Active',
+            },
+            select: { sizeId: true },
+          })) ||
+          (await tx.size.findFirst({
+            where: {
+              name: {
+                equals: variant.size.trim(),
+                mode: 'insensitive',
+              },
+            },
+            select: { sizeId: true },
+          }))
         : null;
     if (!size) {
       throw new BadRequestException(
@@ -110,6 +139,10 @@ export class AdminService {
   }
 
   async overview() {
+    if (this.cachedOverview && this.cachedOverview.expiresAt > Date.now()) {
+      return this.cachedOverview.data;
+    }
+
     const [inventoryRows, employees, orders] = await Promise.all([
       this.prisma.inventory.findMany({
         include: {
@@ -155,7 +188,7 @@ export class AdminService {
     const customerDistribution = this.customerDistribution(analyticsOrders);
     const nextYearForecast = this.nextYearForecast(analyticsOrders);
 
-    return {
+    const result = {
       inventory,
       employees: employees.map((employee) => ({
         id: employee.employeeId,
@@ -186,6 +219,14 @@ export class AdminService {
         nextYearForecast,
       },
     };
+
+    // Cache overview response for 15 seconds to eliminate repetitive DB query storms
+    this.cachedOverview = {
+      data: result,
+      expiresAt: Date.now() + 15_000,
+    };
+
+    return result;
   }
 
   private customerDistribution(
@@ -501,6 +542,7 @@ export class AdminService {
         `Quantity cannot be lower than ${reservedQuantity} reserved units.`,
       );
     }
+    this.cachedOverview = null;
     return this.prisma.inventory.update({
       where: { inventoryId },
       data: { quantity },
@@ -599,6 +641,7 @@ export class AdminService {
 
       return { inventoryId, updated: true };
     });
+    this.cachedOverview = null;
     this.productCatalogueService?.clearCache();
     return result;
   }
@@ -645,13 +688,13 @@ export class AdminService {
             },
           });
 
-          const colorRows: any[] = refs.colorId
-            ? await tx.$queryRawUnsafe(
-                'SELECT image_url FROM color WHERE color_id = $1::uuid',
-                refs.colorId,
-              )
-            : [];
-          const colorImgUrl = colorRows[0]?.image_url;
+          const colorRecord = refs.colorId
+            ? await tx.color.findUnique({
+                where: { colorId: refs.colorId },
+                select: { imageUrl: true },
+              })
+            : null;
+          const colorImgUrl = colorRecord?.imageUrl;
           const explicitImgUrl = variantDto.imageUrl?.trim();
           const mainProductImgUrl = dto.imageUrl?.trim();
           const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
@@ -697,7 +740,8 @@ export class AdminService {
           },
         });
       });
-      this.productCatalogueService?.clearCache();
+      this.cachedOverview = null;
+    this.productCatalogueService?.clearCache();
       return result;
     } catch (e: any) {
       if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
@@ -712,207 +756,369 @@ export class AdminService {
 
   async updateProductWhole(productId: string, dto: CreateProductDto) {
     try {
-      const result = await this.prisma.$transaction(async (tx) => {
-        const existingProduct = await tx.product.findUnique({
-          where: { productId },
-          include: {
-            variants: {
-              include: { images: true, inventory: true },
-            },
-          },
-        });
-        if (!existingProduct) {
-          throw new NotFoundException('Product not found.');
-        }
+      const result = await this.prisma.$transaction(
+        async (tx) => {
+          const isValidUuid = (id?: string | null): boolean => {
+            if (!id) return false;
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+              id,
+            );
+          };
 
-        // 1. Update product base info
-        await tx.product.update({
-          where: { productId },
-          data: {
-            name: dto.name.trim(),
-            description: dto.description?.trim(),
-            categoryId: dto.categoryId || null,
-            supplierId: dto.supplierId || null,
-            basePrice: dto.basePrice,
-            status: dto.status,
-            ...(dto.isSoldOut !== undefined ? { isSoldOut: Boolean(dto.isSoldOut) } : {}),
-          },
-        });
-
-        // 2. Resolve variant references (colorId, sizeId)
-        const references = await Promise.all(
-          dto.variants.map((variant) =>
-            this.resolveVariantReferences(tx, variant),
-          ),
-        );
-
-        const existingVariantMap = new Map<string, any>();
-        existingProduct.variants.forEach((v) => {
-          const key = `${v.colorId || ''}_${v.sizeId || ''}`;
-          existingVariantMap.set(key, v);
-          if (v.sku) {
-            existingVariantMap.set(v.sku.toLowerCase(), v);
-          }
-        });
-
-        const processedVariantIds = new Set<string>();
-
-        // 3. Smart Upsert Variants (Update existing or create new)
-        for (let i = 0; i < dto.variants.length; i++) {
-          const variantDto = dto.variants[i];
-          const refs = references[i];
-          const key = `${refs.colorId || ''}_${refs.sizeId || ''}`;
-
-          const existingVar =
-            existingVariantMap.get(key) ||
-            existingVariantMap.get(variantDto.sku.trim().toLowerCase());
-
-          const colorRows: any[] = refs.colorId
-            ? await tx.$queryRawUnsafe(
-                'SELECT image_url FROM color WHERE color_id = $1::uuid',
-                refs.colorId,
-              )
-            : [];
-          const colorImgUrl = colorRows[0]?.image_url;
-          const explicitImgUrl = variantDto.imageUrl?.trim();
-          const mainProductImgUrl = dto.imageUrl?.trim();
-          const targetImgUrl = explicitImgUrl || colorImgUrl || mainProductImgUrl;
-
-          const imageList: string[] =
-            variantDto.images && variantDto.images.length > 0
-              ? variantDto.images.filter(Boolean)
-              : targetImgUrl
-                ? [targetImgUrl]
-                : [];
-
-          if (existingVar) {
-            processedVariantIds.add(existingVar.variantId);
-
-            // Update existing variant in-place
-            await tx.productVariant.update({
-              where: { variantId: existingVar.variantId },
-              data: {
-                sku: variantDto.sku.trim(),
-                status: variantDto.status || 'show',
-                priceAdjustment: variantDto.priceAdjustment,
-              },
-            });
-
-            // Update or create inventory for existing variant
-            const existingInv = existingVar.inventory?.[0];
-            if (existingInv) {
-              await tx.inventory.update({
-                where: { inventoryId: existingInv.inventoryId },
-                data: {
-                  quantity: variantDto.quantity,
-                  branchId: variantDto.branchId || null,
-                  reorderLevel: variantDto.reorderLevel ?? 10,
-                  lastUpdated: new Date(),
-                },
-              });
-            } else {
-              await tx.inventory.create({
-                data: {
-                  variantId: existingVar.variantId,
-                  quantity: variantDto.quantity,
-                  branchId: variantDto.branchId || null,
-                  reorderLevel: variantDto.reorderLevel ?? 10,
-                },
-              });
-            }
-
-            // Update images for existing variant
-            await tx.images.deleteMany({
-              where: { variantId: existingVar.variantId },
-            });
-            if (imageList.length > 0) {
-              await tx.images.createMany({
-                data: imageList.map((url) => ({
-                  variantId: existingVar.variantId,
-                  imageUrl: url,
-                })),
-              });
-            }
-          } else {
-            // Create brand new variant
-            const newVar = await tx.productVariant.create({
-              data: {
-                productId: productId,
-                sku: variantDto.sku.trim(),
-                status: variantDto.status || 'show',
-                sizeId: refs.sizeId,
-                colorId: refs.colorId,
-                priceAdjustment: variantDto.priceAdjustment,
-                inventory: {
-                  create: {
-                    quantity: variantDto.quantity,
-                    branchId: variantDto.branchId || null,
-                    reorderLevel: variantDto.reorderLevel ?? 10,
+          // 1. Batch pre-fetch existing product, colors, sizes, branches, and foreign keys in parallel
+          const [existingProduct, allColors, allSizes, allBranches, cat, sup] =
+            await Promise.all([
+              tx.product.findUnique({
+                where: { productId },
+                include: {
+                  variants: {
+                    include: { images: true, inventory: true },
                   },
                 },
-                ...(imageList.length > 0
-                  ? {
-                      images: {
-                        create: imageList.map((url) => ({
-                          imageUrl: url,
-                        })),
-                      },
-                    }
-                  : {}),
-              },
-            });
-            processedVariantIds.add(newVar.variantId);
+              }),
+              tx.color.findMany(),
+              tx.size.findMany(),
+              tx.branch.findMany({ select: { branchId: true } }),
+              dto.categoryId && isValidUuid(dto.categoryId)
+                ? tx.category.findUnique({
+                    where: { categoryId: dto.categoryId },
+                    select: { categoryId: true },
+                  })
+                : null,
+              dto.supplierId && isValidUuid(dto.supplierId)
+                ? tx.supplier.findUnique({
+                    where: { supplierId: dto.supplierId },
+                    select: { supplierId: true },
+                  })
+                : null,
+            ]);
+
+          if (!existingProduct) {
+            throw new NotFoundException('Product not found.');
           }
-        }
 
-        // 4. Handle removed variants gracefully
-        const removedVariantIds = existingProduct.variants
-          .map((v) => v.variantId)
-          .filter((id) => !processedVariantIds.has(id));
+          const validCategoryId = cat?.categoryId || null;
+          const validSupplierId = sup?.supplierId || null;
 
-        if (removedVariantIds.length > 0) {
-          for (const remId of removedVariantIds) {
-            try {
-              await tx.cartItem.deleteMany({ where: { variantId: remId } });
+          // 2. Update product base info
+          await tx.product.update({
+            where: { productId },
+            data: {
+              name: dto.name.trim(),
+              description: dto.description?.trim(),
+              categoryId: validCategoryId,
+              supplierId: validSupplierId,
+              basePrice: dto.basePrice,
+              status: dto.status || 'live',
+              ...(dto.isSoldOut !== undefined
+                ? { isSoldOut: Boolean(dto.isSoldOut) }
+                : {}),
+            },
+          });
+
+          // 3. Fast in-memory resolution of colors and sizes (zero DB round trips)
+          const colorById = new Map<string, (typeof allColors)[0]>();
+          const colorByName = new Map<string, (typeof allColors)[0]>();
+          for (const c of allColors) {
+            colorById.set(c.colorId, c);
+            colorByName.set(c.name.trim().toLowerCase(), c);
+          }
+
+          const sizeById = new Map<string, (typeof allSizes)[0]>();
+          const sizeByName = new Map<string, (typeof allSizes)[0]>();
+          for (const s of allSizes) {
+            sizeById.set(s.sizeId, s);
+            sizeByName.set(s.name.trim().toLowerCase(), s);
+          }
+
+          const branchSet = new Set<string>(allBranches.map((b) => b.branchId));
+
+          const references = dto.variants.map((variant) => {
+            const color =
+              (variant.colorId ? colorById.get(variant.colorId) : null) ||
+              (variant.color
+                ? colorByName.get(variant.color.trim().toLowerCase())
+                : null);
+            if (!color) {
+              throw new BadRequestException(
+                'Select a valid active color for every product variant.',
+              );
+            }
+
+            const size =
+              (variant.sizeId ? sizeById.get(variant.sizeId) : null) ||
+              (variant.size
+                ? sizeByName.get(variant.size.trim().toLowerCase())
+                : null);
+            if (!size) {
+              throw new BadRequestException(
+                'Select a valid active size for every product variant.',
+              );
+            }
+
+            return {
+              colorId: color.colorId,
+              sizeId: size.sizeId,
+              colorImgUrl: color.imageUrl,
+            };
+          });
+
+          // 4. Batch pre-check SKUs for collision across other products
+          const candidateSkus = dto.variants
+            .map((v) => v.sku?.trim())
+            .filter((s): s is string => Boolean(s));
+
+          const takenSkus =
+            candidateSkus.length > 0
+              ? await tx.productVariant.findMany({
+                  where: {
+                    sku: { in: candidateSkus },
+                    productId: { not: productId },
+                  },
+                  select: { sku: true },
+                })
+              : [];
+          const takenSkuSet = new Set(
+            takenSkus.map((s) => s.sku.toLowerCase()),
+          );
+
+          // 5. Existing variants lookup map
+          const existingVariantMap = new Map<string, any>();
+          existingProduct.variants.forEach((v) => {
+            const key = `${v.colorId || ''}_${v.sizeId || ''}`;
+            existingVariantMap.set(key, v);
+            if (v.sku) {
+              existingVariantMap.set(v.sku.toLowerCase(), v);
+            }
+          });
+
+          const processedVariantIds = new Set<string>();
+
+          // 6. Fast Variant Upsert Loop
+          for (let i = 0; i < dto.variants.length; i++) {
+            const variantDto = dto.variants[i];
+            const refs = references[i];
+            const key = `${refs.colorId || ''}_${refs.sizeId || ''}`;
+
+            const existingVar =
+              existingVariantMap.get(key) ||
+              existingVariantMap.get(variantDto.sku?.trim().toLowerCase());
+
+            const explicitImgUrl = variantDto.imageUrl?.trim();
+            const mainProductImgUrl = dto.imageUrl?.trim();
+            const targetImgUrl =
+              explicitImgUrl || refs.colorImgUrl || mainProductImgUrl;
+
+            const imageList: string[] =
+              variantDto.images && variantDto.images.length > 0
+                ? variantDto.images.filter(Boolean)
+                : targetImgUrl
+                  ? [targetImgUrl]
+                  : [];
+
+            const validBranchId =
+              variantDto.branchId && branchSet.has(variantDto.branchId)
+                ? variantDto.branchId
+                : null;
+
+            // Ensure SKU uniqueness in-memory
+            let targetSku = variantDto.sku?.trim();
+            if (!targetSku) {
+              targetSku = `VG-${productId.slice(0, 4)}-${refs.colorId.slice(0, 3)}-${refs.sizeId.slice(0, 3)}`;
+            }
+            if (takenSkuSet.has(targetSku.toLowerCase())) {
+              targetSku = `${targetSku}-${Math.floor(1000 + Math.random() * 9000)}`;
+            }
+            takenSkuSet.add(targetSku.toLowerCase());
+
+            if (existingVar) {
+              processedVariantIds.add(existingVar.variantId);
+
+              // Update existing variant
+              await tx.productVariant.update({
+                where: { variantId: existingVar.variantId },
+                data: {
+                  sku: targetSku,
+                  status: variantDto.status || 'show',
+                  priceAdjustment: variantDto.priceAdjustment,
+                },
+              });
+
+              // Update or create inventory for warehouse
+              const warehouseInv =
+                existingVar.inventory?.find((inv: any) => !inv.employeeId) ||
+                existingVar.inventory?.[0];
+
+              if (warehouseInv) {
+                await tx.inventory.update({
+                  where: { inventoryId: warehouseInv.inventoryId },
+                  data: {
+                    quantity: variantDto.quantity,
+                    branchId: validBranchId,
+                    reorderLevel: variantDto.reorderLevel ?? 10,
+                    lastUpdated: new Date(),
+                  },
+                });
+              } else {
+                await tx.inventory.create({
+                  data: {
+                    variantId: existingVar.variantId,
+                    quantity: variantDto.quantity,
+                    branchId: validBranchId,
+                    reorderLevel: variantDto.reorderLevel ?? 10,
+                  },
+                });
+              }
+
+              // Update images if provided or changed
+              await tx.images.deleteMany({
+                where: { variantId: existingVar.variantId },
+              });
+              if (imageList.length > 0) {
+                await tx.images.createMany({
+                  data: imageList.map((url) => ({
+                    variantId: existingVar.variantId,
+                    imageUrl: url,
+                  })),
+                });
+              }
+            } else {
+              // Create brand new variant
+              const newVar = await tx.productVariant.create({
+                data: {
+                  productId: productId,
+                  sku: targetSku,
+                  status: variantDto.status || 'show',
+                  sizeId: refs.sizeId,
+                  colorId: refs.colorId,
+                  priceAdjustment: variantDto.priceAdjustment,
+                  inventory: {
+                    create: {
+                      quantity: variantDto.quantity,
+                      branchId: validBranchId,
+                      reorderLevel: variantDto.reorderLevel ?? 10,
+                    },
+                  },
+                  ...(imageList.length > 0
+                    ? {
+                        images: {
+                          create: imageList.map((url) => ({
+                            imageUrl: url,
+                          })),
+                        },
+                      }
+                    : {}),
+                },
+              });
+              processedVariantIds.add(newVar.variantId);
+            }
+          }
+
+          // 7. Handle removed variants in batch without aborting transaction
+          const removedVariantIds = existingProduct.variants
+            .map((v) => v.variantId)
+            .filter((id) => !processedVariantIds.has(id));
+
+          if (removedVariantIds.length > 0) {
+            const [orderItems, commitments] = await Promise.all([
+              tx.orderItem.findMany({
+                where: { variantId: { in: removedVariantIds } },
+                select: { variantId: true },
+              }),
+              tx.inventoryCommitment.findMany({
+                where: { inventory: { variantId: { in: removedVariantIds } } },
+                select: { inventory: { select: { variantId: true } } },
+              }),
+            ]);
+
+            const preservedVariantIds = new Set<string>();
+            orderItems.forEach((oi) => preservedVariantIds.add(oi.variantId));
+            commitments.forEach((c) => {
+              if (c.inventory?.variantId) {
+                preservedVariantIds.add(c.inventory.variantId);
+              }
+            });
+
+            const idsToHide = removedVariantIds.filter((id) =>
+              preservedVariantIds.has(id),
+            );
+            const idsToDelete = removedVariantIds.filter(
+              (id) => !preservedVariantIds.has(id),
+            );
+
+            if (idsToHide.length > 0) {
+              await Promise.all([
+                tx.productVariant.updateMany({
+                  where: { variantId: { in: idsToHide } },
+                  data: { status: 'hidden' },
+                }),
+                tx.inventory.updateMany({
+                  where: { variantId: { in: idsToHide } },
+                  data: { quantity: 0 },
+                }),
+              ]);
+            }
+
+            if (idsToDelete.length > 0) {
+              await tx.cartItem.deleteMany({
+                where: { variantId: { in: idsToDelete } },
+              });
               await tx.pendingCheckoutItem.deleteMany({
-                where: { variantId: remId },
+                where: { variantId: { in: idsToDelete } },
               });
               await tx.inventoryCommitment.deleteMany({
-                where: { inventory: { variantId: remId } },
+                where: { inventory: { variantId: { in: idsToDelete } } },
               });
               await tx.stockReservation.deleteMany({
-                where: { inventory: { variantId: remId } },
+                where: { inventory: { variantId: { in: idsToDelete } } },
               });
-              await tx.images.deleteMany({ where: { variantId: remId } });
-              await tx.inventory.deleteMany({ where: { variantId: remId } });
-              await tx.productVariant.delete({ where: { variantId: remId } });
-            } catch (err) {
-              await tx.productVariant.update({
-                where: { variantId: remId },
-                data: { status: 'hidden' },
+              await tx.images.deleteMany({
+                where: { variantId: { in: idsToDelete } },
+              });
+              await tx.inventory.deleteMany({
+                where: { variantId: { in: idsToDelete } },
+              });
+              await tx.productVariant.deleteMany({
+                where: { variantId: { in: idsToDelete } },
               });
             }
           }
-        }
 
-        return tx.product.findUnique({
-          where: { productId },
-          include: {
-            variants: {
-              include: { color: true, size: true, inventory: true, images: true },
+          return tx.product.findUnique({
+            where: { productId },
+            include: {
+              variants: {
+                include: {
+                  color: true,
+                  size: true,
+                  inventory: true,
+                  images: true,
+                },
+              },
             },
-          },
-        });
-      });
+          });
+        },
+        {
+          maxWait: 10000,
+          timeout: 60000,
+        },
+      );
+      this.cachedOverview = null;
       this.productCatalogueService?.clearCache();
       return result;
     } catch (e: any) {
+      this.logger.error('Product update failed:', e?.stack || e);
       if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
         throw new ConflictException(
           'A product variant with this SKU already exists.',
         );
       }
-      throw e;
+      if (e instanceof HttpException) {
+        throw e;
+      }
+      throw new InternalServerErrorException(
+        e?.message || 'Failed to update product',
+      );
     }
   }
 
@@ -926,6 +1132,7 @@ export class AdminService {
       where: { productId },
       data: { status },
     });
+    this.cachedOverview = null;
     this.productCatalogueService?.clearCache();
     return { success: true };
   }
@@ -935,6 +1142,7 @@ export class AdminService {
       where: { productId },
       data: { isSoldOut: Boolean(isSoldOut) },
     });
+    this.cachedOverview = null;
     this.productCatalogueService?.clearCache();
     return { success: true, isSoldOut: product.isSoldOut };
   }
@@ -1157,7 +1365,8 @@ export class AdminService {
       }
 
       console.log(`[deleteProduct] Successfully deleted product ${productId}`);
-      this.productCatalogueService?.clearCache();
+      this.cachedOverview = null;
+    this.productCatalogueService?.clearCache();
       return { success: true };
     } catch (error: any) {
       console.error('[deleteProduct Error]:', error);

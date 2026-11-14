@@ -435,9 +435,15 @@ export default function LoginPage() {
       let displayName = "";
       let databaseProfile: Record<string, unknown> = {};
 
+      const authHeaders: HeadersInit = signinData.accessToken
+        ? { Authorization: `Bearer ${signinData.accessToken}` }
+        : {};
+
       if (userRole === "Customer") {
         try {
-          const profileRes = await fetch(`${apiUrl}/customers/profile/${userId}`);
+          const profileRes = await fetch(`${apiUrl}/customers/profile/${userId}`, {
+            headers: authHeaders,
+          });
           if (profileRes.ok) {
             const profileData = await profileRes.json();
             databaseProfile = profileData;
@@ -448,7 +454,9 @@ export default function LoginPage() {
         }
       } else if (userRole === "Employee") {
         try {
-          const profileRes = await fetch(`${apiUrl}/employees/profile/${userId}`);
+          const profileRes = await fetch(`${apiUrl}/employees/profile/${userId}`, {
+            headers: authHeaders,
+          });
           if (profileRes.ok) {
             const profileData = await profileRes.json();
             databaseProfile = profileData;

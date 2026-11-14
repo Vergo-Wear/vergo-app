@@ -14,6 +14,7 @@ export default function EmployeeDashboard() {
     preparedCODTotal,
     preparedBankTotal,
     stockLevels,
+    myStock,
     orders
   } = useEmployee();
 
@@ -30,10 +31,12 @@ export default function EmployeeDashboard() {
     const localUserRaw = typeof window !== "undefined" ? sessionStorage.getItem("vergo_user") : null;
     const localUser = localUserRaw ? JSON.parse(localUserRaw) : null;
     const userId = localUser?.id || localUser?.profileId;
+    const token = typeof window !== "undefined" ? sessionStorage.getItem("vergo_access_token") : null;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
     if (userId) {
-      fetch(`${apiUrl}/employees/profile/${userId}`)
+      fetch(`${apiUrl}/employees/profile/${userId}`, { headers })
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data) setProfileData(data);
@@ -44,7 +47,7 @@ export default function EmployeeDashboard() {
       setLoadingProfile(false);
     }
 
-    fetch(`${apiUrl}/employees/leaderboard`)
+    fetch(`${apiUrl}/employees/leaderboard`, { headers })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (Array.isArray(data)) setDbLeaderboard(data);
@@ -93,20 +96,30 @@ export default function EmployeeDashboard() {
     .toUpperCase()
     .slice(0, 2);
 
+  const currentEmpId = profileData?.employeeId || localUser?.employeeId;
+
   const leaderboardToDisplay = dbLeaderboard.length > 0
     ? dbLeaderboard.map((item) => ({
       rank: item.rank,
-      name: item.profileId === profileData?.profileId ? `${item.name} (You)` : item.name,
+      name:
+        (item.profileId && item.profileId === profileData?.profileId) ||
+        (item.employeeId && (item.employeeId === profileData?.employeeId || item.employeeId === localUser?.employeeId))
+          ? `${item.name} (You)`
+          : item.name,
       role: item.position || "Fulfillment Specialist",
       items: item.items || 0,
-      isMe: item.profileId === profileData?.profileId,
+      isMe:
+        (item.profileId && item.profileId === profileData?.profileId) ||
+        (item.employeeId && (item.employeeId === profileData?.employeeId || item.employeeId === localUser?.employeeId)),
       initials: item.initials || "EM",
     }))
     : [
       { rank: 1, name: `${employeeName} (You)`, role: employeeRole, items: dailyTotal, isMe: true, initials: userInitials },
     ];
 
-  const lowStockAlerts = stockLevels.filter((s) => s.qty <= (s.lowStockLimit || 10));
+  const lowStockAlerts = myStock && myStock.length > 0
+    ? myStock.filter((s) => s.qty <= (s.reorderLevel || 10))
+    : stockLevels.filter((s) => s.qty <= (s.lowStockLimit || 10));
 
   // Employee Metadata for PDF Report
   const employeeInfo = {
@@ -120,9 +133,10 @@ export default function EmployeeDashboard() {
   };
 
   // Filter orders worked on by this employee
-  const myWorkOrders = orders.filter(o =>
-    o.claimedBy !== null &&
-    (o.claimedBy.includes("Mark V.") || o.claimedBy.includes("You"))
+  const myWorkOrders = orders.filter(
+    (o) =>
+      currentEmpId &&
+      (o.employeeId === currentEmpId || (o.claimedBy && o.claimedBy === currentEmpId)),
   );
 
   // Generate Report and Trigger PDF Print
@@ -578,17 +592,24 @@ export default function EmployeeDashboard() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
-              {lowStockAlerts.length === 0 ? (
+              {myStock && myStock.length === 0 ? (
+                <div style={{ color: "var(--emp-text-muted)", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px", padding: "10px 0" }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 16, height: 16, color: "var(--emp-text-muted)" }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>No stock currently allocated to your account.</span>
+                </div>
+              ) : lowStockAlerts.length === 0 ? (
                 <div style={{ color: "var(--emp-neon-green)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", padding: "10px 0" }}>
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ width: 16, height: 16 }}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>All database stock levels are optimal.</span>
+                  <span>All your assigned stock levels are optimal.</span>
                 </div>
               ) : (
-                lowStockAlerts.slice(0, 5).map(stock => (
+                lowStockAlerts.slice(0, 5).map((stock: any) => (
                   <div
-                    key={stock.id}
+                    key={stock.id || stock.inventoryId}
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
@@ -600,18 +621,11 @@ export default function EmployeeDashboard() {
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: "13px", fontWeight: 700 }}>
-                        {stock.name} {[stock.color, stock.size].filter(Boolean).length > 0 ? `(${[stock.color, stock.size].filter(Boolean).join(" / ")})` : ""}
-                      </div>
-                      <div style={{ fontSize: "11px", color: "var(--emp-text-muted)" }}>SKU: {stock.sku}</div>
+                      <div style={{ fontWeight: 700, fontSize: "12px", color: "#ffffff" }}>{stock.name || stock.productName}</div>
+                      <div style={{ fontSize: "10px", color: "var(--emp-text-muted)" }}>SKU: {stock.sku} · Size: {stock.size}</div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{ fontSize: "12px", fontWeight: 800 }}>{stock.qty} units</span>
-                      {stock.qty < 5 ? (
-                        <span className="emp-badge red" style={{ fontSize: "8.5px", padding: "1px 5px" }}>Critical Low</span>
-                      ) : (
-                        <span className="emp-badge" style={{ fontSize: "8.5px", padding: "1px 5px", backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>Low Stock</span>
-                      )}
+                    <div style={{ textAlign: "right" }}>
+                      <span className="emp-badge red">{stock.qty} left</span>
                     </div>
                   </div>
                 ))

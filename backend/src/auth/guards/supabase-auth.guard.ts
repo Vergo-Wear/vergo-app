@@ -39,6 +39,12 @@ export class SupabaseAuthGuard implements CanActivate {
   private readonly logger = new Logger(SupabaseAuthGuard.name);
   private readonly supabase: SupabaseClient;
 
+  /** In-memory cache for validated sessions to prevent slamming Supabase Auth and DB on every request */
+  private static readonly tokenCache = new Map<
+    string,
+    { user: RequestUser; expiresAt: number }
+  >();
+
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
@@ -61,6 +67,13 @@ export class SupabaseAuthGuard implements CanActivate {
     }
 
     const token = authHeader.replace('Bearer ', '');
+
+    // Return cached user if token was recently validated (60s TTL)
+    const cached = SupabaseAuthGuard.tokenCache.get(token);
+    if (cached && cached.expiresAt > Date.now()) {
+      request.user = cached.user;
+      return true;
+    }
 
     try {
       const {
@@ -130,12 +143,30 @@ export class SupabaseAuthGuard implements CanActivate {
       }
 
       // Attach user identity, role and status to request for downstream use
-      request.user = {
+      const requestUser: RequestUser = {
         id: user.id,
         email: userEmail,
         role: profile?.role?.roleName ?? null,
         status: profile?.status ?? null,
       };
+
+      // Cache token for 60 seconds to prevent repeated DB & Supabase auth roundtrips
+      SupabaseAuthGuard.tokenCache.set(token, {
+        user: requestUser,
+        expiresAt: Date.now() + 60_000,
+      });
+
+      // Cleanup cache if it grows large
+      if (SupabaseAuthGuard.tokenCache.size > 200) {
+        const now = Date.now();
+        for (const [t, entry] of SupabaseAuthGuard.tokenCache.entries()) {
+          if (entry.expiresAt <= now) {
+            SupabaseAuthGuard.tokenCache.delete(t);
+          }
+        }
+      }
+
+      request.user = requestUser;
       return true;
     } catch (error) {
       if (

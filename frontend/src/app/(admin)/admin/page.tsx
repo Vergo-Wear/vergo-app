@@ -151,7 +151,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 select-none">
-            <div style={{ fontSize: "22px", fontWeight: "900", color: "#ffffff", marginBottom: "20px", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em" }}>
+      <div style={{ fontSize: "22px", fontWeight: "900", color: "#ffffff", marginBottom: "20px", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em" }}>
         DASHBOARD
       </div>
       {/* 3 STATS CARDS GRID */}

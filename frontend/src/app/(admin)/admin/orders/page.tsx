@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdmin } from "../AdminContext";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { createSupabaseClient } from "@/lib/supabase";
 
 // --- TYPES ---
 interface OrderCustomerDetails {
@@ -25,11 +26,24 @@ interface OrderShippingDetails {
 interface PaymentProof {
   status: string;
   receipt_url?: string;
+  file_name?: string;
+  mime_type?: string;
   uploaded_at?: string;
   expires_at?: string;
   rejected_reason?: string;
   acted_by?: string;
   acted_at?: string;
+}
+
+interface OrderItemDetail {
+  name: string;
+  quantity: number;
+  price: number;
+  color?: string | null;
+  colorHex?: string | null;
+  size?: string | null;
+  sku?: string | null;
+  imageUrl?: string | null;
 }
 
 interface Order {
@@ -42,7 +56,7 @@ interface Order {
   payment_proofs?: PaymentProof;
   order_customer_details: OrderCustomerDetails;
   order_shipping_details: OrderShippingDetails;
-  items: { name: string; quantity: number; price: number }[];
+  items: OrderItemDetail[];
   delivery_fee: number;
   pending_checkout: boolean;
   registered_customer: boolean;
@@ -86,10 +100,56 @@ interface ApiRecord {
 
 interface ApiProof {
   receiptUrl?: string | null;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
   uploadedAt?: string | null;
   expiresAt?: string | null;
   status?: string;
   adminNotes?: string | null;
+}
+
+function getReceiptDisplayUrls(
+  receiptUrl?: string | null,
+  fileName?: string | null,
+  mimeType?: string | null
+) {
+  if (!receiptUrl) {
+    return { isPdf: false, previewUrl: "", rawUrl: "" };
+  }
+
+  const isPdf =
+    mimeType === "application/pdf" ||
+    Boolean(fileName && /\.pdf$/i.test(fileName)) ||
+    /\.pdf(\?.*)?$/i.test(receiptUrl) ||
+    receiptUrl.toLowerCase().includes("format=pdf");
+
+  let previewUrl = receiptUrl;
+
+  if (isPdf && receiptUrl.includes("cloudinary.com")) {
+    // 1. Ensure asset path uses /image/upload/ for dynamic image transformations
+    let transformed = receiptUrl.replace(/\/raw\/upload\//, "/image/upload/");
+
+    // 2. Rewrite .pdf extension to .jpg (Cloudinary rasterizes page 1 as an image)
+    if (/\.pdf(\?.*)?$/i.test(transformed)) {
+      transformed = transformed.replace(/\.pdf(\?.*)?$/i, ".jpg$1");
+    }
+
+    // 3. Inject page 1 rasterization and auto-quality transformation if not present
+    if (
+      transformed.includes("/image/upload/") &&
+      !transformed.includes("/pg_1")
+    ) {
+      transformed = transformed.replace(
+        "/image/upload/",
+        "/image/upload/pg_1,f_jpg,q_auto/"
+      );
+    }
+
+    previewUrl = transformed;
+  }
+
+  return { isPdf, previewUrl, rawUrl: receiptUrl };
 }
 
 interface ApiItem {
@@ -97,8 +157,14 @@ interface ApiItem {
   unitPrice: string | number;
   variant?: {
     sku?: string | null;
-    product?: { name?: string } | null;
+    product?: { name?: string; images?: { imageUrl?: string }[] } | null;
+    color?: { name?: string; hexCode?: string } | string | null;
+    size?: { name?: string } | string | null;
+    images?: { imageUrl?: string }[] | null;
   } | null;
+  color?: string | { name?: string; hexCode?: string } | null;
+  size?: string | { name?: string } | null;
+  sku?: string | null;
 }
 
 const MANAGED_ORDER_STATUSES = [
@@ -155,8 +221,19 @@ const mapApiRecord = (record: ApiRecord, pendingCheckout: boolean): Order => {
               : proof?.status || "Approved",
             receipt_url:
               proof?.receiptUrl ||
-              (proof as any)?.fileUrl ||
+              proof?.fileUrl ||
+              (proof as any)?.file_url ||
               (record as any).receiptUrl ||
+              undefined,
+            file_name:
+              proof?.fileName ||
+              (proof as any)?.file_name ||
+              (record as any).fileName ||
+              undefined,
+            mime_type:
+              proof?.mimeType ||
+              (proof as any)?.mime_type ||
+              (record as any).mimeType ||
               undefined,
             uploaded_at:
               proof?.uploadedAt ||
@@ -188,11 +265,53 @@ const mapApiRecord = (record: ApiRecord, pendingCheckout: boolean): Order => {
       district: shipping?.district || "Not provided",
       postal_code: shipping?.postalCode || "",
     },
-    items: items.map((item) => ({
-      name: item.variant?.product?.name || item.variant?.sku || "Product",
-      quantity: item.quantity,
-      price: Number(item.unitPrice),
-    })),
+    items: items.map((item) => {
+      const variant = item.variant as any;
+      const sizeVal =
+        typeof variant?.size === "object" && variant?.size !== null
+          ? variant.size.name
+          : typeof variant?.size === "string"
+            ? variant.size
+            : typeof (item as any).size === "object" && (item as any).size !== null
+              ? (item as any).size.name
+              : typeof (item as any).size === "string"
+                ? (item as any).size
+                : null;
+
+      const colorVal =
+        typeof variant?.color === "object" && variant?.color !== null
+          ? variant.color.name
+          : typeof variant?.color === "string"
+            ? variant.color
+            : typeof (item as any).color === "object" && (item as any).color !== null
+              ? (item as any).color.name
+              : typeof (item as any).color === "string"
+                ? (item as any).color
+                : null;
+
+      const colorHex =
+        typeof variant?.color === "object" && variant?.color !== null
+          ? variant.color.hexCode
+          : typeof (item as any).color === "object" && (item as any).color !== null
+            ? (item as any).color.hexCode
+            : null;
+
+      const imageUrl =
+        variant?.images?.[0]?.imageUrl ||
+        variant?.product?.images?.[0]?.imageUrl ||
+        null;
+
+      return {
+        name: variant?.product?.name || variant?.sku || "Product Item",
+        quantity: item.quantity,
+        price: Number(item.unitPrice),
+        color: colorVal,
+        colorHex,
+        size: sizeVal,
+        sku: variant?.sku || (item as any).sku || null,
+        imageUrl,
+      };
+    }),
     delivery_fee: Number(record.deliveryFee),
     pending_checkout: pendingCheckout,
     registered_customer: Boolean(record.customerId),
@@ -274,6 +393,11 @@ export default function OrdersDashboard() {
   // Modals & Drawers State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [receiptModalOrder, setReceiptModalOrder] = useState<Order | null>(null);
+  const [receiptImageError, setReceiptImageError] = useState(false);
+
+  useEffect(() => {
+    setReceiptImageError(false);
+  }, [receiptModalOrder?.order_id]);
   const [customerDrawerOrder, setCustomerDrawerOrder] = useState<Order | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
     action: "confirmCOD" | "rejectCOD" | "approvePayment" | "rejectPayment";
@@ -282,8 +406,8 @@ export default function OrdersDashboard() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
-  const loadOrders = useCallback(async () => {
-    setIsLoading(true);
+  const loadOrders = useCallback(async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
     try {
       const [ordersResponse, checkoutsResponse] = await Promise.all([
         authenticatedFetch("/orders/manage"),
@@ -291,8 +415,8 @@ export default function OrdersDashboard() {
       ]);
 
       if (!ordersResponse || !checkoutsResponse) {
-        addNotification("Session expired or connection failed loading orders.", "error");
-        setIsLoading(false);
+        if (!isSilent) addNotification("Session expired or connection failed loading orders.", "error");
+        if (!isSilent) setIsLoading(false);
         return;
       }
 
@@ -323,19 +447,75 @@ export default function OrdersDashboard() {
           : null
       );
     } catch (error) {
-      addNotification(
-        error instanceof Error
-          ? error.message
-          : "Unable to load orders from the database.",
-        "error"
-      );
+      if (!isSilent) {
+        addNotification(
+          error instanceof Error
+            ? error.message
+            : "Unable to load orders from the database.",
+          "error"
+        );
+      }
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   }, [addNotification]);
 
   useEffect(() => {
+    // 1. Initial load
     void loadOrders();
+
+    // 2. Background polling every 15s when tab is visible (silent update, no screen flicker)
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadOrders(true);
+      }
+    }, 15000);
+
+    // 3. Instant refresh on focus / visibility (silent update)
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadOrders(true);
+      }
+    };
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    window.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    // 4. Cross-component updates (silent update)
+    const handleDataUpdate = () => {
+      void loadOrders(true);
+    };
+    window.addEventListener("vergo_admin_data_updated", handleDataUpdate);
+    window.addEventListener("vergo_notifications_updated", handleDataUpdate);
+
+    // 5. Supabase Realtime channel (silent update)
+    let channel: any = null;
+    const client = createSupabaseClient();
+    if (client) {
+      try {
+        channel = client
+          .channel("vergo-admin-orders-realtime")
+          .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+            void loadOrders(true);
+          })
+          .on("postgres_changes", { event: "*", schema: "public", table: "pending_checkouts" }, () => {
+            void loadOrders(true);
+          })
+          .subscribe();
+      } catch {
+        // ignore realtime subscription errors
+      }
+    }
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      window.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+      window.removeEventListener("vergo_admin_data_updated", handleDataUpdate);
+      window.removeEventListener("vergo_notifications_updated", handleDataUpdate);
+      if (client && channel) {
+        client.removeChannel(channel);
+      }
+    };
   }, [loadOrders]);
 
   // --- ACTIONS ---
@@ -388,6 +568,7 @@ export default function OrdersDashboard() {
       setConfirmAction(null);
       setRejectReason("");
       await loadOrders();
+      window.dispatchEvent(new Event("vergo_admin_data_updated"));
     } catch (error) {
       addNotification(
         error instanceof Error ? error.message : "Unable to review this checkout.",
@@ -410,6 +591,7 @@ export default function OrdersDashboard() {
       if (res && res.ok) {
         addNotification(`Order status updated to ${newStatus}`, "success");
         await loadOrders();
+        window.dispatchEvent(new Event("vergo_admin_data_updated"));
       } else {
         const body = res ? await res.json().catch(() => null) : null;
         const msg = body?.message || "Failed to update order status";
@@ -803,11 +985,11 @@ export default function OrdersDashboard() {
       {/* MAIN TABLE */}
       <div className="bg-[#09090b] rounded-xl border border-[#27272a] overflow-hidden shadow-lg">
         <div className="overflow-x-auto custom-scrollbar">
-          {isLoading ? (
+          {isLoading && orders.length === 0 ? (
             <div className="py-24 flex flex-col items-center justify-center text-center">
               <div className="w-8 h-8 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4" />
-              <p className="text-xs text-emerald-400 uppercase tracking-widest font-mono">
-                Syncing database orders...
+              <p className="text-xs text-[#8e8e93] uppercase tracking-widest font-mono">
+                Loading orders...
               </p>
             </div>
           ) : filteredOrders.length === 0 ? (
@@ -928,8 +1110,19 @@ export default function OrdersDashboard() {
                         <div className="text-white font-bold font-mono">
                           {order.total_amount.toLocaleString()} LKR
                         </div>
+                        <div className="text-[#8e8e93] text-[9px] mt-0.5 font-mono">
+                          {order.items.reduce((sum, item) => sum + item.quantity, 0)} item(s)
+                          {order.items.some((i) => i.color || i.size) && (
+                            <span className="text-zinc-500 block truncate max-w-[130px] ml-auto">
+                              {order.items
+                                .map((i) => [i.color, i.size].filter(Boolean).join("/"))
+                                .filter(Boolean)
+                                .join(", ")}
+                            </span>
+                          )}
+                        </div>
                         {order.delivery_fee > 0 && (
-                          <div className="text-[#8e8e93] text-[9px] mt-1 font-mono">
+                          <div className="text-[#8e8e93] text-[9px] mt-0.5 font-mono">
                             +{order.delivery_fee.toLocaleString()} LKR Shipping
                           </div>
                         )}
@@ -1095,25 +1288,67 @@ export default function OrdersDashboard() {
                 )}
 
                 <div className="mt-4 space-y-3">
-                  <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
-                    Ordered Items
-                  </p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[#555] uppercase tracking-wider text-[9px]">
+                      Ordered Items ({selectedOrder.items.reduce((acc, it) => acc + it.quantity, 0)} pcs)
+                    </p>
+                  </div>
                   {selectedOrder.items.map((item, i) => (
                     <div
                       key={i}
-                      className="flex justify-between items-center bg-[#141416] p-3 rounded-lg border border-[#27272a]"
+                      className="flex items-start justify-between bg-[#141416] p-3 rounded-xl border border-[#27272a] gap-3"
                     >
-                      <div>
-                        <p className="text-white font-bold text-xs uppercase tracking-wide">
-                          {item.name}
-                        </p>
-                        <p className="text-[#8e8e93] text-[10px] mt-1 font-mono">
-                          Qty: {item.quantity} × {item.price.toLocaleString()} LKR
+                      <div className="flex items-start gap-3 min-w-0">
+                        {item.imageUrl && (
+                          <div className="w-12 h-12 rounded-lg bg-[#09090b] border border-white/5 overflow-hidden flex-shrink-0">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-white font-bold text-xs uppercase tracking-wide">
+                            {item.name}
+                          </p>
+
+                          {/* Color & Size Specs */}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            {item.color && (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#1f1f23] border border-white/10 text-[10px] font-medium text-zinc-300">
+                                {item.colorHex && (
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full border border-white/20 flex-shrink-0"
+                                    style={{ backgroundColor: item.colorHex }}
+                                  />
+                                )}
+                                <span>Color: <strong className="text-white">{item.color}</strong></span>
+                              </span>
+                            )}
+                            {item.size && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#1f1f23] border border-white/10 text-[10px] font-medium text-zinc-300">
+                                Size: <strong className="text-white">{item.size}</strong>
+                              </span>
+                            )}
+                            {item.sku && (
+                              <span className="text-[9px] text-[#71717a] font-mono">
+                                ({item.sku})
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-[#8e8e93] text-[10px] mt-1.5 font-mono">
+                            Qty: <span className="text-zinc-200 font-bold">{item.quantity}</span> × {item.price.toLocaleString()} LKR
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-white font-bold font-mono text-xs">
+                          {(item.quantity * item.price).toLocaleString()} LKR
                         </p>
                       </div>
-                      <p className="text-white font-bold font-mono">
-                        {(item.quantity * item.price).toLocaleString()} LKR
-                      </p>
                     </div>
                   ))}
                 </div>
@@ -1447,58 +1682,90 @@ export default function OrdersDashboard() {
               </div>
             </div>
 
-            {/* Image Preview Window */}
+            {/* Image / PDF Preview Window */}
             <div className="p-6 pt-3">
-              <div className="relative bg-[#060608] border border-white/10 rounded-xl min-h-[280px] max-h-[460px] flex items-center justify-center p-3 overflow-hidden group">
-                {receiptModalOrder.payment_proofs?.receipt_url ? (
-                  <>
-                    <img
-                      src={receiptModalOrder.payment_proofs.receipt_url}
-                      alt={`Payment receipt for order ${receiptModalOrder.order_id}`}
-                      className="max-h-[420px] w-auto h-auto max-w-full object-contain rounded-lg shadow-lg"
-                      onError={(e) => {
-                        // Fallback if image fails to render inline
-                        const target = e.currentTarget;
-                        target.style.display = "none";
-                        const parent = target.parentElement;
-                        if (parent && !parent.querySelector(".fallback-link")) {
-                          const fallback = document.createElement("div");
-                          fallback.className = "fallback-link text-center p-6 space-y-3";
+              {(() => {
+                const receiptInfo = getReceiptDisplayUrls(
+                  receiptModalOrder.payment_proofs?.receipt_url,
+                  receiptModalOrder.payment_proofs?.file_name,
+                  receiptModalOrder.payment_proofs?.mime_type
+                );
 
-                          const desc = document.createElement("p");
-                          desc.className = "text-zinc-400 text-xs";
-                          desc.textContent = "Receipt file format cannot be displayed inline.";
+                if (!receiptInfo.rawUrl) {
+                  return (
+                    <div className="relative bg-[#060608] border border-white/10 rounded-xl min-h-[280px] max-h-[460px] flex items-center justify-center p-3 overflow-hidden">
+                      <div className="text-center p-8 text-zinc-500 space-y-2">
+                        <p className="text-sm font-medium">No receipt file uploaded</p>
+                        <p className="text-xs text-zinc-600">The customer has not attached a receipt file yet.</p>
+                      </div>
+                    </div>
+                  );
+                }
 
-                          const link = document.createElement("a");
-                          const receiptUrl = receiptModalOrder.payment_proofs?.receipt_url || "#";
-                          link.href = receiptUrl;
-                          link.target = "_blank";
-                          link.rel = "noopener noreferrer";
-                          link.className = "inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold hover:bg-emerald-500/30 transition-colors";
-                          link.textContent = "Open receipt file ↗";
+                return (
+                  <div className="space-y-2.5">
+                    {/* Header Badge for PDFs */}
+                    {receiptInfo.isPdf && (
+                      <div className="flex items-center gap-2 bg-[#141418] border border-white/10 px-3.5 py-2 rounded-xl text-xs">
+                        <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold uppercase tracking-wider">
+                          PDF Document
+                        </span>
+                        <span className="text-[11px] text-zinc-400 font-mono truncate max-w-[280px] sm:max-w-md">
+                          {receiptModalOrder.payment_proofs?.file_name || "Payment Receipt PDF"}
+                        </span>
+                      </div>
+                    )}
 
-                          fallback.appendChild(desc);
-                          fallback.appendChild(link);
-                          parent.appendChild(fallback);
-                        }
-                      }}
-                    />
-                    <a
-                      href={receiptModalOrder.payment_proofs.receipt_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="absolute top-3 right-3 opacity-90 group-hover:opacity-100 bg-black/75 hover:bg-black text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all shadow-md backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
-                    >
-                      Open Full Size ↗
-                    </a>
-                  </>
-                ) : (
-                  <div className="text-center p-8 text-zinc-500 space-y-2">
-                    <p className="text-sm font-medium">No receipt image uploaded</p>
-                    <p className="text-xs text-zinc-600">The customer has not attached a receipt file yet.</p>
+                    <div className="relative bg-[#060608] border border-white/10 rounded-xl min-h-[300px] max-h-[480px] flex items-center justify-center p-3 overflow-hidden group">
+                      {/* Top Action Button */}
+                      <div className="absolute top-3 right-3 flex items-center gap-2 z-10 opacity-90 group-hover:opacity-100 transition-opacity">
+                        <a
+                          href={receiptInfo.previewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-black/80 hover:bg-black text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all shadow-md backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
+                          title="Open full size image preview in a new tab"
+                        >
+                          {receiptInfo.isPdf ? "Full Image Preview ↗" : "Open Full Size ↗"}
+                        </a>
+                      </div>
+
+                      {receiptImageError ? (
+                        <div className="text-center p-8 space-y-3 max-w-sm">
+                          <div className="w-12 h-12 mx-auto rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-sm">
+                            PDF
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-zinc-200">
+                              Receipt Preview Unavailable
+                            </p>
+                            <p className="text-xs text-zinc-400 mt-1">
+                              Inline preview could not be displayed. You can try opening the full preview image below.
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-center gap-2 pt-2">
+                            <a
+                              href={receiptInfo.previewUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold hover:bg-emerald-500/30 transition-colors"
+                            >
+                              Open Full Image Preview ↗
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <img
+                          src={receiptInfo.previewUrl}
+                          alt={`Payment receipt for order ${receiptModalOrder.order_id}`}
+                          className="max-h-[440px] w-auto h-auto max-w-full object-contain rounded-lg shadow-lg"
+                          onError={() => setReceiptImageError(true)}
+                        />
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </div>
 
             {/* Actions Footer */}

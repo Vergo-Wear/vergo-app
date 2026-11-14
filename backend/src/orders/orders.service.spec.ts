@@ -22,10 +22,11 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
     findMany: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+    deleteMany: jest.fn(),
   };
   const pendingCheckoutItem = { deleteMany: jest.fn(), createMany: jest.fn() };
-  const pendingCheckoutCustomerDetails = { upsert: jest.fn() };
-  const pendingCheckoutShippingDetails = { upsert: jest.fn() };
+  const pendingCheckoutCustomerDetails = { upsert: jest.fn(), deleteMany: jest.fn() };
+  const pendingCheckoutShippingDetails = { upsert: jest.fn(), deleteMany: jest.fn() };
   const paymentProof = {
     upsert: jest.fn(),
     update: jest.fn(),
@@ -599,6 +600,45 @@ describe('OrdersService normalized pending checkout lifecycle', () => {
       update: {},
     });
     expect(notifications.notifyOrderReady).toHaveBeenCalledWith(orderId);
+  });
+
+  it('removes pending checkout, details and items when expiring overdue checkouts', async () => {
+    const expiredCheckoutId = 'expired-checkout-uuid-1';
+    pendingCheckout.findMany
+      .mockResolvedValueOnce([]) // alreadyExpired query
+      .mockResolvedValueOnce([
+        { checkoutId: expiredCheckoutId, customerId: null },
+      ]); // candidates query
+    paymentProof.deleteMany.mockResolvedValue({ count: 1 });
+    pendingCheckoutItem.deleteMany.mockResolvedValueOnce({ count: 2 });
+    pendingCheckoutCustomerDetails.deleteMany.mockResolvedValueOnce({ count: 1 });
+    pendingCheckoutShippingDetails.deleteMany.mockResolvedValueOnce({ count: 1 });
+    pendingCheckout.deleteMany.mockResolvedValueOnce({ count: 1 });
+    stockReservations.expireActive.mockResolvedValueOnce({ count: 0 });
+
+    const result = await service.expireOverduePaymentProofs();
+
+    expect(result.checkouts).toBe(1);
+    expect(stockReservations.releasePendingCheckout).toHaveBeenCalledWith(
+      expect.anything(),
+      expiredCheckoutId,
+    );
+    expect(pendingCheckoutItem.deleteMany).toHaveBeenCalledWith({
+      where: { checkoutId: expiredCheckoutId },
+    });
+    expect(pendingCheckoutCustomerDetails.deleteMany).toHaveBeenCalledWith({
+      where: { checkoutId: expiredCheckoutId },
+    });
+    expect(pendingCheckoutShippingDetails.deleteMany).toHaveBeenCalledWith({
+      where: { checkoutId: expiredCheckoutId },
+    });
+    expect(pendingCheckout.deleteMany).toHaveBeenCalledWith({
+      where: {
+        checkoutId: expiredCheckoutId,
+        status: 'Awaiting Payment',
+        expiresAt: { lte: expect.any(Date) },
+      },
+    });
   });
 
   it('retries a transient startup expiry-sweep connection timeout', async () => {

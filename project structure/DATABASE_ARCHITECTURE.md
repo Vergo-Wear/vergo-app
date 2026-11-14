@@ -1,89 +1,87 @@
 # VERGO E-Commerce Platform: Database Architecture & Relationship Report
 
-**Overview:** This document outlines the relational database architecture for the VERGO platform. It details the purpose of each table, how they connect, and the specific business value they provide. The schema is highly normalized, optimized for apparel retail, and designed to maintain historical financial accuracy.
+**Overview:** This document outlines the relational database architecture for the VERGO platform. It details the purpose of each table, domain boundaries, data flow, and the specific business value they provide based on the live PostgreSQL/Supabase schema defined in [`ER.md`](./ER.md) and [`backend/prisma/schema.prisma`](../backend/prisma/schema.prisma). The schema is highly normalized, optimized for apparel retail, and designed to guarantee historical financial accuracy and robust logistics tracking.
 
 ---
 
-## 1. Base Tables (The Independent Foundation)
-These tables represent core physical or structural truths about the business. They have no foreign keys because they exist independently. This demonstrates strict database normalization (reducing data duplication).
+## 1. Base Tables & Core Structural Lookups
+These tables represent core physical or structural entities in the business with minimal external dependencies.
 
-* **`role`:** Defines system permissions (e.g., Admin, Customer, Manager). 
-  * *Business Value:* Centralizes access control. Changing an admin's permissions happens once here, rather than updating every single user row.
-* **`branch`:** Stores physical store or warehouse locations.
-  * *Business Value:* If a store moves, the address is updated here once. Every employee and inventory record linked to this branch updates automatically via their relationship.
-* **`category`:** Organizes the catalog (e.g., "Winter Wear", "Accessories").
-  * *Business Value:* Powers the frontend UI navigation and allows for highly efficient product filtering.
-* **`supplier`:** Stores vendor contact info for restocking. `email` is enforced UNIQUE at both application and database levels (`supplier_email_key`).
-  * *Business Value:* Isolates external B2B contacts from internal employee or customer data while guaranteeing no duplicate supplier accounts.
-
----
-
-## 2. Identity & Access Management (The Security Layer)
-This section bridges the gap between secure authentication and public user data.
-
-* **`profiles`:** The master bridge table. It links securely to the authentication provider's hidden system (Supabase `auth.users`) via the `id` column.
-  * *Business Value:* Keeps passwords and core security logic completely isolated from general business data, preventing accidental data leaks.
-* **`employee` & `customer`:** These link back to `profiles` via a `profile_id` foreign key. The database strictly enforces this as a 1-to-1 relationship via `@unique` and database UNIQUE constraints (`customer_profile_id_key` and `employee_profile_id_key`), ensuring a profile cannot create multiple customer or employee records.
-  * *Business Value:* Separates operational logic. Customers require shipping addresses; employees require salaries and branch assignments. Splitting them avoids a massive, messy "Users" table filled with NULL columns.
+* **`role`:** Defines system-level access roles (e.g. Admin, Customer, Employee/Manager).
+  * *Business Value:* Centralizes access control. Profiles reference roles to enforce application permissions and Row-Level Security (RLS).
+* **`branch`:** Stores physical store or warehouse dispatch locations (`name`, `address`, `phone`).
+  * *Business Value:* Multi-branch fulfillment support. Inventory quantities and courier pickup locations map directly to specific branches.
+* **`category`:** Hierarchical categorization for clothing and accessories catalog navigation.
+* **`color`:** Normalized apparel color palette (`color_id`, `name`, `hex_code`, `display_order`, `image_url`, `status`).
+* **`size`:** Normalized apparel sizing standard (`size_id`, `name`, `display_order`, `status`).
+* **`supplier`:** External B2B apparel suppliers and vendor contacts (`name`, `phone`, `email` [UNIQUE], `address`, `status`).
+* **`delivery_fee_rules`:** Regional delivery rate card mapping `district` (UNIQUE) with `base_delivery_fee`, item volume limits, and additional weight/item surcharges.
 
 ---
 
-## 3. HR Operations (Internal Management)
-These tables track workforce logistics, ensuring the administrative backend is fully integrated with the commerce platform.
+## 2. Identity & Access Management (IAM Layer)
+Separates authentication identity from specialized business personas.
 
-* **`attendance`:** Links to `employee` to log daily shifts (`check_in`, `check_out`) and availability transitions.
-  * *Business Value:* Automates time-tracking and availability for order fulfillment. Preserved as an active operational shift record.
-* **`employee_commission`:** Links an `employee` to an `orders` record to track earned fulfillment commission per parcel.
-  * *Business Value:* Incentivizes order preparation and maintains an immutable audit trail of payouts per processed order.
-
----
-
-## 4. Products & Inventory (The Core Engine)
-This is the most critical logic for a clothing retailer. It distinctly separates the *concept* of a product from the *physical item* sitting on a shelf.
-
-* **`product`:** Holds the universal details (Name, Description, `base_price`). Also carries a free-text `status` column (default `'active'`) that determines customer-facing visibility — there is no boolean "is_active" flag.
-* **`product_variant`:** Links to `product`. Holds the specific SKU, Size, and Color, plus a `price_adjustment` (default `0.00`) applied on top of the product's `base_price`.
-  * *Design Justification:* A "Graphic T-Shirt" is one product, but it comes in 3 sizes and 3 colors (9 variants). If this wasn't split, the product description would have to be typed 9 separate times. This architecture is highly optimized for apparel.
-  * *Pricing:* the customer-facing **selling price is `product.base_price + product_variant.price_adjustment`** — there is no standalone price column on the variant itself.
-* **`images`:** Links to `variant_id` (not `product_id`). Columns: `id` (bigint identity), `image_url`, `created_at`, `variant_id` (the unused `title` column was dropped).
-  * *Business Value:* A 1-to-many relationship allowing a single colored shirt to have multiple photos (front, back, lifestyle). Note: there is **no `display_order` column** in the live schema — ordering, if needed, must be handled another way (e.g. `created_at` or `id`).
-  * *Correction:* this table was previously documented here as `product_image` with a `display_order` column; neither matches the live database. A product's full image list is the union of all its variants' images, since images are not linked to `product` directly.
-* **`inventory`:** The bridge between `product_variant` and `branch`. Columns: `quantity` (default 0), `reorder_level` (default 10), `reserved_quantity` (default 0), `last_updated`.
-  * *Business Value:* Allows the system to track exact stock levels per location (e.g., knowing exactly how many "Large Red T-Shirts" are in the main warehouse versus a retail branch).
-  * *Important:* there is **one inventory row per (variant, branch) pair**. A variant's total stock/reserved figures are the sum of `quantity`/`reserved_quantity` across all its branch rows, not a single value.
+* **`profiles`:** The master bridge table connecting directly to Supabase authentication (`auth.users.id`). Stores username, active/inactive status, password reset flags, and audit timestamps.
+* **`employee`:** 1-to-1 extension of `profiles` via `@unique profile_id`. Carries operational workforce fields: assigned `branch_id`, `position`, `salary`, `hire_date`, `availability_status`, `commission_per_parcel`, and `created_by_profile_id`.
+* **`customer`:** 1-to-1 extension of `profiles` via `@unique profile_id`. Holds customer identity, `contact_phone`, and `contact_email` (UNIQUE).
+* **`user_addresses`:** Saved multi-address book for registered customers (`customer_id`, recipient name, phone, address lines, district, city, postal code, `is_primary`).
 
 ---
 
-## 5. Shopping & Checkout (The Revenue Pipeline)
-This structure handles the transition from a temporary shopping session to a permanent legal receipt.
+## 3. Product Catalog & Apparel Variants
+Optimized for fashion e-commerce with two-tier product-variant modeling.
 
-* **`cart` & `cart_item`:** Links to `customer` (or uses `session_id` for guests) and `variant_id`.
-  * *Business Value:* These are highly volatile tables. Items are added, removed, and deleted constantly. Separating carts from orders prevents the core financial database from getting clogged with abandoned checkouts.
-* **`orders`:** The master receipt table linking the Customer, Employee (if processed manually), and Branch. `order_status` is a constrained enum (`Draft`, `Pending Payment`, `Pending Verification`, `Ready to Process`, `Claimed by Employee`, `Preparing`, `Ready`, `Sent for Delivery`, `Completed`, `Cancelled`, `Rejected`, `Expired`) reflecting the full manual-verification checkout flow, not just a simple pending/completed state. Also splits the total into `product_total`, `delivery_fee`, and `cod_amount`.
-* **`order_item`:** Links the Order to the Product Variants.
-  * *Design Justification (Historical Accuracy):* The `unit_price` and `subtotal` are copied here at the exact moment of checkout. Even though the product has a base price in the `product` table, copying it to the `order_item` ensures that if a shirt's price increases next year, past financial records remain completely accurate and unchanged.
-* **`order_customer_details`:** 1-to-1 with `orders` (`order_id` is unique). Snapshots the buyer's name/email/phone at checkout time, plus `customer_type` (`registered` vs `guest`).
-  * *Business Value:* Same historical-accuracy pattern as `order_item` pricing — guest checkouts have no `customer` row to reference, and even registered customers' contact details may change later, so the order keeps its own permanent copy.
-* **`order_shipping_details`:** 1-to-1 with `orders`. Snapshots the delivery address (`receiver_name`, `address_line_1/2`, `city`, `district`, `postal_code`, `delivery_note`) independent of the customer's saved `user_addresses`, for the same audit-trail reason.
-* **`payment_proofs`:** Links to `orders`. Tracks manual bank-transfer/receipt verification with `receipt_url`, `uploaded_at`, `expires_at`, and a `status` enum (`Pending Upload`, `Pending Verification`, `Approved`, `Rejected`, `Expired`), plus `admin_notes` for staff review.
-  * *Business Value:* Supports a manual payment-verification workflow (e.g. bank deposit slips) alongside or instead of an automated payment gateway.
-* **`delivery_fee_rules`:** Independent lookup table mapping `district` (unique) to a flat `fee_amount`.
-  * *Business Value:* Centralizes delivery pricing by region so checkout can compute `delivery_fee` without hardcoding rates.
-* **`user_addresses`:** Saved addresses per `customer`, with an `is_primary` flag.
-  * *Business Value:* Lets returning customers check out faster by reusing a saved address, distinct from the per-order snapshot in `order_shipping_details`.
+* **`product`:** Master catalog item representing the design/model (`category_id`, `supplier_id`, `name`, `description`, `base_price`, `status`, `is_sold_out`).
+* **`product_variant`:** The sellable SKU representing a specific (Product + Color + Size) combination:
+  * Foreign keys: `product_id`, `color_id`, `size_id`.
+  * Pricing: Customer selling price is `product.base_price + product_variant.price_adjustment`.
+* **`images`:** Variant-specific gallery images (`variant_id`, `image_url`). Allows each colorway of a shirt to have its own gallery of lifestyle and product shots.
 
 ---
 
-## 6. Fulfillment & Supply Chain (Logistics)
-These tables handle what happens *after* a transaction occurs, both on the customer side and the B2B side.
+## 4. Multi-Branch Inventory & Stock Lifecycle
+Guarantees inventory integrity from initial browsing through checkout hold and final dispatch.
 
-* **`delivery`:** Links an `order_id` to track physical fulfillment, carrier integrations (e.g. Citypak), and waybill status.
-* **`notification`:** A centralized system linking messages to specific customers, checkouts, and orders.
-  * *Business Value:* Powers an internal inbox or automated event triggers (e.g., dispatching order status and delivery updates).
+* **`inventory`:** Per-variant, per-branch stock balance (`variant_id`, `branch_id`, `quantity`, `reorder_level`, `last_updated`, `employee_id`).
+* **`stock_reservation`:** Ephemeral stock holds created during the checkout process (`checkout_id`, `inventory_id`, `quantity`, `expires_at`, `status`). Prevents overselling during payment submission without permanently decrementing warehouse stock.
+* **`inventory_commitment`:** Hard deduction linked to confirmed orders (`order_item_id`, `inventory_id`, `quantity`, `committed_at`, `restored_at`, `restore_reason`). Provides an audit trail if an order is cancelled or restocked.
 
 ---
 
-## 7. External Integrations & Infrastructure
+## 5. Shopping Cart & 2-Phase Checkout Pipeline
+A resilient transaction pipeline designed for both instant payment and manual bank-slip verification.
 
-* **Contact Us Workflow:** Storefront customer inquiries are routed directly to an external Google Form (`NEXT_PUBLIC_GOOGLE_CONTACT_FORM_URL`). The obsolete database table `contact_message` and its Prisma model have been decommissioned. No message submission records are stored in the transactional PostgreSQL database.
-* **Prisma Migration History (`_prisma_migrations`):** Engine-level metadata table tracking applied migrations and checksums. Maintained strictly for Prisma schema evolution and deliberately omitted from the commercial business ER diagram.
+### Phase A: Pre-Checkout & Payment Review
+1. **`cart` & `cart_item`:** Active shopping carts linked to registered customers.
+2. **`pending_checkout`:** Checkout session initiated by a customer (or guest). Holds pricing snapshots (`product_total`, `delivery_fee`, `total_amount`), payment method, hold expiration (`expires_at`), and verification status (`Pending Upload`, `Pending Verification`, `Approved`, `Rejected`, `Expired`).
+3. **`pending_checkout_item`:** Line items reserved for the pending checkout session (`variant_id`, `quantity`, `unit_price`).
+4. **`pending_checkout_customer_details`:** Snapshots buyer contact info (`first_name`, `last_name`, `email`, `phone`).
+5. **`pending_checkout_shipping_details`:** Snapshots intended delivery location for the session.
+6. **`payment_proof`:** Tracks uploaded bank transfer slips/receipts (`checkout_id`, `file_url`, `file_name`, `mime_type`, `file_size_bytes`, `reviewed_by_profile_id`, `rejection_reason`).
+
+### Phase B: Confirmed Orders (Audited Financial Ledger)
+Once payment is verified or COD is placed:
+* **`orders`:** Permanent order record referencing `customer_id`, assigned `employee_id`, and `branch_id`. Tracks timestamped stage transitions (`order_date`, `claimed_at`, `preparing_at`, `parcel_ready_at`, `sent_at`, `delivered_at`, `completed_at`).
+* **`order_item`:** Permanent line-item ledger with immutable `unit_price` and `subtotal`.
+* **`order_customer_details`:** Permanent 1-to-1 snapshot of customer details at time of order creation.
+* **`order_shipping_details`:** Permanent 1-to-1 snapshot of delivery address, recipient, and delivery notes.
+
+---
+
+## 6. Courier Integration & Delivery Logistics
+Built for third-party courier APIs (e.g. Koombiyo, Citypak) and fulfillment tracking.
+
+* **`delivery`:** Main delivery record linked 1-to-1 with `orders`. Contains tracking numbers (`waybill_number`, `courier_reference`, `shipment_reference`), package dimensions/weight, COD collection amounts, delivery status, and Proof of Delivery (`pod_image_url`, receiver NIC/name).
+* **`courier_shipper_profile`:** Shipper profile and warehouse pickup address configurations per courier and branch.
+* **`delivery_waybill`:** Waybill PDF or label generation audit logs (`delivery_id`, `waybill_number`, `waybill_url`, `generated_at`).
+* **`delivery_tracking_event`:** Chronological tracking checkpoints received via courier webhooks or polling (`delivery_id`, `event_time`, `status_code`, `status_description`, `location`).
+* **`courier_pickup_request` & `courier_pickup_delivery`:** Batched courier manifest requests scheduling driver dispatch for multiple parcels.
+
+---
+
+## 7. Workforce Management, Commissions & Reviews
+* **`attendance`:** Daily employee time and attendance log (`employee_id`, `check_in`, `check_out`, `status`).
+* **`employee_commission`:** Tracks commission payouts awarded to employees per fulfilled order (`employee_id`, `order_id`, `rate_used`, `commission_amount`, `status`, `paid_at`).
+* **`review` & `review_image`:** Post-purchase product reviews linked to specific verified order items (`order_item_id`, `product_id`, `customer_id`, `rating`, `comment`, `is_hidden`).
+* **`notification`:** Multi-channel notification dispatch records (Email, SMS, In-app) linked to `recipient_profile_id`, `order_id`, or `checkout_id`.

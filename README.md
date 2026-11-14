@@ -96,9 +96,15 @@ vergo-app/
 │   ├── 03_API_SPECIFICATION.md          # REST API Reference & Endpoints
 │   ├── 04_SECURITY_ARCHITECTURE.md      # Security, Auth, RLS & Threat Modeling
 │   ├── 05_TEST_CASES_AND_QUALITY_ASSURANCE.md # QA Matrix & 14 Jest Test Suites
-│   ├── 06_DATABASE_AND_STORAGE_ARCHITECTURE.md# 31-Table DB Data Dictionary & Cloudinary
+│   ├── 06_DATABASE_AND_STORAGE_ARCHITECTURE.md# 40-Table DB Data Dictionary & Cloudinary
 │   ├── 07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md # Citypak API & 7 Concurrency Locks
 │   └── README.md                        # Final Docs Master Index
+│
+├── project structure/                   # Database Architecture & RLS Documentation
+│   ├── ER.md                            # Comprehensive 40-Table Dictionary & RLS Policies
+│   ├── DATABASE_ARCHITECTURE.md         # Relational Architecture & Domain Boundaries
+│   ├── er_diagram_dark_black_text.html  # Interactive Mermaid ER Diagram
+│   └── README.md                        # Project Structure Directory Index
 │
 └── REVIEW_STATUS.md                     # Live UI-to-Backend Integration Ledger
 ```
@@ -162,17 +168,21 @@ npm run typecheck
 
 ## Documentation
 
-Complete system documentation is located in the [Final Docs](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs) directory:
-- [01_DEVELOPER_DOCUMENTATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/01_DEVELOPER_DOCUMENTATION.md) — Developer Architecture & Engineering Guide
-- [02_USER_DOCUMENTATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/02_USER_DOCUMENTATION.md) — User Manual & Operating Guide
-- [03_API_SPECIFICATION.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/03_API_SPECIFICATION.md) — Complete REST API Specification
-- [04_SECURITY_ARCHITECTURE.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/04_SECURITY_ARCHITECTURE.md) — Security & RLS Guide
-- [05_TEST_CASES_AND_QUALITY_ASSURANCE.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/05_TEST_CASES_AND_QUALITY_ASSURANCE.md) — QA Matrix & Test Cases
-- [06_DATABASE_AND_STORAGE_ARCHITECTURE.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/06_DATABASE_AND_STORAGE_ARCHITECTURE.md) — 31-Table Schema & Cloudinary
-- [07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md](file:///e:/All%20Projects/GitHub_Projects/Vergo-Wear/vergo-app/vergo-app/Final%20Docs/07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md) — Citypak & Concurrency
+Complete system documentation is located in the [Final Docs](Final%20Docs/) directory:
+- [01_DEVELOPER_DOCUMENTATION.md](Final%20Docs/01_DEVELOPER_DOCUMENTATION.md) — Developer Architecture & Engineering Guide
+- [02_USER_DOCUMENTATION.md](Final%20Docs/02_USER_DOCUMENTATION.md) — User Manual & Operating Guide
+- [03_API_SPECIFICATION.md](Final%20Docs/03_API_SPECIFICATION.md) — Complete REST API Specification
+- [04_SECURITY_ARCHITECTURE.md](Final%20Docs/04_SECURITY_ARCHITECTURE.md) — Security & RLS Guide
+- [05_TEST_CASES_AND_QUALITY_ASSURANCE.md](Final%20Docs/05_TEST_CASES_AND_QUALITY_ASSURANCE.md) — QA Matrix & Test Cases
+- [06_DATABASE_AND_STORAGE_ARCHITECTURE.md](Final%20Docs/06_DATABASE_AND_STORAGE_ARCHITECTURE.md) — 40-Table Schema & Cloudinary
+- [07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md](Final%20Docs/07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md) — Citypak & Concurrency
+
+Database architecture and interactive diagrams are also indexed under [project structure](project%20structure/).
 
 ---
 
 ## License
 
-This software is developed under the course unit **CSC304 Team Software Project**, Department of Computer Science, Faculty of Science, University of Jaffna. Licensed under the MIT License.
+Copyright © 2026 CodeRangers. This guide was prepared by CodeRangers for VERGO to support the use of its software. VERGO branding, product photographs and third-party materials remain the property of their respective owners.
+VERGO Wear may use and share this guide with its authorised staff for operating and maintaining the delivered software. Third-party software and materials remain subject to their applicable licence terms.
+

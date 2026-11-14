@@ -722,7 +722,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       include: this.checkoutInclude,
     });
     if (!created) throw new NotFoundException('Pending checkout not found.');
-    await this.notifications.notifyOrderCreated(checkoutId);
+    if (!isBank) {
+      await this.notifications.notifyOrderCreated(checkoutId);
+    }
     return this.presentCheckout(created);
   }
 
@@ -919,6 +921,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       include: this.checkoutInclude,
     });
     if (!updated) throw new NotFoundException('Pending checkout not found.');
+    await this.notifications.notifyOrderCreated(checkoutId);
     return {
       checkout: this.presentCheckout(updated),
       replacedStoragePublicId,
@@ -1083,7 +1086,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return Promise.all(
       orders.map(async (order) => ({
         ...this.presentOrder(order),
-        ...(await this.checkParcelStock(order.orderItems, branchId)),
+        ...(await this.checkParcelStock(
+          order.orderItems,
+          branchId,
+          employeeId,
+          isDbAdmin,
+        )),
       })),
     );
   }
@@ -1091,34 +1099,48 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private async checkParcelStock(
     items: StockCheckItem[],
     branchId: string | null,
+    employeeId?: string | null,
+    isAdmin = false,
   ) {
-    if (!branchId) {
+    if (!isAdmin && !employeeId) {
       return {
         stockAvailable: false,
-        stockShortages: ['Employee is not assigned to a stock branch.'],
+        stockShortages: ['Employee profile not found.'],
       };
     }
     const shortages: string[] = [];
     for (const item of items) {
-      const inventory = await this.prisma.inventory.findFirst({
-        where: { branchId, variantId: item.variantId },
-      });
-      const held = inventory
-        ? await this.prisma.stockReservation.aggregate({
-            where: {
-              inventoryId: inventory.inventoryId,
-              status: { in: ['Active', 'Pending Verification'] },
-            },
-            _sum: { quantity: true },
-          })
-        : null;
-      const available = Math.max(
-        0,
-        (inventory?.quantity ?? 0) - (held?._sum.quantity ?? 0),
-      );
+      let available = 0;
+      if (!isAdmin && employeeId) {
+        // Employee must fulfill from their specifically allocated stock
+        const empInventory = await this.prisma.inventory.findFirst({
+          where: { employeeId, variantId: item.variantId },
+        });
+        available = empInventory?.quantity ?? 0;
+      } else if (branchId) {
+        // Warehouse inventory check for Admin
+        const inventory = await this.prisma.inventory.findFirst({
+          where: { branchId, variantId: item.variantId, employeeId: null },
+        });
+        const held = inventory
+          ? await this.prisma.stockReservation.aggregate({
+              where: {
+                inventoryId: inventory.inventoryId,
+                status: { in: ['Active', 'Pending Verification'] },
+              },
+              _sum: { quantity: true },
+            })
+          : null;
+        available = Math.max(
+          0,
+          (inventory?.quantity ?? 0) - (held?._sum.quantity ?? 0),
+        );
+      }
+
       if (available < item.quantity) {
+        const skuLabel = item.variant?.sku ?? item.variantId;
         shortages.push(
-          `${item.variant?.sku ?? item.variantId}: needs ${item.quantity}, ${available} available`,
+          `${skuLabel}: needs ${item.quantity}, ${available} available in your allocated stock`,
         );
       }
     }
@@ -1181,6 +1203,22 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           throw new ForbiddenException(
             'You cannot claim a new order until your current order in Product Preparation is completed and moved to Delivery Prep stage.',
           );
+        }
+
+        // Enforce employee stock requirement: Employee must have sufficient allocated inventory
+        for (const item of order.orderItems) {
+          const empInventory = await this.prisma.inventory.findFirst({
+            where: {
+              employeeId: employee.employeeId,
+              variantId: item.variantId,
+            },
+          });
+          const availableStock = empInventory?.quantity ?? 0;
+          if (availableStock < item.quantity) {
+            throw new BadRequestException(
+              `Cannot claim order: You do not have sufficient stock allocated for this order (${item.quantity} required, ${availableStock} available in your stock). Please request stock from admin first.`,
+            );
+          }
         }
 
         const claimedAt = new Date();
@@ -1325,12 +1363,28 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     if (!items || items.length === 0) return true;
 
+    // 1. If this checkout already holds active or pending stock reservations for all items
+    // (whether in warehouse stock where employeeId is null, or in employee stock), stock is guaranteed!
     const reservations = await tx.stockReservation.findMany({
       where: { checkoutId, status: { in: ['Active', 'Pending Verification'] } },
       include: { inventory: true },
     });
 
     if (reservations.length > 0) {
+      const reservedMap = new Map<string, number>();
+      for (const res of reservations) {
+        const vId = res.inventory?.variantId || (res as any).variantId;
+        if (vId) {
+          reservedMap.set(vId, (reservedMap.get(vId) ?? 0) + res.quantity);
+        }
+      }
+
+      const holdsAll = items.every(
+        (item) => (reservedMap.get(item.variantId) ?? 0) >= item.quantity,
+      );
+      if (holdsAll) return true;
+
+      // Also check if any single employee holds all reservations
       const empReservationMap = new Map<string, Map<string, number>>();
       for (const res of reservations) {
         const empId = res.inventory?.employeeId;
@@ -1344,13 +1398,44 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       }
 
       for (const [, varMap] of empReservationMap.entries()) {
-        const holdsAll = items.every(
+        const holdsAllEmp = items.every(
           (item) => (varMap.get(item.variantId) ?? 0) >= item.quantity,
         );
-        if (holdsAll) return true;
+        if (holdsAllEmp) return true;
       }
     }
 
+    // 2. Check if total available stock in warehouse / branches can fulfill all items
+    let totalStockAvailable = true;
+    for (const item of items) {
+      const invRows = await tx.inventory.findMany({
+        where: { variantId: item.variantId },
+        select: { inventoryId: true, quantity: true },
+      });
+
+      let available = 0;
+      for (const inv of invRows) {
+        const held = await tx.stockReservation.aggregate({
+          where: {
+            inventoryId: inv.inventoryId,
+            checkoutId: { not: checkoutId },
+            status: { in: ['Active', 'Pending Verification'] },
+          },
+          _sum: { quantity: true },
+        });
+        const heldQty = held._sum.quantity ?? 0;
+        available += Math.max(0, inv.quantity - heldQty);
+      }
+
+      if (available < item.quantity) {
+        totalStockAvailable = false;
+        break;
+      }
+    }
+
+    if (totalStockAvailable) return true;
+
+    // 3. Check if any specific employee has sufficient stock in their inventory
     const employees = await tx.inventory.findMany({
       where: { employeeId: { not: null }, quantity: { gt: 0 } },
       select: { employeeId: true },
@@ -1512,10 +1597,35 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return reviewed;
   }
 
-  /** Removes expired holds, marks their checkout expired, and clears DB carts. */
+  /** Removes expired holds, deletes expired checkouts and their details/items, and clears DB carts. */
   async expireOverduePaymentProofs() {
     const now = new Date();
     const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Clean up any existing checkouts already marked as 'Expired' across all related tables and pending_checkout
+      const alreadyExpired = await tx.pendingCheckout.findMany({
+        where: { status: 'Expired' },
+        select: { checkoutId: true },
+      });
+      if (alreadyExpired.length > 0) {
+        const expiredIds = alreadyExpired.map((c) => c.checkoutId);
+        await tx.pendingCheckoutItem.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+        await tx.pendingCheckoutCustomerDetails.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+        await tx.pendingCheckoutShippingDetails.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+        await tx.paymentProof.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+        await tx.pendingCheckout.deleteMany({
+          where: { checkoutId: { in: expiredIds } },
+        });
+      }
+
+      // 2. Find pending checkouts whose payment reservation has passed expiration
       const candidates = await tx.pendingCheckout.findMany({
         where: { status: 'Awaiting Payment', expiresAt: { lte: now } },
         select: { checkoutId: true, customerId: true },
@@ -1528,24 +1638,37 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             checkout.customerId,
           );
         }
-        const transitioned = await tx.pendingCheckout.updateMany({
+        // Release the reserved stock back to inventory first
+        await this.stockReservations.releasePendingCheckout(
+          tx,
+          checkout.checkoutId,
+        );
+
+        // Delete all child relations
+        await tx.pendingCheckoutItem.deleteMany({
+          where: { checkoutId: checkout.checkoutId },
+        });
+        await tx.pendingCheckoutCustomerDetails.deleteMany({
+          where: { checkoutId: checkout.checkoutId },
+        });
+        await tx.pendingCheckoutShippingDetails.deleteMany({
+          where: { checkoutId: checkout.checkoutId },
+        });
+        await tx.paymentProof.deleteMany({
+          where: { checkoutId: checkout.checkoutId },
+        });
+
+        // Delete the pending checkout record itself
+        const deleted = await tx.pendingCheckout.deleteMany({
           where: {
             checkoutId: checkout.checkoutId,
             status: 'Awaiting Payment',
             expiresAt: { lte: now },
           },
-          data: { status: 'Expired' },
         });
-        if (transitioned.count !== 1) continue;
+        if (deleted.count !== 1) continue;
         checkouts += 1;
-        await tx.paymentProof.updateMany({
-          where: { checkoutId: checkout.checkoutId },
-          data: { status: 'Expired' },
-        });
-        await this.stockReservations.releasePendingCheckout(
-          tx,
-          checkout.checkoutId,
-        );
+
         if (checkout.customerId) {
           const cart = await tx.cart.findUnique({
             where: { customerId: checkout.customerId },
@@ -1559,7 +1682,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }, { timeout: 60000, maxWait: 10000 });
     if (result.expired > 0 || result.checkouts > 0) {
       this.logger.log(
-        `Expired ${result.checkouts} checkout(s) and deleted ${result.expired} orphaned hold(s).`,
+        `Expired & deleted ${result.checkouts} checkout(s) and deleted ${result.expired} orphaned hold(s).`,
       );
     }
     return result;

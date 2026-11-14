@@ -13,6 +13,50 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+const KNOWN_COLOR_HEX_MAP: Record<string, string> = {
+  "merlot red": "#662D38",
+  "graphite black": "#313133",
+  "vintage cream": "#F5EBE1",
+  "sandy beige": "#BCAEA0",
+  "sunset ember": "#BC5E43",
+  "sage green": "#7A8778",
+  "wisteria blue": "#386282",
+  "milky white": "#EDEDED",
+  "ash grey": "#7D756E",
+  "navy blue": "#232C3B",
+  "obsidian green": "#1E2B24",
+  "black": "#111113",
+  "jet black": "#18181B",
+  "crimson red": "#EF4444",
+  "radioactive moss": "#10B981",
+  "cobalt blue": "#2563EB",
+  "olive green": "#727756",
+  "white": "#FFFFFF",
+  "red": "#DC2626",
+  "blue": "#2563EB",
+  "green": "#16A34A",
+  "grey": "#6B7280",
+  "gray": "#6B7280",
+  "yellow": "#EAB308",
+  "orange": "#F97316",
+  "purple": "#9333EA",
+  "pink": "#EC4899",
+  "beige": "#D4C5B9",
+  "cream": "#FFFDD0",
+  "brown": "#78350F",
+  "maroon": "#800000",
+  "navy": "#1E3A8A",
+  "teal": "#0D9488",
+};
+
+function resolveColorHex(colorName: string, explicitHex?: string | null): string {
+  if (explicitHex && /^#([0-9A-Fa-f]{3,8})$/.test(explicitHex.trim())) {
+    return explicitHex.trim();
+  }
+  const normalized = colorName.trim().toLowerCase();
+  return KNOWN_COLOR_HEX_MAP[normalized] || "#4B5563";
+}
+
 export default function ProductDetailPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const productId = resolvedParams.id;
@@ -58,7 +102,15 @@ export default function ProductDetailPage({ params }: PageProps) {
   useEffect(() => {
     if (product) {
       if (product.colors && product.colors.length > 0 && (!selectedColor || !product.colors.includes(selectedColor))) {
-        setSelectedColor(product.colors[0]);
+        const initialColor = product.colors[0];
+        setSelectedColor(initialColor);
+        const variantWithColor = product.variants.find((v) => v.color === initialColor && v.images && v.images.length > 0);
+        if (variantWithColor && variantWithColor.images && variantWithColor.images.length > 0) {
+          const targetImg = variantWithColor.images[0];
+          const allImgs = product.images && product.images.length > 0 ? product.images : [product.image];
+          const idx = allImgs.indexOf(targetImg);
+          if (idx !== -1) setActiveImageIndex(idx);
+        }
       }
       if (sizeOptions.length > 0 && (!selectedSize || !sizeOptions.includes(selectedSize))) {
         setSelectedSize(sizeOptions[0]);
@@ -98,14 +150,15 @@ export default function ProductDetailPage({ params }: PageProps) {
   const handleAddToCart = () => {
     if (!product || isProductSoldOut || availableQuantity < 1) return;
     const addedQty = Math.min(quantity, availableQuantity);
+    const chosenColor = selectedColor || selectedVariant?.color || product.colors?.[0] || undefined;
     addToCart(
       product,
       selectedSize,
       addedQty,
-      product.colors?.[0] || undefined,
+      chosenColor,
     );
     setToast(
-      `Added to cart: "${product.name}" × ${addedQty}, (Size ${selectedSize})`,
+      `Added to cart: "${product.name}" × ${addedQty}${chosenColor ? ` (${chosenColor}, Size ${selectedSize})` : ` (Size ${selectedSize})`}`,
     );
     setTimeout(() => {
       setToast(null);
@@ -236,33 +289,62 @@ export default function ProductDetailPage({ params }: PageProps) {
             {product?.colors && product.colors.length > 0 && (
               <div className="size-selection-section">
                 <div className="size-header">
-                  <span className="size-label">SELECT COLOR</span>
+                  <span className="size-label">
+                    SELECT COLOR: <strong style={{ color: "#00FF9D", fontWeight: 700 }}>{selectedColor}</strong>
+                  </span>
                 </div>
                 <div className="size-options-grid" style={{ marginBottom: "20px" }}>
-                  {product.colors.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => {
-                        setSelectedColor(color);
-                        // Jump the main image to the selected variant's first image
-                        const variantWithColor = product?.variants.find((v) => v.color === color);
-                        if (variantWithColor && variantWithColor.images && variantWithColor.images.length > 0) {
-                          const targetImg = variantWithColor.images[0];
-                          const idx = productGallery.indexOf(targetImg);
-                          if (idx !== -1) setActiveImageIndex(idx);
-                        }
+                  {product.colors.map((color) => {
+                    const colorOpt = product.colorOptions?.find(
+                      (c) => c.name.toLowerCase() === color.toLowerCase()
+                    );
+                    const hex = resolveColorHex(color, colorOpt?.hexCode);
+                    const isSelected = selectedColor === color;
 
-                        const colorAvailability = product?.variants.find(
-                          (variant) => variant.color === color && variant.size === selectedSize,
-                        )?.availableQuantity ?? 0;
-                        setQuantity((current) => Math.max(1, Math.min(current, colorAvailability || 1)));
-                      }}
-                      className={`size-btn ${selectedColor === color ? "selected" : ""}`}
-                    >
-                      {color}
-                    </button>
-                  ))}
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => {
+                          setSelectedColor(color);
+                          // Jump the main image to the selected variant's first image
+                          const variantWithColor = product?.variants.find((v) => v.color === color && v.images && v.images.length > 0)
+                            || product?.variants.find((v) => v.color === color);
+                          if (variantWithColor && variantWithColor.images && variantWithColor.images.length > 0) {
+                            const targetImg = variantWithColor.images[0];
+                            const idx = productGallery.indexOf(targetImg);
+                            if (idx !== -1) {
+                              setActiveImageIndex(idx);
+                            } else {
+                              // If target image is not in productGallery, append or find
+                              const fallbackIdx = productGallery.findIndex((img) => img === targetImg);
+                              if (fallbackIdx !== -1) setActiveImageIndex(fallbackIdx);
+                            }
+                          }
+
+                          const colorAvailability = product?.variants.find(
+                            (variant) => variant.color === color && variant.size === selectedSize,
+                          )?.availableQuantity ?? 0;
+                          setQuantity((current) => Math.max(1, Math.min(current, colorAvailability || 1)));
+                        }}
+                        className={`size-btn color-option-btn ${isSelected ? "selected" : ""}`}
+                        style={{
+                          background: isSelected
+                            ? "linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))"
+                            : "linear-gradient(135deg, #111113, #0d0d0f)",
+                        }}
+                      >
+                        <span
+                          className="color-btn-dot"
+                          style={{
+                            backgroundColor: hex,
+                            boxShadow: isSelected ? `0 0 10px ${hex}` : "0 1px 3px rgba(0,0,0,0.5)",
+                          }}
+                        />
+                        <span className="color-btn-label">{color}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

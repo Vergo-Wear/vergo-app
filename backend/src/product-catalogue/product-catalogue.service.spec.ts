@@ -63,7 +63,7 @@ describe('ProductCatalogueService', () => {
 
     expect(productDelegate.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { status: { in: ['live', 'hold'] } },
+        where: { status: { in: ['live', 'show'] } },
       }),
     );
     expect(result[0]).toMatchObject({

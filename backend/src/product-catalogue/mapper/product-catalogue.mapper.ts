@@ -50,6 +50,20 @@ function mapVariant(
       ),
     0,
   );
+  const warehouseQuantity = variant.inventory
+    .filter((inv) => !inv.employeeId)
+    .reduce((sum, inv) => sum + (inv.quantity ?? 0), 0);
+  const warehouseReserved = variant.inventory
+    .filter((inv) => !inv.employeeId)
+    .reduce(
+      (sum, inv) =>
+        sum +
+        inv.stockReservations.reduce(
+          (reserved, hold) => reserved + hold.quantity,
+          0,
+        ),
+      0,
+    );
   const price = basePrice.plus(variant.priceAdjustment ?? 0).toNumber();
   const images = variant.images
     .filter((image) => isValidImageUrl(image.imageUrl))
@@ -64,12 +78,19 @@ function mapVariant(
     sku: variant.sku,
     size: variant.size?.name || 'Standard',
     colour: variant.color?.name || 'Standard',
+    color: variant.color?.name || 'Standard',
+    color_hex: variant.color?.hexCode || null,
     price,
     inventory: {
       quantity,
       reserved_quantity: reservedQuantity,
+      warehouse_quantity: warehouseQuantity,
+      warehouse_reserved: warehouseReserved,
     },
     images,
+    warehouseStock: warehouseQuantity,
+    stockQuantity: warehouseQuantity,
+    availableStock: Math.max(0, warehouseQuantity - warehouseReserved),
   };
 }
 

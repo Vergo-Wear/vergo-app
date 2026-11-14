@@ -53,7 +53,7 @@ export default function Navbar({
     // Auto redirect password recovery email links containing hash fragments to /auth/reset-password
     const hash = window.location.hash || "";
     if (
-      (hash.includes("type=recovery") || hash.includes("access_token=")) &&
+      hash.includes("type=recovery") &&
       !pathname.startsWith("/auth/reset-password")
     ) {
       router.push(`/auth/reset-password${hash}`);

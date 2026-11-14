@@ -63,11 +63,16 @@ export class PaymentProofService {
     checkout: CreateOrderDto,
     receipt: UploadedReceiptFile,
   ) {
+    const isPdf =
+      receipt.mimetype === 'application/pdf' ||
+      receipt.originalname.toLowerCase().endsWith('.pdf');
+
     const upload = await this.cloudinary.uploadBuffer(receipt.buffer, {
       folder: 'vergo/payment-receipts',
       public_id: `${checkoutId}-${Date.now()}`,
       use_filename: false,
       unique_filename: true,
+      resource_type: isPdf ? 'image' : 'auto',
     });
     try {
       const finalized = await this.orders.finalizeBankTransferReservation(

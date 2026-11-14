@@ -229,6 +229,37 @@
   box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
 }
 
+.color-option-btn {
+  height: 48px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.color-btn-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.color-btn-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .quantity-selection-section {
   display: flex;
   align-items: center;

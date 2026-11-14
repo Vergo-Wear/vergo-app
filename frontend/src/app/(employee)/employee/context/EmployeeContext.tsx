@@ -81,6 +81,8 @@ export interface StockItem {
   sku: string;
   size: string;
   color: string;
+  colorHex?: string | null;
+  imageUrl?: string | null;
   qty: number;
   lowStockLimit: number;
 }
@@ -186,6 +188,7 @@ interface EmployeeContextType {
   syncCitypakStatus: () => Promise<any>;
   lastSyncTime: string | null;
   fetchOrders: () => Promise<void>;
+  fetchStockLevels: () => Promise<void>;
   addNotification: (
     title: string,
     message: string,
@@ -265,6 +268,8 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   });
   const [packageWeight, setWeight] = useState("");
   const [pickupSlot, setPickupSlot] = useState("");
+
+  const [currentEmployee, setCurrentEmployee] = useState<any>(null);
 
   const token = () => sessionStorage.getItem("vergo_access_token");
   const addNotification = (
@@ -359,6 +364,75 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     };
   };
 
+  const mapCatalogueToStockItems = (products: any[]): StockItem[] => {
+    const items: StockItem[] = [];
+    products.forEach((p: any) => {
+      if (p.variants && p.variants.length > 0) {
+        p.variants.forEach((v: any) => {
+          const sizeName = typeof v.size === "object" ? v.size?.name : v.size || "Standard";
+          const colorName =
+            v.colour ||
+            (typeof v.color === "object" ? v.color?.name : v.color) ||
+            v.colorName ||
+            "Standard";
+          const colorHex =
+            v.color_hex ||
+            v.colorHex ||
+            (typeof v.color === "object" ? v.color?.hexCode : null) ||
+            null;
+          const imageUrl =
+            v.images?.[0]?.url ||
+            (Array.isArray(v.images) && typeof v.images[0] === "string" ? v.images[0] : null) ||
+            p.images?.[0]?.url ||
+            (Array.isArray(p.images) && typeof p.images[0] === "string" ? p.images[0] : null) ||
+            null;
+          const rawQty =
+            v.warehouseStock ??
+            v.inventory?.warehouse_quantity ??
+            v.inventory?.quantity ??
+            v.stockQuantity ??
+            v.availableStock ??
+            0;
+          const variantId = v.variant_id || v.variantId;
+          const productId = p.product_id || p.productId;
+
+          items.push({
+            id: v.sku || variantId || `${productId}-${sizeName}-${colorName}`,
+            name: p.name,
+            sku:
+              v.sku ||
+              (variantId
+                ? String(variantId).substring(0, 8).toUpperCase()
+                : `${p.name ? p.name.substring(0, 3).toUpperCase() : "PRD"}-${sizeName}`),
+            size: sizeName,
+            color: colorName,
+            colorHex,
+            imageUrl,
+            qty: Math.max(0, Number(rawQty) || 0),
+            lowStockLimit: 10,
+          });
+        });
+      } else {
+        const productId = p.product_id || p.productId;
+        items.push({
+          id: productId || p.name,
+          name: p.name,
+          sku: `PRD-${String(productId || p.name).substring(0, 6).toUpperCase()}`,
+          size: "Standard",
+          color: "Standard",
+          colorHex: null,
+          imageUrl:
+            p.images?.[0]?.url ||
+            (Array.isArray(p.images) && typeof p.images[0] === "string" ? p.images[0] : null) ||
+            null,
+          qty: 0,
+          lowStockLimit: 10,
+        });
+      }
+    });
+    return items;
+  };
+
   useEffect(() => {
     const auth = token();
     if (!auth) return;
@@ -383,24 +457,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       .then((r) => (r.ok ? r.json() : []))
       .then((products) => {
         if (Array.isArray(products)) {
-          const items: StockItem[] = [];
-          products.forEach((p: any) => {
-            if (p.variants && p.variants.length > 0) {
-              p.variants.forEach((v: any) => {
-                const sizeName = typeof v.size === "object" ? v.size?.name : v.size || "M";
-                const colorName = typeof v.color === "object" ? v.color?.name : v.color || "Black";
-                items.push({
-                  id: v.sku || v.variantId || `${p.productId}-${sizeName}-${colorName}`,
-                  name: p.name,
-                  sku: v.sku || (v.variantId ? String(v.variantId).substring(0, 8).toUpperCase() : `${p.name.substring(0, 3).toUpperCase()}-${sizeName}`),
-                  size: sizeName,
-                  color: colorName,
-                  qty: Number(v.stockQuantity ?? v.availableStock ?? 12),
-                  lowStockLimit: 10,
-                });
-              });
-            }
-          });
+          const items = mapCatalogueToStockItems(products);
           if (items.length > 0) setStockLevels(items);
         }
       })
@@ -413,6 +470,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((employee) => {
         if (employee) {
+          setCurrentEmployee(employee);
           setAvailabilityStatus(
             employee.availabilityStatus === "AVAILABLE"
               ? "AVAILABLE"
@@ -602,8 +660,24 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) setAvailabilityStatus(next);
     });
   };
+  const currentEmpId =
+    currentEmployee?.employeeId ||
+    (typeof window !== "undefined"
+      ? (() => {
+          try {
+            return JSON.parse(sessionStorage.getItem("vergo_user") || "{}")?.employeeId;
+          } catch {
+            return null;
+          }
+        })()
+      : null);
+
   const productPrepQueue: ProductPrepItem[] = orders
-    .filter((order) => ["Claimed", "Preparing"].includes(order.status))
+    .filter(
+      (order) =>
+        ["Claimed", "Preparing"].includes(order.status) &&
+        (!currentEmpId || order.employeeId === currentEmpId),
+    )
     .flatMap((order) =>
       order.itemsList.map((item) => ({
         id: `${order.id}-${item.sku}`,
@@ -619,8 +693,13 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
         status: order.status === "Preparing" ? "PREPARING" : "NOT STARTED",
       })),
     ) as ProductPrepItem[];
+
   const readyPickups: ReadyPickupItem[] = orders
-    .filter((order) => order.status === "Ready for Pickup")
+    .filter(
+      (order) =>
+        order.status === "Ready for Pickup" &&
+        (!currentEmpId || order.employeeId === currentEmpId),
+    )
     .map((order) => ({
       id: order.id,
       batch: `Order #${order.id}`,
@@ -631,8 +710,13 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       notificationStatus: "QUEUED",
       deliveryPrep: "READY",
     }));
+
   const pickingQueue = orders
-    .filter((order) => order.status === "Ready to Pick")
+    .filter(
+      (order) =>
+        order.status === "Ready to Pick" &&
+        (!order.employeeId || order.employeeId === null),
+    )
     .map((order) => ({
       id: order.id,
       skus: order.itemsList.length,
@@ -640,9 +724,22 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       zone: "",
       status: "pending" as const,
     }));
-  const prepared = orders.filter((order) =>
-    ["Ready for Pickup", "Sent"].includes(order.status),
+
+  // Employee-specific fulfilled/prepared orders
+  const myClaimedOrders = orders.filter(
+    (order) => currentEmpId && order.employeeId === currentEmpId,
   );
+  const myPrepared = myClaimedOrders.filter((order) =>
+    ["Ready for Pickup", "Sent", "Completed", "Finished"].includes(order.status),
+  );
+  const myDailyTotal = myPrepared.reduce(
+    (sum, o) => sum + o.itemsList.reduce((iSum, i) => iSum + (i.qty || 1), 0),
+    0,
+  );
+  const myEfficiency = myClaimedOrders.length
+    ? Number(((myPrepared.length / myClaimedOrders.length) * 100).toFixed(1))
+    : 0;
+
   const logoutEmployee = () => {
     sessionStorage.clear();
     window.dispatchEvent(new Event("vergo-auth-change"));
@@ -675,35 +772,10 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${API_URL}/product-catalogue`, { cache: "no-store" });
       if (res.ok) {
         const catalogue = await res.json();
-        const items: StockItem[] = [];
-        catalogue.forEach((p: any) => {
-          if (p.variants && p.variants.length > 0) {
-            p.variants.forEach((v: any) => {
-              const sizeName = typeof v.size === "object" ? v.size?.name : v.size || "M";
-              const colorName = typeof v.color === "object" ? v.color?.name : v.color || "Black";
-              items.push({
-                id: v.sku || v.variantId || `${p.productId}-${sizeName}-${colorName}`,
-                name: p.name,
-                sku: v.sku || (v.variantId ? String(v.variantId).substring(0, 8).toUpperCase() : `${p.name.substring(0, 3).toUpperCase()}-${sizeName}`),
-                size: sizeName,
-                color: colorName,
-                qty: Number(v.stockQuantity ?? v.availableStock ?? 12),
-                lowStockLimit: 10,
-              });
-            });
-          } else {
-            items.push({
-              id: p.productId,
-              name: p.name,
-              sku: `PRD-${String(p.productId).substring(0, 6).toUpperCase()}`,
-              size: "Standard",
-              color: "Default",
-              qty: Number(p.basePrice ? 15 : 0),
-              lowStockLimit: 10,
-            });
-          }
-        });
-        setStockLevels(items);
+        if (Array.isArray(catalogue)) {
+          const items = mapCatalogueToStockItems(catalogue);
+          setStockLevels(items);
+        }
       }
     } catch (err) {
       console.error("Error loading catalogue stock levels:", err);
@@ -910,16 +982,14 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   const value: EmployeeContextType = {
     searchQuery,
     setSearchQuery,
-    dailyTotal: orders.length,
+    dailyTotal: myDailyTotal,
     currentStreak: 0,
-    efficiency: orders.length
-      ? Number(((prepared.length / orders.length) * 100).toFixed(1))
-      : 0,
+    efficiency: myEfficiency,
     systemStatus: "Operational",
-    preparedCODTotal: prepared
+    preparedCODTotal: myPrepared
       .filter((o) => o.paymentMethod === "COD")
       .reduce((sum, o) => sum + o.valuation, 0),
-    preparedBankTotal: prepared
+    preparedBankTotal: myPrepared
       .filter((o) => o.paymentMethod === "BANK")
       .reduce((sum, o) => sum + o.valuation, 0),
     pickingQueue,
@@ -971,6 +1041,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
     syncCitypakStatus,
     lastSyncTime,
     fetchOrders,
+    fetchStockLevels,
     addNotification,
     clearNotifications: () => setNotifications([]),
     requestStockFromAdmin: async (
