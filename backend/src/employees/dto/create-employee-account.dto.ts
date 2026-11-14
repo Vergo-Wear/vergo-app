@@ -23,7 +23,7 @@ export class CreateEmployeeAccountDto {
   email: string;
 
   @IsNotEmpty({ message: 'Phone number is required.' })
-  @Matches(/^(?:\+94|0)?\s*[1-9](?:[\s-]?[0-9]){8}$/, {
+  @Matches(/^(?:\+94|0)?[1-9][0-9]{8}$/, {
     message:
       'Phone number must be a valid Sri Lankan phone number (e.g. 0771234567 or +94771234567).',
   })

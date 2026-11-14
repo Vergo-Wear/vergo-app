@@ -596,18 +596,9 @@ export default function EmployeesPage() {
 
       const data = await response.json().catch(() => null);
       if (!response.ok) {
-        let message = "Failed to create the employee account.";
-        if (Array.isArray(data?.message)) {
-          message = data.message.join(" ");
-        } else if (typeof data?.message === "string") {
-          message = data.message;
-        } else if (data?.error) {
-          message = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
-        }
-        setModalAlert({
-          type: "error",
-          text: message,
-        });
+        const message = Array.isArray(data?.message)
+          ? data.message[0]
+          : data?.message || "Failed to create the employee account.";
         throw new Error(message);
       }
 
