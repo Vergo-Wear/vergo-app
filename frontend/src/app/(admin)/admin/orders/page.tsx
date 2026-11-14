@@ -35,6 +35,17 @@ interface PaymentProof {
   acted_at?: string;
 }
 
+interface OrderItemDetail {
+  name: string;
+  quantity: number;
+  price: number;
+  color?: string | null;
+  colorHex?: string | null;
+  size?: string | null;
+  sku?: string | null;
+  imageUrl?: string | null;
+}
+
 interface Order {
   order_id: string;
   payment_method: "Cash On Delivery" | "Bank Transfer";
@@ -45,7 +56,7 @@ interface Order {
   payment_proofs?: PaymentProof;
   order_customer_details: OrderCustomerDetails;
   order_shipping_details: OrderShippingDetails;
-  items: { name: string; quantity: number; price: number }[];
+  items: OrderItemDetail[];
   delivery_fee: number;
   pending_checkout: boolean;
   registered_customer: boolean;
@@ -146,8 +157,14 @@ interface ApiItem {
   unitPrice: string | number;
   variant?: {
     sku?: string | null;
-    product?: { name?: string } | null;
+    product?: { name?: string; images?: { imageUrl?: string }[] } | null;
+    color?: { name?: string; hexCode?: string } | string | null;
+    size?: { name?: string } | string | null;
+    images?: { imageUrl?: string }[] | null;
   } | null;
+  color?: string | { name?: string; hexCode?: string } | null;
+  size?: string | { name?: string } | null;
+  sku?: string | null;
 }
 
 const MANAGED_ORDER_STATUSES = [
@@ -248,11 +265,53 @@ const mapApiRecord = (record: ApiRecord, pendingCheckout: boolean): Order => {
       district: shipping?.district || "Not provided",
       postal_code: shipping?.postalCode || "",
     },
-    items: items.map((item) => ({
-      name: item.variant?.product?.name || item.variant?.sku || "Product",
-      quantity: item.quantity,
-      price: Number(item.unitPrice),
-    })),
+    items: items.map((item) => {
+      const variant = item.variant as any;
+      const sizeVal =
+        typeof variant?.size === "object" && variant?.size !== null
+          ? variant.size.name
+          : typeof variant?.size === "string"
+            ? variant.size
+            : typeof (item as any).size === "object" && (item as any).size !== null
+              ? (item as any).size.name
+              : typeof (item as any).size === "string"
+                ? (item as any).size
+                : null;
+
+      const colorVal =
+        typeof variant?.color === "object" && variant?.color !== null
+          ? variant.color.name
+          : typeof variant?.color === "string"
+            ? variant.color
+            : typeof (item as any).color === "object" && (item as any).color !== null
+              ? (item as any).color.name
+              : typeof (item as any).color === "string"
+                ? (item as any).color
+                : null;
+
+      const colorHex =
+        typeof variant?.color === "object" && variant?.color !== null
+          ? variant.color.hexCode
+          : typeof (item as any).color === "object" && (item as any).color !== null
+            ? (item as any).color.hexCode
+            : null;
+
+      const imageUrl =
+        variant?.images?.[0]?.imageUrl ||
+        variant?.product?.images?.[0]?.imageUrl ||
+        null;
+
+      return {
+        name: variant?.product?.name || variant?.sku || "Product Item",
+        quantity: item.quantity,
+        price: Number(item.unitPrice),
+        color: colorVal,
+        colorHex,
+        size: sizeVal,
+        sku: variant?.sku || (item as any).sku || null,
+        imageUrl,
+      };
+    }),
     delivery_fee: Number(record.deliveryFee),
     pending_checkout: pendingCheckout,
     registered_customer: Boolean(record.customerId),
@@ -1053,8 +1112,19 @@ export default function OrdersDashboard() {
                         <div className="text-white font-bold font-mono">
                           {order.total_amount.toLocaleString()} LKR
                         </div>
+                        <div className="text-[#8e8e93] text-[9px] mt-0.5 font-mono">
+                          {order.items.reduce((sum, item) => sum + item.quantity, 0)} item(s)
+                          {order.items.some((i) => i.color || i.size) && (
+                            <span className="text-zinc-500 block truncate max-w-[130px] ml-auto">
+                              {order.items
+                                .map((i) => [i.color, i.size].filter(Boolean).join("/"))
+                                .filter(Boolean)
+                                .join(", ")}
+                            </span>
+                          )}
+                        </div>
                         {order.delivery_fee > 0 && (
-                          <div className="text-[#8e8e93] text-[9px] mt-1 font-mono">
+                          <div className="text-[#8e8e93] text-[9px] mt-0.5 font-mono">
                             +{order.delivery_fee.toLocaleString()} LKR Shipping
                           </div>
                         )}
@@ -1220,25 +1290,67 @@ export default function OrdersDashboard() {
                 )}
 
                 <div className="mt-4 space-y-3">
-                  <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
-                    Ordered Items
-                  </p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-[#555] uppercase tracking-wider text-[9px]">
+                      Ordered Items ({selectedOrder.items.reduce((acc, it) => acc + it.quantity, 0)} pcs)
+                    </p>
+                  </div>
                   {selectedOrder.items.map((item, i) => (
                     <div
                       key={i}
-                      className="flex justify-between items-center bg-[#141416] p-3 rounded-lg border border-[#27272a]"
+                      className="flex items-start justify-between bg-[#141416] p-3 rounded-xl border border-[#27272a] gap-3"
                     >
-                      <div>
-                        <p className="text-white font-bold text-xs uppercase tracking-wide">
-                          {item.name}
-                        </p>
-                        <p className="text-[#8e8e93] text-[10px] mt-1 font-mono">
-                          Qty: {item.quantity} × {item.price.toLocaleString()} LKR
+                      <div className="flex items-start gap-3 min-w-0">
+                        {item.imageUrl && (
+                          <div className="w-12 h-12 rounded-lg bg-[#09090b] border border-white/5 overflow-hidden flex-shrink-0">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-white font-bold text-xs uppercase tracking-wide">
+                            {item.name}
+                          </p>
+
+                          {/* Color & Size Specs */}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            {item.color && (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#1f1f23] border border-white/10 text-[10px] font-medium text-zinc-300">
+                                {item.colorHex && (
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full border border-white/20 flex-shrink-0"
+                                    style={{ backgroundColor: item.colorHex }}
+                                  />
+                                )}
+                                <span>Color: <strong className="text-white">{item.color}</strong></span>
+                              </span>
+                            )}
+                            {item.size && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#1f1f23] border border-white/10 text-[10px] font-medium text-zinc-300">
+                                Size: <strong className="text-white">{item.size}</strong>
+                              </span>
+                            )}
+                            {item.sku && (
+                              <span className="text-[9px] text-[#71717a] font-mono">
+                                ({item.sku})
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-[#8e8e93] text-[10px] mt-1.5 font-mono">
+                            Qty: <span className="text-zinc-200 font-bold">{item.quantity}</span> × {item.price.toLocaleString()} LKR
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-white font-bold font-mono text-xs">
+                          {(item.quantity * item.price).toLocaleString()} LKR
                         </p>
                       </div>
-                      <p className="text-white font-bold font-mono">
-                        {(item.quantity * item.price).toLocaleString()} LKR
-                      </p>
                     </div>
                   ))}
                 </div>
