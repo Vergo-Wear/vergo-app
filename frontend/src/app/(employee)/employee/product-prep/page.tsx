@@ -35,12 +35,41 @@ export default function ProductPrep() {
     return localISOTime;
   };
 
-  const now = new Date();
-  const defaultFrom = formatDatetimeInput(new Date(now.getTime() + 30 * 60 * 1000));
-  const defaultTo = formatDatetimeInput(new Date(now.getTime() + 4 * 60 * 60 * 1000));
+  const getSmartDefaultPickupTimes = () => {
+    const now = new Date();
+    const currentHour = now.getHours();
 
-  const [pickupFromDatetime, setPickupFromDatetime] = useState(defaultFrom);
-  const [pickupToDatetime, setPickupToDatetime] = useState(defaultTo);
+    const from = new Date(now);
+    const to = new Date(now);
+
+    if (currentHour >= 16) {
+      // Courier operating hours ended for today: schedule for tomorrow 10:00 AM - 15:00 PM
+      from.setDate(from.getDate() + 1);
+      from.setHours(10, 0, 0, 0);
+      to.setDate(to.getDate() + 1);
+      to.setHours(15, 0, 0, 0);
+    } else if (currentHour < 9) {
+      // Before 9:00 AM: schedule for today 10:00 AM - 15:00 PM
+      from.setHours(10, 0, 0, 0);
+      to.setHours(15, 0, 0, 0);
+    } else {
+      // Normal operating hours (09:00 - 16:00): schedule from now + 1 hour to min(now + 4 hours, 17:00)
+      from.setTime(now.getTime() + 60 * 60 * 1000);
+      to.setTime(now.getTime() + 4 * 60 * 60 * 1000);
+      if (to.getHours() >= 17) {
+        to.setHours(17, 0, 0, 0);
+      }
+    }
+
+    return {
+      from: formatDatetimeInput(from),
+      to: formatDatetimeInput(to),
+    };
+  };
+
+  const defaultTimes = getSmartDefaultPickupTimes();
+  const [pickupFromDatetime, setPickupFromDatetime] = useState(defaultTimes.from);
+  const [pickupToDatetime, setPickupToDatetime] = useState(defaultTimes.to);
   const [waybillCount, setWaybillCount] = useState("1");
   const [weightKg, setWeightKg] = useState("0.5");
 
@@ -454,6 +483,21 @@ export default function ProductPrep() {
     }
     if (hasPreallocatedTracking === "Yes" && !preallocatedTrackingNumber.trim()) {
       setErrorMsg("Pre-allocated tracking number is enabled. Please enter the Citypak Tracking Number.");
+      return;
+    }
+
+    const fromDate = new Date(pickupFromDatetime);
+    const toDate = new Date(pickupToDatetime);
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      setErrorMsg("Please provide valid pickup From and To dates.");
+      return;
+    }
+    if (toDate.getTime() <= fromDate.getTime()) {
+      setErrorMsg("Pickup 'To' time must be after pickup 'From' time.");
+      return;
+    }
+    if (fromDate.getTime() < Date.now() - 5 * 60 * 1000) {
+      setErrorMsg("Pickup time cannot be in the past. Please select a future date and time.");
       return;
     }
 

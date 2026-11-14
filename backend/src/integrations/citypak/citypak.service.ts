@@ -750,16 +750,34 @@ export class CitypakService {
       totalWeightGrams += unrecordedCount * 500;
     }
 
-    // Format datetimes as DD/MM/YYYY HH:mm
+    const finalWeightGrams = Math.max(500, Number(totalWeightGrams));
+    const finalWaybillCount = Math.max(1, Number(totalWaybillCount));
+
+    // Format datetimes as DD/MM/YYYY HH:mm in Sri Lanka Time (Asia/Colombo)
     const formatDateStr = (isoStr: string) => {
       const date = new Date(isoStr);
-      const dd = String(date.getDate()).padStart(2, '0');
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const yyyy = date.getFullYear();
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+      if (isNaN(date.getTime())) {
+        throw new BadRequestException(`Invalid date string: ${isoStr}`);
+      }
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Colombo',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      return formatter.format(date).replace(',', '').trim();
     };
+
+    const fromDate = new Date(dto.pickupFromDatetime);
+    const toDate = new Date(dto.pickupToDatetime);
+    if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+      if (toDate.getTime() <= fromDate.getTime()) {
+        throw new BadRequestException('Pickup "To" datetime must be after pickup "From" datetime.');
+      }
+    }
 
     const fromFormatted = formatDateStr(dto.pickupFromDatetime);
     const toFormatted = formatDateStr(dto.pickupToDatetime);
@@ -775,6 +793,8 @@ export class CitypakService {
       let cleaned = (phone || '').replace(/[^\d]/g, '');
       if (cleaned.startsWith('94')) {
         cleaned = '0' + cleaned.slice(2);
+      } else if (cleaned.length === 9 && !cleaned.startsWith('0')) {
+        cleaned = '0' + cleaned;
       }
       return cleaned;
     };
@@ -786,10 +806,28 @@ export class CitypakService {
       pickup_address_line_4_city: dto.pickupAddressLine4City,
       pickup_contact_person: dto.pickupContactPerson,
       pickup_contact_number_1: cleanPhone(dto.pickupContactNumber1),
-      estimated_pickup_weight_grams: Number(totalWeightGrams),
-      estimated_waybill_count: Number(totalWaybillCount),
+      estimated_pickup_weight_grams: finalWeightGrams,
+      estimated_waybill_count: finalWaybillCount,
       pickup_from_datetime: fromFormatted,
       pickup_to_datetime: toFormatted,
+    };
+
+    const extractDetails = (resData: any): string => {
+      if (!resData) return '';
+      const raw = resData.errors || resData.data || resData.error || resData.details;
+      if (!raw) return '';
+      if (typeof raw === 'string') return `: ${raw}`;
+      if (Array.isArray(raw)) return `: ${raw.join(', ')}`;
+      if (typeof raw === 'object') {
+        const entries = Object.entries(raw);
+        if (entries.length > 0) {
+          const formatted = entries
+            .map(([k, v]) => `${k} - ${Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? JSON.stringify(v) : v}`)
+            .join('; ');
+          return `: ${formatted}`;
+        }
+      }
+      return `: ${JSON.stringify(raw)}`;
     };
 
     let externalPickupId: number | null = null;
@@ -807,7 +845,7 @@ export class CitypakService {
 
       const resData = response.data;
       if (!resData || resData.success === false || resData.is_success === false) {
-        const errorDetail = resData?.errors ? `: ${JSON.stringify(resData.errors)}` : '';
+        const errorDetail = extractDetails(resData);
         const msg = resData?.message || 'Citypak pickup creation failed.';
         this.logger.error(`Citypak Pickup Creation failed: ${msg}${errorDetail}`);
         throw new BadRequestException(`Pickup creation failed: ${msg}${errorDetail}`);
@@ -821,9 +859,7 @@ export class CitypakService {
       const responseData = err.response?.data;
       const safeMessage =
         responseData?.message || err.message || 'Error requesting Citypak pickup';
-      const detailErrors = responseData?.errors
-        ? `: ${JSON.stringify(responseData.errors)}`
-        : '';
+      const detailErrors = extractDetails(responseData);
       this.logger.error(`Citypak Pickup Creation failed: ${safeMessage}${detailErrors}`);
       throw new BadRequestException(`Pickup creation failed: ${safeMessage}${detailErrors}`);
     }
