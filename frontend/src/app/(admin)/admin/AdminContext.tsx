@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createSupabaseClient } from "@/lib/supabase";
 
 export interface InventoryItem { inventoryId?: string; sku: string; name: string; location: string; inStock: number; status: "VERIFYING" | "PENDING" | "PROCESSING" | "SHIPPED"; reorderLevel?: number }
 export interface StockAlert { id: string; sku: string; name: string; node: string; units: number; status: "critical" | "warning" }
@@ -43,6 +44,8 @@ interface AdminContextType {
   toggleEmployeeShift: (id: string) => void; restockItem: (sku: string, location: string, amount: number) => void; shipPendingItem: (sku: string, location: string) => void;
   removeEmployee: (id: string) => void;
   addEmployee: (id: string, name: string) => void;
+  refreshData: () => Promise<void>;
+  isRefreshing: boolean;
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
@@ -71,6 +74,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const addNotification = useCallback((message: string, type: ToastNotification["type"]) => {
     const id = crypto.randomUUID();
@@ -79,49 +83,154 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const removeNotification = (id: string) => setNotifications((current) => current.filter((item) => item.id !== id));
 
-  useEffect(() => {
+  const loadAdminData = useCallback(async (isSilent = false) => {
     const token = sessionStorage.getItem("vergo_access_token");
     if (!token || !API_URL) return;
-    fetch(`${API_URL}/admin/overview`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
-      .then((response) => {
-        if (!response.ok) throw new Error("Unable to retrieve admin data.");
-        return response.json();
-      })
-      .then((data) => {
-        setInventory(data.inventory.map((item: InventoryItem) => ({ ...item, status: item.inStock <= (item.reorderLevel || 0) ? "PENDING" : "PROCESSING" })));
-        setEmployees(data.employees.map((employee: { id: string; name: string; status: string }, index: number) => ({ id: employee.id, rank: index + 1, name: employee.name, avatar: employee.name.split(" ").map((part) => part[0]).join("").slice(0, 2), status: employee.status === "active" ? "ON DUTY" : "ON BREAK", parcels: 0 })));
-        setStats(data.stats);
-        setAnalytics(data.analytics || EMPTY_ANALYTICS);
 
-        fetch(`${API_URL}/orders/manage/pending-checkouts`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((pendingCheckouts) => {
-            if (Array.isArray(pendingCheckouts)) {
-              setOrders(pendingCheckouts);
-            }
-          })
-          .catch(() => null);
+    if (!isSilent) setIsRefreshing(true);
+    const headers = { Authorization: `Bearer ${token}` };
 
-        fetch(`${API_URL}/admin/employee-logistics`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((logistics) => {
-            if (Array.isArray(logistics) && logistics.length > 0) {
-              setEmployees(
-                logistics.map((emp: any, index: number) => ({
-                  id: emp.employeeId,
-                  rank: index + 1,
-                  name: emp.name,
-                  avatar: emp.name.split(" ").map((part: string) => part[0]).join("").slice(0, 2).toUpperCase(),
-                  status: emp.availabilityStatus === "AVAILABLE" ? "ON DUTY" : "ON BREAK",
-                  parcels: emp.metrics?.dispatchedCount || 0,
-                }))
-              );
-            }
+    try {
+      const [overviewRes, checkoutsRes, logisticsRes] = await Promise.all([
+        fetch(`${API_URL}/admin/overview`, { headers, cache: "no-store" }),
+        fetch(`${API_URL}/orders/manage/pending-checkouts`, { headers, cache: "no-store" }),
+        fetch(`${API_URL}/admin/employee-logistics`, { headers, cache: "no-store" }),
+      ]);
+
+      if (overviewRes.ok) {
+        const overviewData = await overviewRes.json();
+        setInventory(
+          overviewData.inventory.map((item: InventoryItem) => ({
+            ...item,
+            status:
+              item.inStock <= (item.reorderLevel || 0)
+                ? "PENDING"
+                : "PROCESSING",
+          }))
+        );
+        setEmployees(
+          overviewData.employees.map(
+            (
+              employee: { id: string; name: string; status: string },
+              index: number
+            ) => ({
+              id: employee.id,
+              rank: index + 1,
+              name: employee.name,
+              avatar: employee.name
+                .split(" ")
+                .map((part) => part[0])
+                .join("")
+                .slice(0, 2),
+              status:
+                employee.status === "active" ? "ON DUTY" : "ON BREAK",
+              parcels: 0,
+            })
+          )
+        );
+        setStats(overviewData.stats);
+        setAnalytics(overviewData.analytics || EMPTY_ANALYTICS);
+      }
+
+      if (checkoutsRes.ok) {
+        const pendingCheckouts = await checkoutsRes.json();
+        if (Array.isArray(pendingCheckouts)) {
+          setOrders(pendingCheckouts);
+        }
+      }
+
+      if (logisticsRes.ok) {
+        const logistics = await logisticsRes.json();
+        if (Array.isArray(logistics) && logistics.length > 0) {
+          setEmployees(
+            logistics.map((emp: any, index: number) => ({
+              id: emp.employeeId,
+              rank: index + 1,
+              name: emp.name,
+              avatar: emp.name
+                .split(" ")
+                .map((part: string) => part[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase(),
+              status:
+                emp.availabilityStatus === "AVAILABLE"
+                  ? "ON DUTY"
+                  : "ON BREAK",
+              parcels: emp.metrics?.dispatchedCount || 0,
+            }))
+          );
+        }
+      }
+    } catch (err: any) {
+      if (!isSilent) {
+        addNotification(err.message || "Unable to retrieve admin data.", "error");
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [addNotification]);
+
+  useEffect(() => {
+    // 1. Initial load
+    void loadAdminData();
+
+    // 2. Poll every 15 seconds in background if document is visible
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadAdminData(true);
+      }
+    }, 15000);
+
+    // 3. Instant refresh on tab focus / visibility return
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadAdminData(true);
+      }
+    };
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    window.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    // 4. Listen to cross-component data updates
+    const handleDataUpdate = () => {
+      void loadAdminData(true);
+    };
+    window.addEventListener("vergo_admin_data_updated", handleDataUpdate);
+    window.addEventListener("vergo_notifications_updated", handleDataUpdate);
+
+    // 5. Supabase Realtime channel subscription
+    let channel: any = null;
+    const client = createSupabaseClient();
+    if (client) {
+      try {
+        channel = client
+          .channel("vergo-admin-realtime")
+          .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+            void loadAdminData(true);
           })
-          .catch(() => null);
-      })
-      .catch((error: Error) => addNotification(error.message, "error"));
-  }, []);
+          .on("postgres_changes", { event: "*", schema: "public", table: "pending_checkouts" }, () => {
+            void loadAdminData(true);
+          })
+          .on("postgres_changes", { event: "*", schema: "public", table: "inventory" }, () => {
+            void loadAdminData(true);
+          })
+          .subscribe();
+      } catch {
+        // ignore realtime subscription errors
+      }
+    }
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      window.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+      window.removeEventListener("vergo_admin_data_updated", handleDataUpdate);
+      window.removeEventListener("vergo_notifications_updated", handleDataUpdate);
+      if (client && channel) {
+        client.removeChannel(channel);
+      }
+    };
+  }, [loadAdminData]);
 
   const persistQuantity = (item: InventoryItem, quantity: number) => {
     const token = sessionStorage.getItem("vergo_access_token");
@@ -233,7 +342,38 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     });
   }, [orders, inventory]);
 
-  return <AdminContext.Provider value={{ inventory, alerts, employees, stats, analytics, notifications, orders, adminAlerts, searchQuery, statusFilter, transferModalOpen, setSearchQuery, setStatusFilter, setTransferModalOpen, addNotification, removeNotification, transferStock, toggleEmployeeShift, restockItem, shipPendingItem, removeEmployee, addEmployee }}>{children}</AdminContext.Provider>;
+  return (
+    <AdminContext.Provider
+      value={{
+        inventory,
+        alerts,
+        employees,
+        stats,
+        analytics,
+        notifications,
+        orders,
+        adminAlerts,
+        searchQuery,
+        statusFilter,
+        transferModalOpen,
+        setSearchQuery,
+        setStatusFilter,
+        setTransferModalOpen,
+        addNotification,
+        removeNotification,
+        transferStock,
+        toggleEmployeeShift,
+        restockItem,
+        shipPendingItem,
+        removeEmployee,
+        addEmployee,
+        refreshData: () => loadAdminData(false),
+        isRefreshing,
+      }}
+    >
+      {children}
+    </AdminContext.Provider>
+  );
 }
 
 export function useAdmin() {

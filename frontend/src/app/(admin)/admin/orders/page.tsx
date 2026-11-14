@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdmin } from "../AdminContext";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { createSupabaseClient } from "@/lib/supabase";
 
 // --- TYPES ---
 interface OrderCustomerDetails {
@@ -335,7 +336,61 @@ export default function OrdersDashboard() {
   }, [addNotification]);
 
   useEffect(() => {
+    // 1. Initial load
     void loadOrders();
+
+    // 2. Background polling every 15s when tab is visible
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadOrders();
+      }
+    }, 15000);
+
+    // 3. Instant refresh on focus / visibility
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadOrders();
+      }
+    };
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    window.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    // 4. Cross-component updates
+    const handleDataUpdate = () => {
+      void loadOrders();
+    };
+    window.addEventListener("vergo_admin_data_updated", handleDataUpdate);
+    window.addEventListener("vergo_notifications_updated", handleDataUpdate);
+
+    // 5. Supabase Realtime channel
+    let channel: any = null;
+    const client = createSupabaseClient();
+    if (client) {
+      try {
+        channel = client
+          .channel("vergo-admin-orders-realtime")
+          .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+            void loadOrders();
+          })
+          .on("postgres_changes", { event: "*", schema: "public", table: "pending_checkouts" }, () => {
+            void loadOrders();
+          })
+          .subscribe();
+      } catch {
+        // ignore realtime subscription errors
+      }
+    }
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      window.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+      window.removeEventListener("vergo_admin_data_updated", handleDataUpdate);
+      window.removeEventListener("vergo_notifications_updated", handleDataUpdate);
+      if (client && channel) {
+        client.removeChannel(channel);
+      }
+    };
   }, [loadOrders]);
 
   // --- ACTIONS ---
@@ -388,6 +443,7 @@ export default function OrdersDashboard() {
       setConfirmAction(null);
       setRejectReason("");
       await loadOrders();
+      window.dispatchEvent(new Event("vergo_admin_data_updated"));
     } catch (error) {
       addNotification(
         error instanceof Error ? error.message : "Unable to review this checkout.",
@@ -410,6 +466,7 @@ export default function OrdersDashboard() {
       if (res && res.ok) {
         addNotification(`Order status updated to ${newStatus}`, "success");
         await loadOrders();
+        window.dispatchEvent(new Event("vergo_admin_data_updated"));
       } else {
         const body = res ? await res.json().catch(() => null) : null;
         const msg = body?.message || "Failed to update order status";

@@ -35,6 +35,7 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
+  private cachedOverview: { data: any; expiresAt: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -110,6 +111,10 @@ export class AdminService {
   }
 
   async overview() {
+    if (this.cachedOverview && this.cachedOverview.expiresAt > Date.now()) {
+      return this.cachedOverview.data;
+    }
+
     const [inventoryRows, employees, orders] = await Promise.all([
       this.prisma.inventory.findMany({
         include: {
@@ -155,7 +160,7 @@ export class AdminService {
     const customerDistribution = this.customerDistribution(analyticsOrders);
     const nextYearForecast = this.nextYearForecast(analyticsOrders);
 
-    return {
+    const result = {
       inventory,
       employees: employees.map((employee) => ({
         id: employee.employeeId,
@@ -186,6 +191,14 @@ export class AdminService {
         nextYearForecast,
       },
     };
+
+    // Cache overview response for 15 seconds to eliminate repetitive DB query storms
+    this.cachedOverview = {
+      data: result,
+      expiresAt: Date.now() + 15_000,
+    };
+
+    return result;
   }
 
   private customerDistribution(
@@ -501,6 +514,7 @@ export class AdminService {
         `Quantity cannot be lower than ${reservedQuantity} reserved units.`,
       );
     }
+    this.cachedOverview = null;
     return this.prisma.inventory.update({
       where: { inventoryId },
       data: { quantity },
@@ -599,6 +613,7 @@ export class AdminService {
 
       return { inventoryId, updated: true };
     });
+    this.cachedOverview = null;
     this.productCatalogueService?.clearCache();
     return result;
   }
@@ -697,7 +712,8 @@ export class AdminService {
           },
         });
       });
-      this.productCatalogueService?.clearCache();
+      this.cachedOverview = null;
+    this.productCatalogueService?.clearCache();
       return result;
     } catch (e: any) {
       if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
@@ -904,7 +920,8 @@ export class AdminService {
           },
         });
       });
-      this.productCatalogueService?.clearCache();
+      this.cachedOverview = null;
+    this.productCatalogueService?.clearCache();
       return result;
     } catch (e: any) {
       if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
@@ -926,6 +943,7 @@ export class AdminService {
       where: { productId },
       data: { status },
     });
+    this.cachedOverview = null;
     this.productCatalogueService?.clearCache();
     return { success: true };
   }
@@ -935,6 +953,7 @@ export class AdminService {
       where: { productId },
       data: { isSoldOut: Boolean(isSoldOut) },
     });
+    this.cachedOverview = null;
     this.productCatalogueService?.clearCache();
     return { success: true, isSoldOut: product.isSoldOut };
   }
@@ -1157,7 +1176,8 @@ export class AdminService {
       }
 
       console.log(`[deleteProduct] Successfully deleted product ${productId}`);
-      this.productCatalogueService?.clearCache();
+      this.cachedOverview = null;
+    this.productCatalogueService?.clearCache();
       return { success: true };
     } catch (error: any) {
       console.error('[deleteProduct Error]:', error);

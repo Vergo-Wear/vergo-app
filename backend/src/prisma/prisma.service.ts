@@ -29,7 +29,7 @@ export class PrismaService
     }
     const pool = new Pool({
       connectionString,
-      max: positiveIntegerFromEnv('DATABASE_POOL_MAX', 5),
+      max: positiveIntegerFromEnv('DATABASE_POOL_MAX', 10),
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: positiveIntegerFromEnv(
         'DATABASE_CONNECTION_TIMEOUT_MS',

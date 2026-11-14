@@ -84,7 +84,18 @@ export default function CartPage() {
                   {/* Product Image */}
                   <div className="cart-item-image-wrapper">
                     <Image
-                      src={item.product.image}
+                      src={
+                        (item.color && item.product.variants.find(
+                          (v) =>
+                            v.color?.toLowerCase() === item.color?.toLowerCase() &&
+                            v.images &&
+                            v.images.length > 0
+                        )?.images?.[0]) ||
+                        (item.color && item.product.colorOptions?.find(
+                          (c) => c.name?.toLowerCase() === item.color?.toLowerCase()
+                        )?.imageUrl) ||
+                        item.product.image
+                      }
                       alt={item.product.name}
                       fill
                       className="cart-item-image"

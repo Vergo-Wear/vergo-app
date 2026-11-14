@@ -19,6 +19,8 @@ export default function DashboardPage() {
     restockItem,
     shipPendingItem,
     addNotification,
+    refreshData,
+    isRefreshing,
   } = useAdmin();
 
   // Local table state
@@ -151,8 +153,28 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 select-none">
-            <div style={{ fontSize: "22px", fontWeight: "900", color: "#ffffff", marginBottom: "20px", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em" }}>
-        DASHBOARD
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div style={{ fontSize: "22px", fontWeight: "900", color: "#ffffff", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.08em" }}>
+          DASHBOARD
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-[#121214] border border-[rgba(255,255,255,0.08)] px-3 py-1.5 rounded-lg text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-400">LIVE SYNC ACTIVE</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshData()}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white/5 hover:bg-white/10 active:scale-95 text-white rounded-lg border border-white/10 transition-all cursor-pointer"
+            title="Refresh dashboard data"
+          >
+            <svg className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-emerald-400" : "text-white"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span className="text-[11px] font-bold tracking-wider">{isRefreshing ? "SYNCING..." : "SYNC NOW"}</span>
+          </button>
+        </div>
       </div>
       {/* 3 STATS CARDS GRID */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -55,7 +55,12 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchUnreadCount();
     window.addEventListener("vergo_notifications_updated", fetchUnreadCount);
-    const interval = setInterval(fetchUnreadCount, 3000);
+    // Poll unread count every 30s instead of 3s to prevent database connection saturation
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchUnreadCount();
+      }
+    }, 30000);
     return () => {
       window.removeEventListener("vergo_notifications_updated", fetchUnreadCount);
       clearInterval(interval);
