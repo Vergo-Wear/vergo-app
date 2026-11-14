@@ -36,11 +36,18 @@ export default function AnalyticsPage() {
 
   const analytics = useMemo(() => {
     const totalStock = inventory.reduce((sum, item) => sum + item.inStock, 0);
-    const healthyItems = inventory.filter(
-      (item) => item.inStock > (item.reorderLevel || 0),
-    ).length;
+    // An inventory item is healthy if it has available stock above minimum threshold (reorder level or > 3)
+    const healthyItems = inventory.filter((item) => {
+      const threshold = item.reorderLevel && item.reorderLevel > 0 ? item.reorderLevel : 3;
+      return item.inStock > threshold;
+    }).length;
+    // An employee is considered active/available if on duty / on shift
     const activeEmployees = employees.filter(
-      (employee) => employee.status === "ON SHIFT",
+      (employee) =>
+        employee.status === "ON DUTY" ||
+        employee.status === "ON SHIFT" ||
+        (employee as any).status === "active" ||
+        (employee as any).availabilityStatus === "AVAILABLE",
     ).length;
     const criticalAlerts = adminAlerts.filter(
       (alert) => alert.severity === "critical",
