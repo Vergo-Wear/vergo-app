@@ -433,7 +433,10 @@ export default function EmployeesPage() {
 
       if (!res || !res.ok) {
         const errJson = res ? await res.json().catch(() => ({})) : {};
-        throw new Error(errJson?.message || "Failed to distribute stock.");
+        const msg = Array.isArray(errJson?.message)
+          ? errJson.message.join(", ")
+          : errJson?.message || "Failed to distribute stock.";
+        throw new Error(msg);
       }
 
       const result = await res.json();
