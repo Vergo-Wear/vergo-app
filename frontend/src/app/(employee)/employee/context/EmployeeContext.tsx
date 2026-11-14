@@ -266,6 +266,8 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   const [packageWeight, setWeight] = useState("");
   const [pickupSlot, setPickupSlot] = useState("");
 
+  const [currentEmployee, setCurrentEmployee] = useState<any>(null);
+
   const token = () => sessionStorage.getItem("vergo_access_token");
   const addNotification = (
     title: string,
@@ -413,6 +415,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((employee) => {
         if (employee) {
+          setCurrentEmployee(employee);
           setAvailabilityStatus(
             employee.availabilityStatus === "AVAILABLE"
               ? "AVAILABLE"
@@ -602,8 +605,24 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) setAvailabilityStatus(next);
     });
   };
+  const currentEmpId =
+    currentEmployee?.employeeId ||
+    (typeof window !== "undefined"
+      ? (() => {
+          try {
+            return JSON.parse(sessionStorage.getItem("vergo_user") || "{}")?.employeeId;
+          } catch {
+            return null;
+          }
+        })()
+      : null);
+
   const productPrepQueue: ProductPrepItem[] = orders
-    .filter((order) => ["Claimed", "Preparing"].includes(order.status))
+    .filter(
+      (order) =>
+        ["Claimed", "Preparing"].includes(order.status) &&
+        (!currentEmpId || order.employeeId === currentEmpId),
+    )
     .flatMap((order) =>
       order.itemsList.map((item) => ({
         id: `${order.id}-${item.sku}`,
@@ -619,8 +638,13 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
         status: order.status === "Preparing" ? "PREPARING" : "NOT STARTED",
       })),
     ) as ProductPrepItem[];
+
   const readyPickups: ReadyPickupItem[] = orders
-    .filter((order) => order.status === "Ready for Pickup")
+    .filter(
+      (order) =>
+        order.status === "Ready for Pickup" &&
+        (!currentEmpId || order.employeeId === currentEmpId),
+    )
     .map((order) => ({
       id: order.id,
       batch: `Order #${order.id}`,
@@ -631,8 +655,13 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       notificationStatus: "QUEUED",
       deliveryPrep: "READY",
     }));
+
   const pickingQueue = orders
-    .filter((order) => order.status === "Ready to Pick")
+    .filter(
+      (order) =>
+        order.status === "Ready to Pick" &&
+        (!order.employeeId || order.employeeId === null),
+    )
     .map((order) => ({
       id: order.id,
       skus: order.itemsList.length,
@@ -640,9 +669,22 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
       zone: "",
       status: "pending" as const,
     }));
-  const prepared = orders.filter((order) =>
-    ["Ready for Pickup", "Sent"].includes(order.status),
+
+  // Employee-specific fulfilled/prepared orders
+  const myClaimedOrders = orders.filter(
+    (order) => currentEmpId && order.employeeId === currentEmpId,
   );
+  const myPrepared = myClaimedOrders.filter((order) =>
+    ["Ready for Pickup", "Sent", "Completed", "Finished"].includes(order.status),
+  );
+  const myDailyTotal = myPrepared.reduce(
+    (sum, o) => sum + o.itemsList.reduce((iSum, i) => iSum + (i.qty || 1), 0),
+    0,
+  );
+  const myEfficiency = myClaimedOrders.length
+    ? Number(((myPrepared.length / myClaimedOrders.length) * 100).toFixed(1))
+    : 0;
+
   const logoutEmployee = () => {
     sessionStorage.clear();
     window.dispatchEvent(new Event("vergo-auth-change"));
@@ -910,16 +952,14 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
   const value: EmployeeContextType = {
     searchQuery,
     setSearchQuery,
-    dailyTotal: orders.length,
+    dailyTotal: myDailyTotal,
     currentStreak: 0,
-    efficiency: orders.length
-      ? Number(((prepared.length / orders.length) * 100).toFixed(1))
-      : 0,
+    efficiency: myEfficiency,
     systemStatus: "Operational",
-    preparedCODTotal: prepared
+    preparedCODTotal: myPrepared
       .filter((o) => o.paymentMethod === "COD")
       .reduce((sum, o) => sum + o.valuation, 0),
-    preparedBankTotal: prepared
+    preparedBankTotal: myPrepared
       .filter((o) => o.paymentMethod === "BANK")
       .reduce((sum, o) => sum + o.valuation, 0),
     pickingQueue,
