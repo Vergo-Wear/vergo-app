@@ -39,7 +39,7 @@ async function bootstrap() {
     }),
   );
 
-  const rawFrontendUrls = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+  const rawFrontendUrls = process.env.FRONTEND_URL ?? '';
   const allowedOrigins = rawFrontendUrls
     .split(',')
     .map((u) => u.trim().replace(/\/+$/, ''))

@@ -17,6 +17,25 @@ export default function LoginPage() {
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // OTP Verification state for unconfirmed email accounts
+  const [showOtpVerification, setShowOtpVerification] = useState(false);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [otpSuccess, setOtpSuccess] = useState("");
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isResendingOtp, setIsResendingOtp] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Countdown timer for resend OTP cooldown
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
   const [pendingProfileCompletion, setPendingProfileCompletion] = useState(false);
   const [oauthSession, setOauthSession] = useState<any>(null);
   const [profileCompletionForm, setProfileCompletionForm] = useState({
@@ -82,7 +101,7 @@ export default function LoginPage() {
     if (!client) return;
 
     const handleAuthSession = async () => {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
       try {
         const session = await getSupabaseRedirectSession(client);
         if (session) {
@@ -222,7 +241,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     setMessage(null);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
 
     try {
       const capitalize = (str: string) => str.trim().replace(/\b\w/g, c => c.toUpperCase());
@@ -347,7 +366,7 @@ export default function LoginPage() {
     setMessage(null);
     window.dispatchEvent(new Event("vergo-auth-submitting"));
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
 
     try {
       let signinData: any = null;
@@ -528,6 +547,16 @@ export default function LoginPage() {
       }, 1000);
     } catch (err: any) {
       console.warn("Sign in failed:", err.message || err);
+      const rawMsg = err.message || "";
+      if (
+        rawMsg.toLowerCase().includes("email not confirmed") ||
+        rawMsg.toLowerCase().includes("not confirmed")
+      ) {
+        const emailCandidate = formData.emailOrMobile.trim();
+        if (emailCandidate.includes("@")) {
+          setUnconfirmedEmail(emailCandidate);
+        }
+      }
       setMessage({
         text: err.message || "An unexpected error occurred. Please check your credentials and try again.",
         type: "error",
@@ -536,6 +565,246 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpCode.trim()) {
+      setOtpError("Please enter the verification code.");
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpError("");
+    setOtpSuccess("");
+
+    const client = createSupabaseClient();
+    if (!client) {
+      setOtpError("Supabase client is not configured.");
+      setIsVerifyingOtp(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await client.auth.verifyOtp({
+        email: unconfirmedEmail,
+        token: otpCode.trim(),
+        type: "signup",
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setOtpSuccess("Email verified successfully! You can now log in.");
+      setTimeout(() => {
+        setShowOtpVerification(false);
+        setMessage({
+          text: "Email verified successfully! Please enter your password to sign in.",
+          type: "success",
+        });
+      }, 1500);
+    } catch (err: any) {
+      console.warn("OTP Verification failed:", err.message || err);
+      setOtpError(err.message || "Invalid or expired verification code.");
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || isResendingOtp) return;
+    setIsResendingOtp(true);
+    setOtpError("");
+    setOtpSuccess("");
+
+    const client = createSupabaseClient();
+    if (!client) {
+      setOtpError("Supabase client is not configured.");
+      setIsResendingOtp(false);
+      return;
+    }
+
+    try {
+      const { error } = await client.auth.resend({
+        type: "signup",
+        email: unconfirmedEmail,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setResendCooldown(60);
+      setOtpSuccess("A new verification code has been sent to your email.");
+    } catch (err: any) {
+      console.warn("Resend OTP failed:", err.message || err);
+      setOtpError(err.message || "Failed to resend verification code. Please try again later.");
+    } finally {
+      setIsResendingOtp(false);
+    }
+  };
+
+  if (showOtpVerification) {
+    return (
+      <div className="auth-page-wrapper">
+        <main className="auth-container">
+          <div className="register-card">
+            <div className="register-card-logo">
+              <Image
+                src="/images/wlogo.png"
+                alt="VERGO"
+                width={130}
+                height={40}
+                priority
+                style={{ objectFit: "contain", width: "auto", height: "auto" }}
+              />
+            </div>
+            <h1 className="register-title">VERIFY YOUR EMAIL</h1>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "var(--text-secondary, #b3b3b3)",
+                marginBottom: "20px",
+                textAlign: "center",
+                lineHeight: "1.5",
+              }}
+            >
+              Your account has not been activated yet. <br />
+              Enter the verification code sent to <br />
+              <strong style={{ color: "#ffffff" }}>{unconfirmedEmail}</strong>.
+            </p>
+
+            <form className="register-form" onSubmit={handleVerifyOtp}>
+              <div className="input-group">
+                <label
+                  className="input-label"
+                  style={{
+                    display: "block",
+                    color: "var(--text-primary, #ffffff)",
+                    fontSize: "0.85rem",
+                    fontWeight: "600",
+                    marginBottom: "6px",
+                    textAlign: "left",
+                  }}
+                >
+                  VERIFICATION CODE (OTP) *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter verification code"
+                  value={otpCode}
+                  onChange={(e) => {
+                    setOtpCode(e.target.value);
+                    if (otpError) setOtpError("");
+                  }}
+                  autoFocus
+                  maxLength={10}
+                  className={`custom-input ${otpError ? "input-error" : ""}`}
+                  style={{
+                    letterSpacing: "4px",
+                    textAlign: "center",
+                    fontSize: "1.2rem",
+                    fontWeight: "600",
+                  }}
+                />
+                {otpError && (
+                  <span
+                    style={{
+                      color: "#ff4d4d",
+                      fontSize: "0.75rem",
+                      marginTop: "6px",
+                      display: "block",
+                      textAlign: "center",
+                    }}
+                  >
+                    {otpError}
+                  </span>
+                )}
+                {otpSuccess && (
+                  <span
+                    style={{
+                      color: "#4ade80",
+                      fontSize: "0.8rem",
+                      marginTop: "6px",
+                      display: "block",
+                      textAlign: "center",
+                    }}
+                  >
+                    {otpSuccess}
+                  </span>
+                )}
+              </div>
+
+              {/* Verify Button */}
+              <button
+                type="submit"
+                disabled={isVerifyingOtp || !otpCode.trim()}
+                className="register-submit-btn"
+                style={{
+                  opacity: isVerifyingOtp || !otpCode.trim() ? 0.6 : 1,
+                  cursor: isVerifyingOtp || !otpCode.trim() ? "not-allowed" : "pointer",
+                  marginTop: "10px",
+                }}
+              >
+                {isVerifyingOtp ? "VERIFYING..." : "VERIFY & PROCEED"}
+              </button>
+
+              {/* Resend OTP - hidden once OTP is verified successfully */}
+              {!otpSuccess && (
+                <div
+                  style={{
+                    marginTop: "16px",
+                    textAlign: "center",
+                    fontSize: "0.85rem",
+                    color: "var(--text-secondary, #b3b3b3)",
+                  }}
+                >
+                  Didn't receive the code?{" "}
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={resendCooldown > 0 || isResendingOtp}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color:
+                        resendCooldown > 0 || isResendingOtp
+                          ? "var(--text-muted, #777)"
+                          : "var(--color-primary, #ffffff)",
+                      textDecoration: "underline",
+                      cursor:
+                        resendCooldown > 0 || isResendingOtp ? "not-allowed" : "pointer",
+                      padding: 0,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {isResendingOtp
+                      ? "Sending..."
+                      : resendCooldown > 0
+                        ? `Resend in ${resendCooldown}s`
+                        : "Resend Code"}
+                  </button>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="auth-divider" style={{ marginTop: "24px" }}></div>
+
+              {/* Cancel / Back to Login */}
+              <button
+                type="button"
+                onClick={() => setShowOtpVerification(false)}
+                className="auth-secondary-btn"
+                style={{ marginTop: "12px" }}
+              >
+                BACK TO SIGN IN
+              </button>
+            </form>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (pendingProfileCompletion) {
     return (
@@ -784,6 +1053,40 @@ export default function LoginPage() {
                 Forgot Password?
               </Link>
             </div>
+
+            {/* If Email is unconfirmed, show prompt to verify */}
+            {unconfirmedEmail && (
+              <div
+                style={{
+                  marginBottom: "16px",
+                  padding: "12px 14px",
+                  borderRadius: "8px",
+                  backgroundColor: "rgba(255, 77, 77, 0.08)",
+                  border: "1px solid rgba(255, 77, 77, 0.25)",
+                  textAlign: "center",
+                }}
+              >
+                <p style={{ color: "#ff8080", fontSize: "0.85rem", margin: "0 0 10px 0", lineHeight: "1.4" }}>
+                  Your email has not been confirmed yet.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtpVerification(true);
+                    handleResendOtp();
+                  }}
+                  className="auth-secondary-btn"
+                  style={{
+                    padding: "8px 14px",
+                    fontSize: "0.8rem",
+                    width: "auto",
+                    display: "inline-block",
+                  }}
+                >
+                  VERIFY EMAIL NOW
+                </button>
+              </div>
+            )}
 
             {/* Submit Login Button */}
             <button

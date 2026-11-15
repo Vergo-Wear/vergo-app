@@ -109,13 +109,21 @@ export class AuthService {
       );
     }
 
-    // 2. Register user in Supabase Auth (admin client auto-confirms the email,
-    //    allowing immediate sign-in without requiring email verification)
+    // 2. Register user in Supabase Auth using client.auth.signUp() to trigger
+    //    Supabase Confirm sign up OTP email without auto-confirming
+    const customerFullName = `${firstName} ${lastName}`.trim();
     const { data: authData, error: authError } =
-      await this.supabaseService.adminClient.auth.admin.createUser({
+      await this.supabaseService.client.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
-        email_confirm: true,
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            full_name: customerFullName,
+            CUSTOMER_NAME: customerFullName,
+          },
+        },
       });
 
     if (authError || !authData.user) {
@@ -276,7 +284,7 @@ export class AuthService {
     }
 
     // 2. Sign in with Supabase Auth
-    let { data: authData, error: authError } =
+    const { data: authData, error: authError } =
       await this.supabaseService.client.auth.signInWithPassword({
         email: email.toLowerCase(),
         password,
@@ -286,6 +294,14 @@ export class AuthService {
 
     if (authError || !authData || !authData.user || !authData.session) {
       this.logger.warn(`Auth login failed: ${authError?.message}`);
+      if (
+        authError?.message?.toLowerCase().includes('email not confirmed') ||
+        authError?.message?.toLowerCase().includes('not confirmed')
+      ) {
+        throw new UnauthorizedException(
+          'Email not confirmed. Please verify your email using the OTP sent to your inbox before signing in.',
+        );
+      }
       throw new UnauthorizedException('Invalid credentials.');
     }
 
@@ -301,7 +317,10 @@ export class AuthService {
       include: { role: true },
     });
 
-    if (email.toLowerCase() === 'vergo.wearofficial@gmail.com' && adminRole) {
+    const adminEmail = process.env.VERGO_ADMIN_EMAIL?.toLowerCase();
+    const isAdminEmail = Boolean(adminEmail && email.toLowerCase() === adminEmail);
+
+    if (isAdminEmail && adminRole) {
       if (!profile) {
         profile = await this.prisma.profiles.create({
           data: {
@@ -338,7 +357,7 @@ export class AuthService {
     // Verify role matches
     const roleName = profile.role?.roleName;
     if (
-      email.toLowerCase() !== 'vergo.wearofficial@gmail.com' &&
+      !isAdminEmail &&
       (!roleName || roleName.toLowerCase() !== allowedRoleName.toLowerCase())
     ) {
       throw new ForbiddenException(
@@ -356,7 +375,7 @@ export class AuthService {
     const mustChangePassword = Boolean(rawProfile?.must_change_password);
 
     const actualRole =
-      email.toLowerCase() === 'vergo.wearofficial@gmail.com'
+      isAdminEmail
         ? 'Admin'
         : profile.role?.roleName || allowedRoleName;
 
@@ -519,8 +538,9 @@ export class AuthService {
       }
     }
 
-    // Special handling for official Admin email vergo.wearofficial@gmail.com
-    if (user.email && user.email.toLowerCase() === 'vergo.wearofficial@gmail.com') {
+    // Special handling for official Admin email from environment
+    const adminEmail = process.env.VERGO_ADMIN_EMAIL?.toLowerCase();
+    if (adminEmail && user.email && user.email.toLowerCase() === adminEmail) {
       try {
         const adminRole = await this.prisma.role.findFirst({
           where: { roleName: { equals: 'Admin', mode: 'insensitive' } },

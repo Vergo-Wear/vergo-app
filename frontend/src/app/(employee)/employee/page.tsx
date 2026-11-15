@@ -32,7 +32,7 @@ export default function EmployeeDashboard() {
     const localUser = localUserRaw ? JSON.parse(localUserRaw) : null;
     const userId = localUser?.id || localUser?.profileId;
     const token = typeof window !== "undefined" ? sessionStorage.getItem("vergo_access_token") : null;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
 
     if (userId) {
@@ -118,8 +118,8 @@ export default function EmployeeDashboard() {
     ];
 
   const lowStockAlerts = myStock && myStock.length > 0
-    ? myStock.filter((s) => s.qty <= (s.reorderLevel || 10))
-    : stockLevels.filter((s) => s.qty <= (s.lowStockLimit || 10));
+    ? myStock.filter((s) => s.qty <= (s.reorderLevel ? Math.min(s.reorderLevel, 3) : 3))
+    : stockLevels.filter((s) => s.qty <= (s.lowStockLimit ? Math.min(s.lowStockLimit, 3) : 3));
 
   // Employee Metadata for PDF Report
   const employeeInfo = {
@@ -650,6 +650,12 @@ export default function EmployeeDashboard() {
               <button className="emp-modal-close" onClick={() => setSelectedDetailsOrder(null)}>&times;</button>
             </div>
             <div className="emp-modal-body" style={{ fontSize: "13px", display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div>
+                <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--emp-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Order ID (Full Reference)</span>
+                <div style={{ fontWeight: 800, fontSize: "12.5px", fontFamily: "monospace", marginTop: "2px", color: "var(--emp-neon-green)", wordBreak: "break-all" }}>
+                  {selectedDetailsOrder.id}
+                </div>
+              </div>
               <div>
                 <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--emp-text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Customer Name</span>
                 <div style={{ fontWeight: 800, fontSize: "15px", marginTop: "2px", color: "#ffffff" }}>{selectedDetailsOrder.customerName}</div>

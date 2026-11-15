@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { NotificationType, orderNumber } from './notification-type';
@@ -393,17 +394,33 @@ export class NotificationsService {
           paymentMethod: true,
           status: true,
           adminNotes: true,
+          totalAmount: true,
+          createdAt: true,
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: true,
+                  color: true,
+                  size: true,
+                },
+              },
+            },
+          },
+          shippingDetails: true,
           customer: {
             select: {
               customerId: true,
               profileId: true,
               firstName: true,
+              lastName: true,
               email: true,
             },
           },
           customerDetails: {
             select: {
               firstName: true,
+              lastName: true,
               email: true,
               phone: true,
             },
@@ -438,7 +455,52 @@ export class NotificationsService {
           : NotificationType.COD_REJECTED;
       const reference = checkout.order?.orderId
         ? orderNumber(checkout.order.orderId)
-        : `#${checkout.checkoutId.slice(0, 8).toUpperCase()}`;
+        : orderNumber(checkout.checkoutId);
+      const cleanOrderId = reference.replace(/^#/, '');
+      const rawUniqueId = checkout.order?.orderId || checkout.checkoutId;
+
+      const customerFullName = checkout.customer
+        ? `${checkout.customer.firstName || ''} ${checkout.customer.lastName || ''}`.trim()
+        : checkout.customerDetails
+          ? `${checkout.customerDetails.firstName || ''} ${checkout.customerDetails.lastName || ''}`.trim()
+          : recipient.firstName;
+
+      const orderItems =
+        checkout.items && checkout.items.length > 0
+          ? checkout.items
+              .map((item) => {
+                const title = item.variant?.product?.name || 'Item';
+                const color = item.variant?.color?.name ? ` (${item.variant.color.name})` : '';
+                const size = item.variant?.size?.name ? ` - Size: ${item.variant.size.name}` : '';
+                return `${title}${color}${size} x${item.quantity}`;
+              })
+              .join(', ')
+          : 'Items details pending';
+
+      const shipping = checkout.shippingDetails;
+      const deliveryAddress = shipping
+        ? [
+            shipping.addressLine1,
+            shipping.addressLine2,
+            shipping.city,
+            shipping.district,
+            shipping.postalCode,
+          ]
+            .filter(Boolean)
+            .join(', ')
+        : 'Address not provided';
+
+      const orderDate = checkout.createdAt
+        ? checkout.createdAt.toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+
+      const formattedTotal = Number(checkout.totalAmount || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+
+      const rejectionReason = checkout.adminNotes || 'Verification could not be completed';
+
       const title = approved
         ? isBank
           ? 'Payment Approved'
@@ -469,14 +531,57 @@ export class NotificationsService {
           checkoutId,
           NotificationType.ORDER_CREATED,
         );
-      }
 
-      if (isBank && !approved) {
-        await this.email.sendPaymentRejectedEmail({
+        // Send Order Approved email to customer (Resend template)
+        await this.email.sendOrderApprovedEmail({
           to: recipient.email,
-          customerName: recipient.firstName,
-          orderNumber: reference,
-          reason: checkout.adminNotes,
+          customerName: customerFullName || recipient.firstName,
+          orderReference: reference,
+          idempotencyKey: `order-approved-${checkoutId}`,
+          variables: {
+            order_id: cleanOrderId,
+            order_reference: reference,
+            unique_order_id: rawUniqueId,
+            UNIQUE_ORDER_ID: rawUniqueId,
+            customer_name: customerFullName || recipient.firstName,
+            CUSTOMER_NAME: customerFullName || recipient.firstName,
+            ORDER_REFERENCE: reference,
+            order_items: orderItems,
+            ordered_products: orderItems,
+            ORDER_ITEMS: orderItems,
+            total_amount: formattedTotal,
+            TOTAL_AMOUNT: formattedTotal,
+            order_date: orderDate,
+            delivery_address: deliveryAddress,
+            payment_method: checkout.paymentMethod,
+          },
+        });
+      } else {
+        // Order Rejection email to customer (Resend template)
+        await this.email.sendOrderRejectedEmail({
+          to: recipient.email,
+          customerName: customerFullName || recipient.firstName,
+          orderReference: reference,
+          idempotencyKey: `order-rejected-${checkoutId}`,
+          variables: {
+            order_id: cleanOrderId,
+            order_reference: reference,
+            unique_order_id: rawUniqueId,
+            UNIQUE_ORDER_ID: rawUniqueId,
+            customer_name: customerFullName || recipient.firstName,
+            CUSTOMER_NAME: customerFullName || recipient.firstName,
+            ORDER_REFERENCE: reference,
+            order_items: orderItems,
+            ordered_products: orderItems,
+            ORDER_ITEMS: orderItems,
+            rejection_reason: rejectionReason,
+            REJECTION_REASON: rejectionReason,
+            total_amount: formattedTotal,
+            TOTAL_AMOUNT: formattedTotal,
+            order_date: orderDate,
+            delivery_address: deliveryAddress,
+            payment_method: checkout.paymentMethod,
+          },
         });
       }
     } catch (error) {
@@ -496,6 +601,177 @@ export class NotificationsService {
         NotificationType.ORDER_CREATED,
         true,
       );
+
+      // Fetch pending checkout details to send emails to admin and customer
+      const checkout = await this.prisma.pendingCheckout.findUnique({
+        where: { checkoutId },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: true,
+                  color: true,
+                  size: true,
+                },
+              },
+            },
+          },
+          customerDetails: true,
+          shippingDetails: true,
+          customer: true,
+          paymentProof: true,
+        },
+      });
+
+      if (!checkout) return;
+
+      const customerEmail =
+        checkout.customer?.email || checkout.customerDetails?.email;
+      const customerFirstName =
+        checkout.customer?.firstName ||
+        checkout.customerDetails?.firstName ||
+        'Valued Customer';
+      const customerLastName =
+        checkout.customer?.lastName ||
+        checkout.customerDetails?.lastName ||
+        '';
+      const customerName = `${customerFirstName} ${customerLastName}`.trim();
+      const customerPhone =
+        checkout.customerDetails?.phone ||
+        checkout.customer?.phone ||
+        'Not provided';
+      const reference = orderNumber(checkoutId);
+      const cleanOrderId = reference.replace(/^#/, '');
+      const shipping = checkout.shippingDetails;
+      const orderDate = checkout.createdAt
+        ? checkout.createdAt.toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+
+      const orderedProducts =
+        checkout.items && checkout.items.length > 0
+          ? checkout.items
+              .map((item) => {
+                const title = item.variant?.product?.name || 'Item';
+                const color = item.variant?.color?.name ? ` (${item.variant.color.name})` : '';
+                const size = item.variant?.size?.name ? ` - Size: ${item.variant.size.name}` : '';
+                return `${title}${color}${size} x${item.quantity}`;
+              })
+              .join(', ')
+          : 'Items details pending';
+
+      const deliveryAddress = shipping
+        ? [
+            shipping.addressLine1,
+            shipping.addressLine2,
+            shipping.city,
+            shipping.district,
+            shipping.postalCode,
+          ]
+            .filter(Boolean)
+            .join(', ')
+        : 'Address not provided';
+
+      const formattedTotal = Number(checkout.totalAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      // 1. Send Order Received Email to Customer
+      if (customerEmail) {
+        let attachmentBuffer: Buffer | undefined;
+        let attachmentFilename: string | undefined;
+
+        // For Bank Transfer, attach uploaded payment proof receipt if available
+        if (checkout.paymentProof?.fileUrl) {
+          try {
+            const proofRes = await axios.get<ArrayBuffer>(checkout.paymentProof.fileUrl, {
+              responseType: 'arraybuffer',
+              timeout: 15000,
+            });
+            attachmentBuffer = Buffer.from(proofRes.data);
+            attachmentFilename =
+              checkout.paymentProof.fileName ||
+              `receipt-${reference.replace(/^#/, '')}.jpg`;
+          } catch (receiptErr) {
+            this.logger.error(
+              `Failed to fetch payment proof receipt for checkout ${checkoutId}:`,
+              receiptErr,
+            );
+          }
+        }
+
+        await this.email.sendOrderReceivedEmail({
+          to: customerEmail,
+          customerName,
+          orderReference: reference,
+          idempotencyKey: `order-received-${checkoutId}`,
+          attachmentBuffer,
+          attachmentFilename,
+          variables: {
+            order_id: cleanOrderId,
+            order_reference: reference,
+            unique_order_id: checkoutId,
+            UNIQUE_ORDER_ID: checkoutId,
+            customer_name: customerName,
+            order_date: orderDate,
+            payment_method: checkout.paymentMethod,
+            order_items: orderedProducts,
+            ordered_products: orderedProducts,
+            total_amount: formattedTotal,
+            delivery_address: deliveryAddress,
+            ORDER_ITEMS: orderedProducts,
+            TOTAL_AMOUNT: formattedTotal,
+          },
+        });
+      }
+
+      // 2. Send New Order Notification to Administrator
+      const adminEmail = process.env.VERGO_ADMIN_EMAIL;
+      const frontendUrl = process.env.FRONTEND_URL;
+      const adminDashboardUrl = frontendUrl ? `${frontendUrl.replace(/\/$/, '')}/admin/orders` : undefined;
+
+      if (adminEmail) {
+        await this.email.sendNewOrderAdminEmail({
+          to: adminEmail,
+          variables: {
+            // Reference & ID variables
+            order_reference: reference,
+            order_id: checkoutId,
+            unique_order_id: checkoutId,
+            clean_order_id: cleanOrderId,
+
+            // Order details
+            order_date: orderDate,
+            customer_name: customerName,
+            customer_email: customerEmail || 'Not provided',
+            customer_phone: customerPhone,
+            payment_method: checkout.paymentMethod,
+            payment_status: checkout.status,
+            order_status: checkout.status,
+            total_amount: formattedTotal,
+            order_items: orderedProducts,
+            ordered_products: orderedProducts,
+            delivery_address: deliveryAddress,
+            admin_dashboard_url: adminDashboardUrl || '',
+
+            // Uppercase aliases for complete compatibility
+            ORDER_REFERENCE: reference,
+            ORDER_ID: checkoutId,
+            UNIQUE_ORDER_ID: checkoutId,
+            CUSTOMER_NAME: customerName,
+            CUSTOMER_EMAIL: customerEmail || 'Not provided',
+            CUSTOMER_PHONE: customerPhone,
+            ORDER_DATE: orderDate,
+            ORDERED_PRODUCTS: orderedProducts,
+            ORDER_ITEMS: orderedProducts,
+            PAYMENT_METHOD: checkout.paymentMethod,
+            PAYMENT_STATUS: checkout.status,
+            ORDER_STATUS: checkout.status,
+            TOTAL_AMOUNT: formattedTotal,
+            DELIVERY_ADDRESS: deliveryAddress,
+            ADMIN_DASHBOARD_URL: adminDashboardUrl || '',
+          },
+          idempotencyKey: `new-order-admin-${checkoutId}`,
+        });
+      }
     } catch (error) {
       this.logger.error(`Failed to notify admins for new order ${checkoutId}`, error);
     }
@@ -589,6 +865,16 @@ export class NotificationsService {
           message: `Your order ${orderNumber(orderId)} has been collected by Citypak and is on the way! Tracking: ${trackingNumber}`,
           once: true,
         });
+
+        // Send delivery notification email to customer via Resend template
+        if (customer.email) {
+          await this.email.sendDeliveryNotificationEmail({
+            to: customer.email,
+            customerName: customer.firstName || 'Valued Customer',
+            orderReference: orderNumber(orderId),
+            idempotencyKey: `delivery-dispatched-${orderId}`,
+          });
+        }
       }
 
       await this.notifyAdmins(
@@ -733,18 +1019,33 @@ export class NotificationsService {
     },
   ) {
     let employeeName = 'Employee';
+    let employeeIdDisplay = 'EMP-VERGO';
+    let branchName = 'Main Warehouse';
+    let employeeEmail = 'N/A';
+
     try {
       const employee = await this.prisma.employee.findFirst({
         where: { profileId },
+        include: {
+          branch: true,
+          profile: true,
+        },
       });
+
       if (employee) {
         employeeName = `${employee.firstName} ${employee.lastName}`.trim();
+        employeeIdDisplay = employee.employeeId
+          ? `EMP-${employee.employeeId.slice(0, 8).toUpperCase()}`
+          : 'EMP-VERGO';
+        branchName = employee.branch?.name || 'Main Warehouse';
+        employeeEmail = (employee.profile as any)?.email || employee.phone || 'N/A';
       } else {
         const profile = await this.prisma.profiles.findUnique({
           where: { id: profileId },
         });
         if (profile) {
           employeeName = (profile as any).email || profile.username || 'Employee';
+          employeeEmail = (profile as any).email || 'N/A';
         }
       }
     } catch (e) {
@@ -759,12 +1060,55 @@ export class NotificationsService {
     const notesText = dto.notes ? ` Notes: ${dto.notes}` : '';
     const message = `${employeeName} requested ${dto.quantity} units of ${dto.productName || 'product'} [SKU: ${dto.sku}]${variantText}.${notesText}`;
 
+    // 1. In-app admin notification
     await this.notifyAdmins(
       title,
       message,
       null,
       NotificationType.STOCK_REQUEST,
     );
+
+    // 2. Email notification to Admin via Resend
+    const adminEmail = process.env.VERGO_ADMIN_EMAIL;
+    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    const adminInventoryUrl = frontendUrl ? `${frontendUrl}/admin/inventory` : 'https://www.vergo.lk/admin/inventory';
+    const requestDate = new Date().toISOString().split('T')[0];
+
+    if (adminEmail) {
+      try {
+        await this.email.sendStockRequestAdminEmail({
+          to: adminEmail,
+          variables: {
+            EMPLOYEE_NAME: employeeName,
+            employee_name: employeeName,
+            EMPLOYEE_ID: employeeIdDisplay,
+            employee_id: employeeIdDisplay,
+            BRANCH_NAME: branchName,
+            branch_name: branchName,
+            EMPLOYEE_EMAIL: employeeEmail,
+            employee_email: employeeEmail,
+            PRODUCT_NAME: dto.productName || 'Product Variant',
+            product_name: dto.productName || 'Product Variant',
+            SKU: dto.sku,
+            sku: dto.sku,
+            QUANTITY: String(dto.quantity),
+            quantity: String(dto.quantity),
+            SIZE: dto.size || 'N/A',
+            size: dto.size || 'N/A',
+            COLOR: dto.color || 'N/A',
+            color: dto.color || 'N/A',
+            NOTES: dto.notes || 'None',
+            notes: dto.notes || 'None',
+            REQUEST_DATE: requestDate,
+            request_date: requestDate,
+            ADMIN_INVENTORY_URL: adminInventoryUrl,
+            admin_inventory_url: adminInventoryUrl,
+          },
+        });
+      } catch (emailErr) {
+        this.logger.error(`Failed to send stock request email to admin:`, emailErr);
+      }
+    }
 
     return { success: true, message: 'Stock request notification sent to Admin.' };
   }

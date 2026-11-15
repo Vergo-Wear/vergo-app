@@ -109,7 +109,7 @@ describe('Auth Module (Controller & Service)', () => {
         roleName: 'Customer',
       });
 
-      supabaseMock.adminClient.auth.admin.createUser.mockResolvedValue({
+      supabaseMock.client.auth.signUp.mockResolvedValue({
         data: { user: { id: 'supabase-user-id', email: 'new@test.com' } },
         error: null,
       });
@@ -135,11 +135,18 @@ describe('Auth Module (Controller & Service)', () => {
       expect(response.user.id).toBe('supabase-user-id');
       expect(response.customer.customerId).toBe('customer-id-123');
       expect(
-        supabaseMock.adminClient.auth.admin.createUser,
+        supabaseMock.client.auth.signUp,
       ).toHaveBeenCalledWith({
         email: 'new@test.com',
         password: 'password123',
-        email_confirm: true,
+        options: {
+          data: {
+            first_name: 'John',
+            last_name: 'Doe',
+            full_name: 'John Doe',
+            CUSTOMER_NAME: 'John Doe',
+          },
+        },
       });
     });
 
@@ -152,7 +159,7 @@ describe('Auth Module (Controller & Service)', () => {
         roleName: 'Customer',
       });
 
-      supabaseMock.adminClient.auth.admin.createUser.mockResolvedValue({
+      supabaseMock.client.auth.signUp.mockResolvedValue({
         data: { user: null },
         error: {
           name: 'AuthApiError',
@@ -176,7 +183,7 @@ describe('Auth Module (Controller & Service)', () => {
         roleName: 'Customer',
       });
 
-      supabaseMock.adminClient.auth.admin.createUser.mockResolvedValue({
+      supabaseMock.client.auth.signUp.mockResolvedValue({
         data: { user: { id: 'supabase-user-id', email: 'new@test.com' } },
         error: null,
       });

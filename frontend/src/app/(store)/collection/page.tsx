@@ -44,7 +44,7 @@ function CollectionContent() {
 
   useEffect(() => {
     const loadCustomization = () => {
-      fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/customization?t=${Date.now()}`, {
+      fetch(`${(process.env.NEXT_PUBLIC_API_URL || "")}/customization?t=${Date.now()}`, {
         cache: "no-store",
       })
         .then((res) => (res.ok ? res.json() : null))

@@ -86,7 +86,7 @@ export default function Footer() {
 
     try {
       // 1. Submit through backend proxy which forwards directly to Google Form
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
       const response = await fetch(`${apiUrl}/contact`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

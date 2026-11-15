@@ -18,7 +18,7 @@ export interface AdCampaign {
   createdAt?: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "");
 
 export default function AdminAdsPage() {
   const { addNotification } = useAdmin();
