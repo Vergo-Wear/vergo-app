@@ -44,6 +44,46 @@ export default function RegisterPage() {
     confirmPassword: "",
   });
 
+  // OTP Verification state for normal customer signup
+  const [showOtpVerification, setShowOtpVerification] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [otpSuccess, setOtpSuccess] = useState("");
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isResendingOtp, setIsResendingOtp] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Handle OTP resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  // Password validation requirements matching reset-password
+  const hasMinLength = formData.password.length >= 6;
+  const hasLowerCase = /[a-z]/.test(formData.password);
+  const hasUpperCase = /[A-Z]/.test(formData.password);
+  const hasNumber = /[0-9]/.test(formData.password);
+  const hasSpecialChar = /[!@#$%^&*()_+=[\]{};':"\\|<>?,./`~-]/.test(formData.password);
+  const isPasswordValid =
+    hasMinLength && hasLowerCase && hasUpperCase && hasNumber && hasSpecialChar;
+
+  const passwordRequirements = [
+    { label: "At least 6 characters", met: hasMinLength },
+    { label: "At least one lowercase letter (a-z)", met: hasLowerCase },
+    { label: "At least one uppercase letter (A-Z)", met: hasUpperCase },
+    { label: "At least one number (0-9)", met: hasNumber },
+    { label: "At least one special character (!@#$%^&* etc.)", met: hasSpecialChar },
+  ];
+
+  const isPasswordInvalid = formData.password.length > 0 && !isPasswordValid;
+  const isConfirmInvalid =
+    formData.confirmPassword.length > 1 && formData.password !== formData.confirmPassword;
+
   const validateField = (name: string, value: string) => {
     let errMsg = "";
     if (name === "firstName") {
@@ -76,8 +116,14 @@ export default function RegisterPage() {
     } else if (name === "password") {
       if (!value) {
         errMsg = "Password is required.";
-      } else if (value.length < 6) {
-        errMsg = "Password must be at least 6 characters.";
+      } else if (
+        value.length < 6 ||
+        !/[a-z]/.test(value) ||
+        !/[A-Z]/.test(value) ||
+        !/[0-9]/.test(value) ||
+        !/[!@#$%^&*()_+=[\]{};':"\\|<>?,./`~-]/.test(value)
+      ) {
+        errMsg = "Password does not meet the requirements listed below.";
       }
       if (formData.confirmPassword && value !== formData.confirmPassword) {
         setErrors(prev => ({ ...prev, confirmPassword: "Passwords do not match." }));
@@ -108,7 +154,7 @@ export default function RegisterPage() {
     if (!client) return;
 
     const handleAuthSession = async () => {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
       try {
         const session = await getSupabaseRedirectSession(client);
         if (!session) return;
@@ -225,7 +271,7 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     setMessage(null);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
 
     try {
       const capitalize = (str: string) => str.trim().replace(/\b\w/g, c => c.toUpperCase());
@@ -344,7 +390,7 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     setMessage(null);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
 
     try {
       const capitalize = (str: string) => {
@@ -375,51 +421,16 @@ export default function RegisterPage() {
         throw new Error(signupData.message || "Registration failed.");
       }
 
-      // 2. Automatically sign in after successful signup
-      const signinRes = await fetch(`${apiUrl}/auth/customer/signin`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          emailOrPhone: formData.email,
-          password: formData.password,
-        }),
+      // Customer account created in unverified state; switch to OTP verification interface
+      setRegisteredEmail(formData.email.trim().toLowerCase());
+      setShowOtpVerification(true);
+      setResendCooldown(60);
+      setOtpError("");
+      setOtpSuccess("");
+      setMessage({
+        text: "Registration initiated! Please enter the verification code sent to your email.",
+        type: "success",
       });
-
-      const signinData = await signinRes.json();
-
-      if (!signinRes.ok) {
-        throw new Error(signinData.message || "Automatic sign in failed.");
-      }
-
-      // 3. Store tokens and profile information in localStorage
-      sessionStorage.setItem("vergo_is_logged_in", "true");
-      sessionStorage.setItem("vergo_access_token", signinData.accessToken);
-      sessionStorage.setItem("vergo_refresh_token", signinData.refreshToken);
-      const profileRes = await fetch(`${apiUrl}/customers/profile/${signinData.user.id}`);
-      const databaseProfile = profileRes.ok ? await profileRes.json() : {};
-      sessionStorage.setItem(
-        "vergo_user",
-        JSON.stringify({
-          id: signinData.user.id,
-          name: `${capitalizedFirstName} ${capitalizedLastName}`,
-          email: signinData.user.email,
-          avatarUrl: "/images/default-avatar.png",
-          role: signinData.user.role,
-          ...databaseProfile,
-        })
-      );
-
-      // Dispatch authentication change event to trigger Navbar update
-      window.dispatchEvent(new Event("vergo-auth-change"));
-
-      setMessage({ text: "Registration successful! Redirecting...", type: "success" });
-
-      // Redirect to customer side
-      setTimeout(() => {
-        router.push("/");
-      }, 1000);
     } catch (err: any) {
       console.warn("Registration failed:", err.message || err);
       setMessage({
@@ -428,6 +439,106 @@ export default function RegisterPage() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = otpCode.trim();
+    if (!token) {
+      setOtpError("Please enter the verification code.");
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpError("");
+    setOtpSuccess("");
+
+    const client = createSupabaseClient();
+    if (!client) {
+      setOtpError("Supabase client is not configured.");
+      setIsVerifyingOtp(false);
+      return;
+    }
+
+    try {
+      // Verify OTP with Supabase Auth for signup confirmation
+      let verifyResult = await client.auth.verifyOtp({
+        email: registeredEmail,
+        token,
+        type: "signup",
+      });
+
+      // Fallback verification type for standard email confirmation
+      if (verifyResult.error) {
+        const fallback = await client.auth.verifyOtp({
+          email: registeredEmail,
+          token,
+          type: "email",
+        });
+        if (!fallback.error) {
+          verifyResult = fallback;
+        }
+      }
+
+      if (verifyResult.error) {
+        throw verifyResult.error;
+      }
+
+      // Verification succeeded
+      setOtpSuccess("Email verified successfully! Redirecting to sign in...");
+      setOtpCode("");
+      
+      // Ensure local Supabase session is signed out so user signs in normally
+      try {
+        await client.auth.signOut();
+      } catch (err) {
+        console.warn("Sign out after OTP verification error:", err);
+      }
+
+      setTimeout(() => {
+        router.push("/auth/login");
+      }, 1500);
+    } catch (err: any) {
+      console.warn("OTP verification failed:", err.message || err);
+      const msg = err.message || "Invalid or expired verification code. Please check and try again.";
+      setOtpError(msg);
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || isResendingOtp) return;
+
+    setIsResendingOtp(true);
+    setOtpError("");
+    setOtpSuccess("");
+
+    const client = createSupabaseClient();
+    if (!client) {
+      setOtpError("Supabase client is not configured.");
+      setIsResendingOtp(false);
+      return;
+    }
+
+    try {
+      const { error } = await client.auth.resend({
+        type: "signup",
+        email: registeredEmail,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setResendCooldown(60);
+      setOtpSuccess("A new verification code has been sent to your email.");
+    } catch (err: any) {
+      console.warn("Resend OTP failed:", err.message || err);
+      setOtpError(err.message || "Failed to resend verification code. Please try again later.");
+    } finally {
+      setIsResendingOtp(false);
     }
   };
 
@@ -453,7 +564,165 @@ export default function RegisterPage() {
         </div>
       )}
 
-      {pendingProfileCompletion ? (
+      {showOtpVerification ? (
+        /* ── Customer Signup OTP Verification Screen ── */
+        <main className="auth-container">
+          <div className="register-card">
+            <div className="register-card-logo">
+              <Image
+                src="/images/wlogo.png"
+                alt="VERGO"
+                width={130}
+                height={40}
+                priority
+                style={{ objectFit: "contain", width: "auto", height: "auto" }}
+              />
+            </div>
+            <h1 className="register-title">VERIFY YOUR EMAIL</h1>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "var(--text-secondary, #b3b3b3)",
+                marginBottom: "20px",
+                textAlign: "center",
+                lineHeight: "1.5",
+              }}
+            >
+              We sent a verification code to <br />
+              <strong style={{ color: "#ffffff" }}>{registeredEmail}</strong>.
+              <br />
+              Please enter the code below to activate your account.
+            </p>
+
+            <form className="register-form" onSubmit={handleVerifyOtp}>
+              <div className="input-group">
+                <label
+                  className="input-label"
+                  style={{
+                    display: "block",
+                    color: "var(--text-primary, #ffffff)",
+                    fontSize: "0.85rem",
+                    fontWeight: "600",
+                    marginBottom: "6px",
+                    textAlign: "left",
+                  }}
+                >
+                  VERIFICATION CODE (OTP) *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter verification code"
+                  value={otpCode}
+                  onChange={(e) => {
+                    setOtpCode(e.target.value);
+                    if (otpError) setOtpError("");
+                  }}
+                  autoFocus
+                  maxLength={10}
+                  className={`custom-input ${otpError ? "input-error" : ""}`}
+                  style={{
+                    letterSpacing: "4px",
+                    textAlign: "center",
+                    fontSize: "1.2rem",
+                    fontWeight: "600",
+                  }}
+                />
+                {otpError && (
+                  <span
+                    style={{
+                      color: "#ff4d4d",
+                      fontSize: "0.75rem",
+                      marginTop: "6px",
+                      display: "block",
+                      textAlign: "center",
+                    }}
+                  >
+                    {otpError}
+                  </span>
+                )}
+                {otpSuccess && (
+                  <span
+                    style={{
+                      color: "#4ade80",
+                      fontSize: "0.8rem",
+                      marginTop: "6px",
+                      display: "block",
+                      textAlign: "center",
+                    }}
+                  >
+                    {otpSuccess}
+                  </span>
+                )}
+              </div>
+
+              {/* Verify Button */}
+              <button
+                type="submit"
+                disabled={isVerifyingOtp || !otpCode.trim()}
+                className="register-submit-btn"
+                style={{
+                  opacity: isVerifyingOtp || !otpCode.trim() ? 0.6 : 1,
+                  cursor: isVerifyingOtp || !otpCode.trim() ? "not-allowed" : "pointer",
+                  marginTop: "10px",
+                }}
+              >
+                {isVerifyingOtp ? "VERIFYING..." : "VERIFY & PROCEED"}
+              </button>
+
+              {/* Resend OTP - hidden once OTP is verified successfully */}
+              {!otpSuccess && (
+                <div
+                  style={{
+                    marginTop: "16px",
+                    textAlign: "center",
+                    fontSize: "0.85rem",
+                    color: "var(--text-secondary, #b3b3b3)",
+                  }}
+                >
+                  Didn't receive the code?{" "}
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={resendCooldown > 0 || isResendingOtp}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color:
+                        resendCooldown > 0 || isResendingOtp
+                          ? "var(--text-muted, #777)"
+                          : "var(--color-primary, #ffffff)",
+                      textDecoration: "underline",
+                      cursor:
+                        resendCooldown > 0 || isResendingOtp ? "not-allowed" : "pointer",
+                      padding: 0,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {isResendingOtp
+                      ? "Sending..."
+                      : resendCooldown > 0
+                        ? `Resend in ${resendCooldown}s`
+                        : "Resend Code"}
+                  </button>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="auth-divider" style={{ marginTop: "24px" }}></div>
+
+              {/* Return to Sign In */}
+              <button
+                type="button"
+                onClick={() => router.push("/auth/login")}
+                className="auth-secondary-btn"
+                style={{ marginTop: "12px" }}
+              >
+                RETURN TO SIGN IN
+              </button>
+            </form>
+          </div>
+        </main>
+      ) : pendingProfileCompletion ? (
         /* ── Complete Profile Form (Google new user) ── */
         <main className="auth-container">
           <div className="register-card">
@@ -625,7 +894,11 @@ export default function RegisterPage() {
                   placeholder="Enter Password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={`custom-input ${errors.password ? "input-error" : ""}`}
+                  style={{
+                    borderColor: isPasswordInvalid ? "#ff4d4d" : undefined,
+                    boxShadow: isPasswordInvalid ? "0 0 0 1px #ff4d4d" : undefined,
+                  }}
+                  className={`custom-input ${errors.password || isPasswordInvalid ? "input-error" : ""}`}
                   autoComplete="new-password"
                 />
                 <button
@@ -646,7 +919,59 @@ export default function RegisterPage() {
                   )}
                 </button>
               </div>
-              {errors.password && (
+              {formData.password.length > 0 && (
+                <div
+                  style={{
+                    marginTop: "10px",
+                    padding: "12px 14px",
+                    borderRadius: "8px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    textAlign: "left",
+                  }}
+                >
+                  <p
+                    style={{
+                      color: "var(--text-primary, #ffffff)",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Your password requires the following:
+                  </p>
+                  <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {passwordRequirements.map((req) => (
+                      <li
+                        key={req.label}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          fontSize: "0.75rem",
+                          color: req.met ? "#00FF9D" : "#ff4d4d",
+                          transition: "color 0.2s ease",
+                        }}
+                      >
+                        {req.met ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                            <polyline points="8 12.5 11 15.5 16 9" />
+                          </svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                            <line x1="9" y1="9" x2="15" y2="15" />
+                            <line x1="15" y1="9" x2="9" y2="15" />
+                          </svg>
+                        )}
+                        <span>{req.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {errors.password && !formData.password.length && (
                 <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
                   {errors.password}
                 </span>
@@ -665,7 +990,11 @@ export default function RegisterPage() {
                   placeholder="Re-enter Password"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className={`custom-input ${errors.confirmPassword ? "input-error" : ""}`}
+                  style={{
+                    borderColor: isConfirmInvalid ? "#ff4d4d" : undefined,
+                    boxShadow: isConfirmInvalid ? "0 0 0 1px #ff4d4d" : undefined,
+                  }}
+                  className={`custom-input ${errors.confirmPassword || isConfirmInvalid ? "input-error" : ""}`}
                   autoComplete="new-password"
                 />
                 <button
@@ -686,9 +1015,9 @@ export default function RegisterPage() {
                   )}
                 </button>
               </div>
-              {errors.confirmPassword && (
+              {(errors.confirmPassword || isConfirmInvalid) && (
                 <span className="field-error-message" style={{ color: "#ff4d4d", fontSize: "0.75rem", marginTop: "4px", display: "block", textAlign: "left" }}>
-                  {errors.confirmPassword}
+                  {errors.confirmPassword || "Passwords do not match."}
                 </span>
               )}
             </div>
@@ -696,11 +1025,40 @@ export default function RegisterPage() {
             {/* Submit Register Button */}
             <button
               type="submit"
-              disabled={isSubmitting || Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber || errors.password || errors.confirmPassword) || !formData.firstName || !formData.lastName || !formData.email || !formData.mobileNumber || !formData.password || !formData.confirmPassword}
+              disabled={
+                isSubmitting ||
+                !isPasswordValid ||
+                formData.password !== formData.confirmPassword ||
+                Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber) ||
+                !formData.firstName ||
+                !formData.lastName ||
+                !formData.email ||
+                !formData.mobileNumber
+              }
               className="register-submit-btn"
               style={{
-                opacity: (isSubmitting || Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber || errors.password || errors.confirmPassword) || !formData.firstName || !formData.lastName || !formData.email || !formData.mobileNumber || !formData.password || !formData.confirmPassword) ? 0.6 : 1,
-                cursor: (isSubmitting || Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber || errors.password || errors.confirmPassword) || !formData.firstName || !formData.lastName || !formData.email || !formData.mobileNumber || !formData.password || !formData.confirmPassword) ? "not-allowed" : "pointer"
+                opacity:
+                  isSubmitting ||
+                  !isPasswordValid ||
+                  formData.password !== formData.confirmPassword ||
+                  Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber) ||
+                  !formData.firstName ||
+                  !formData.lastName ||
+                  !formData.email ||
+                  !formData.mobileNumber
+                    ? 0.6
+                    : 1,
+                cursor:
+                  isSubmitting ||
+                  !isPasswordValid ||
+                  formData.password !== formData.confirmPassword ||
+                  Boolean(errors.firstName || errors.lastName || errors.email || errors.mobileNumber) ||
+                  !formData.firstName ||
+                  !formData.lastName ||
+                  !formData.email ||
+                  !formData.mobileNumber
+                    ? "not-allowed"
+                    : "pointer",
               }}
             >
               {isSubmitting ? "REGISTERING..." : "REGISTER"}

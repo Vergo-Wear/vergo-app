@@ -82,7 +82,7 @@ export default function ProductPrep() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const token = sessionStorage.getItem("vergo_access_token");
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     if (token) {
       fetch(`${apiUrl}/integrations/citypak/shipper-profile`, {
         headers: { Authorization: `Bearer ${token}` },

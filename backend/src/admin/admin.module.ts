@@ -5,9 +5,10 @@ import { AuthModule } from '../auth/auth.module';
 import { EmployeesModule } from '../employees/employees.module';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { ProductCatalogueModule } from '../product-catalogue/product-catalogue.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [AuthModule, EmployeesModule, CloudinaryModule, ProductCatalogueModule],
+  imports: [AuthModule, EmployeesModule, CloudinaryModule, ProductCatalogueModule, EmailModule],
   controllers: [AdminController],
   providers: [AdminService],
 })

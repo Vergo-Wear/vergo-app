@@ -189,7 +189,7 @@ export default function ProductFeedback({ productId, autoOpenForm }: ProductFeed
   }, [isFormOpen]);
 
   const loadEligibilityAndMine = () => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     const token = sessionStorage.getItem("vergo_access_token");
     if (token) {
       fetch(`${apiUrl}/products/${productId}/reviews/eligibility`, {
@@ -228,7 +228,7 @@ export default function ProductFeedback({ productId, autoOpenForm }: ProductFeed
   };
 
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     fetch(`${apiUrl}/products/${productId}/reviews`)
       .then((response) => {
         if (!response.ok) return [];
@@ -479,7 +479,7 @@ function validateReviewModeration(comment: string): { isValid: boolean; reason?:
       setFormError("Please sign in as a customer to submit a review.");
       return;
     }
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     const response = await fetch(`${apiUrl}/products/${productId}/reviews/mine`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -525,7 +525,7 @@ function validateReviewModeration(comment: string): { isValid: boolean; reason?:
       setFormError("Please sign in to delete your review.");
       return;
     }
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     try {
       const response = await fetch(`${apiUrl}/products/${productId}/reviews/mine`, {
         method: "DELETE",

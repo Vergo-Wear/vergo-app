@@ -59,7 +59,7 @@ const DEFAULT_SLIDES: AdCampaign[] = [
   },
 ];
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "");
 const AUTO_PLAY_INTERVAL = 5500; // 5.5 seconds per slide
 
 export default function Hero() {

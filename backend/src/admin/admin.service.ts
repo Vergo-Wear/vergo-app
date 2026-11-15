@@ -31,6 +31,8 @@ const ACTIVE_ORDER_STATUSES = new Set(['cancelled', 'rejected']);
 const monthKey = (date: Date) =>
   `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 
+import { EmailService } from '../email/email.service';
+
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
 
@@ -42,6 +44,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly emailService: EmailService,
     @Optional() private readonly productCatalogueService?: ProductCatalogueService,
   ) { }
 
@@ -2135,7 +2138,9 @@ export class AdminService {
       let targetEmployees: Array<{
         employeeId: string;
         name: string;
+        email: string | null;
         branchId: string | null;
+        branchName: string;
       }> = [];
 
       if (dto.targetMode === 'single') {
@@ -2144,16 +2149,28 @@ export class AdminService {
         }
         const employee = await this.prisma.employee.findUnique({
           where: { employeeId: dto.employeeId },
-          include: { branch: true },
+          include: {
+            branch: true,
+            profile: {
+              include: { authUser: true },
+            },
+          },
         });
         if (!employee) {
           throw new NotFoundException(`Employee "${dto.employeeId}" not found.`);
         }
+        const empEmail =
+          employee.profile?.authUser?.email ||
+          (employee.profile as any)?.email ||
+          null;
+
         targetEmployees = [
           {
             employeeId: employee.employeeId,
             name: `${employee.firstName} ${employee.lastName}`.trim(),
+            email: empEmail,
             branchId: employee.branchId || defaultBranch?.branchId || null,
+            branchName: employee.branch?.name || defaultBranch?.name || 'Main Warehouse',
           },
         ];
       } else {
@@ -2168,7 +2185,12 @@ export class AdminService {
 
         const employees = await this.prisma.employee.findMany({
           where: whereClause,
-          include: { branch: true },
+          include: {
+            branch: true,
+            profile: {
+              include: { authUser: true },
+            },
+          },
         });
 
         if (employees.length === 0) {
@@ -2178,7 +2200,12 @@ export class AdminService {
         targetEmployees = employees.map((emp) => ({
           employeeId: emp.employeeId,
           name: `${emp.firstName} ${emp.lastName}`.trim(),
+          email:
+            emp.profile?.authUser?.email ||
+            (emp.profile as any)?.email ||
+            null,
           branchId: emp.branchId || defaultBranch?.branchId || null,
+          branchName: emp.branch?.name || defaultBranch?.name || 'Main Warehouse',
         }));
       }
 
@@ -2357,6 +2384,62 @@ export class AdminService {
 
       // 5. Invalidate catalogue caches
       this.productCatalogueService?.clearCache();
+
+      // 6. Asynchronously send Stock Distribution notification emails to allocated employees
+      const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+      const employeeStockUrl = frontendUrl ? `${frontendUrl}/employee/stock` : 'https://www.vergo.lk/employee/stock';
+      const distributionDate = new Date().toISOString().split('T')[0];
+
+      const distributedItemsSummary = validAllocations
+        .map((alloc) => {
+          const v = variantMap.get(alloc.variantId);
+          if (!v) return null;
+          const name = v.product?.name || 'Garment';
+          const color = v.color?.name ? ` (${v.color.name})` : '';
+          const size = v.size?.name ? ` - Size: ${v.size.name}` : '';
+          return `${name}${color}${size} x${alloc.quantity} units`;
+        })
+        .filter(Boolean)
+        .join(', ');
+
+      const totalUnitsPerEmployee = validAllocations.reduce(
+        (sum, a) => sum + (a.quantity || 0),
+        0,
+      );
+
+      for (const emp of targetEmployees) {
+        if (!emp.email) continue;
+        const employeeIdDisplay = emp.employeeId
+          ? `EMP-${emp.employeeId.slice(0, 8).toUpperCase()}`
+          : 'EMP-VERGO';
+
+        this.emailService
+          .sendStockDistributionEmail({
+            to: emp.email,
+            variables: {
+              EMPLOYEE_NAME: emp.name,
+              employee_name: emp.name,
+              EMPLOYEE_ID: employeeIdDisplay,
+              employee_id: employeeIdDisplay,
+              BRANCH_NAME: emp.branchName,
+              branch_name: emp.branchName,
+              ALLOCATED_ITEMS: distributedItemsSummary,
+              allocated_items: distributedItemsSummary,
+              TOTAL_QUANTITY: String(totalUnitsPerEmployee),
+              total_quantity: String(totalUnitsPerEmployee),
+              DISTRIBUTION_DATE: distributionDate,
+              distribution_date: distributionDate,
+              EMPLOYEE_STOCK_URL: employeeStockUrl,
+              employee_stock_url: employeeStockUrl,
+            },
+          })
+          .catch((err) =>
+            this.logger.error(
+              `Failed to send stock distribution email to ${emp.email}:`,
+              err,
+            ),
+          );
+      }
 
       return {
         success: true,

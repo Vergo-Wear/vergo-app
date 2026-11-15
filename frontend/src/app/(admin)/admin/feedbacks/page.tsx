@@ -47,7 +47,7 @@ export default function AdminFeedbacksPage() {
     try {
       const [resReviews, resCustomization] = await Promise.all([
         authenticatedFetch("/admin/reviews"),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/customization`, { cache: "no-store" }),
+        fetch(`${(process.env.NEXT_PUBLIC_API_URL || "")}/customization`, { cache: "no-store" }),
       ]);
 
       if (!resReviews || !resReviews.ok) throw new Error(`Unable to fetch reviews (${resReviews?.status || "error"})`);
@@ -214,7 +214,7 @@ export default function AdminFeedbacksPage() {
         sessionStorage.getItem("vergo_access_token") ||
         localStorage.getItem("vergo_access_token");
       await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/customization`,
+        `${(process.env.NEXT_PUBLIC_API_URL || "")}/customization`,
         {
           method: "PATCH",
           headers: {

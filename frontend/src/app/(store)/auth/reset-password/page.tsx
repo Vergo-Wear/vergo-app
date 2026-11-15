@@ -122,7 +122,7 @@ export default function ResetPasswordPage() {
     }
 
     setIsSubmitting(true);
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
 
     // Handle Required Employee Temporary Password Reset
     if (isRequiredTempReset) {

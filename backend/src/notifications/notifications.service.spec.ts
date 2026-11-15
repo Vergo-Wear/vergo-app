@@ -27,6 +27,11 @@ describe('NotificationsService', () => {
   const email = {
     sendPaymentRejectedEmail: jest.fn(),
     sendPaymentExpiredEmail: jest.fn(),
+    sendNewOrderAdminEmail: jest.fn(),
+    sendOrderReceivedEmail: jest.fn(),
+    sendOrderApprovedEmail: jest.fn(),
+    sendOrderRejectedEmail: jest.fn(),
+    sendDeliveryNotificationEmail: jest.fn(),
   };
 
   let service: NotificationsService;
@@ -42,8 +47,8 @@ describe('NotificationsService', () => {
     customer: {
       customerId,
       profileId,
-      firstName: 'Julian',
-      email: 'julian@example.com',
+      firstName: 'Customer',
+      email: 'customer@test.local',
     },
   };
 
@@ -195,8 +200,8 @@ describe('NotificationsService', () => {
       });
       expect(email.sendPaymentRejectedEmail).toHaveBeenCalledWith(
         expect.objectContaining({
-          to: 'julian@example.com',
-          customerName: 'Julian',
+          to: 'customer@test.local',
+          customerName: 'Customer',
           reason: 'Blurry receipt',
         }),
       );
@@ -234,8 +239,8 @@ describe('NotificationsService', () => {
       });
       expect(email.sendPaymentExpiredEmail).toHaveBeenCalledWith(
         expect.objectContaining({
-          to: 'julian@example.com',
-          customerName: 'Julian',
+          to: 'customer@test.local',
+          customerName: 'Customer',
         }),
       );
     });

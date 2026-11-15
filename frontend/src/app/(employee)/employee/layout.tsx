@@ -56,7 +56,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
         if (userId) {
           const apiUrl =
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+            (process.env.NEXT_PUBLIC_API_URL || "");
           fetch(`${apiUrl}/employees/profile/${userId}`)
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {

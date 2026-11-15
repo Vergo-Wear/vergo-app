@@ -86,6 +86,9 @@ export function employeeWelcomeEmail(params: {
   branchName: string;
 }): EmailContent {
   const { employeeName, email, tempPassword, branchName } = params;
+  const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+  const loginUrl = frontendUrl ? `${frontendUrl}/auth/login` : '/auth/login';
+
   return {
     subject: `Welcome to Vergo Wear - Employee Account Created`,
     text: [
@@ -97,7 +100,7 @@ export function employeeWelcomeEmail(params: {
       `Email: ${email}`,
       `Temporary Password: ${tempPassword}`,
       '',
-      `Please sign in at http://localhost:3000/auth/login and you will be prompted to set your permanent password.`,
+      `Please sign in at ${loginUrl} and you will be prompted to set your permanent password.`,
       '',
       `Best regards,`,
       `Vergo Wear Team`,
@@ -111,7 +114,7 @@ export function employeeWelcomeEmail(params: {
         <p style="margin: 0 0 8px 0;"><strong>Login Email:</strong> ${email}</p>
         <p style="margin: 0;"><strong>Temporary Password:</strong> <span style="color: #059669; font-weight: bold;">${tempPassword}</span></p>
       </div>
-      <p>Please sign in at <a href="http://localhost:3000/auth/login" style="color: #059669; font-weight: bold;">Vergo Employee Sign In</a>. Upon initial login, you will be prompted to set a permanent password.</p>
+      <p>Please sign in at <a href="${loginUrl}" style="color: #059669; font-weight: bold;">Vergo Employee Sign In</a>. Upon initial login, you will be prompted to set a permanent password.</p>
       `,
     ),
   };
