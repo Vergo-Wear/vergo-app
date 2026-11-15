@@ -24,7 +24,7 @@ export default function AnalyticsPage() {
   useEffect(() => {
     const token = sessionStorage.getItem("vergo_access_token");
     if (!token) return;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/admin/earnings`, {
+    fetch(`${(process.env.NEXT_PUBLIC_API_URL || "")}/admin/earnings`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : null))

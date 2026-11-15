@@ -32,7 +32,7 @@ interface CartContextType {
 type CartOwner = "guest" | "customer";
 
 const GUEST_CART_KEY = "vergo_guest_cart";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "");
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 function isCartItem(value: unknown): value is CartItem {

@@ -23,7 +23,7 @@ interface CatalogueProduct {
   variants: CatalogueVariant[];
 }
 
-const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const RAW_API_URL = (process.env.NEXT_PUBLIC_API_URL || "");
 
 function getApiUrl(): string {
   // If an explicit API URL is configured (e.g. in production or env), always honor it:

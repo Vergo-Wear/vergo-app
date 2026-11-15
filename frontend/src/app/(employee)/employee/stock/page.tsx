@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useEmployee, StockItem, EmployeeAllocatedStock } from "../context/EmployeeContext";
 
 export default function StockManagement() {
@@ -20,6 +20,14 @@ export default function StockManagement() {
   const [activeTab, setActiveTab] = useState<"my-stock" | "warehouse">("my-stock");
   const [localSearch, setLocalSearch] = useState("");
 
+
+  // Filters for Stock Catalogs
+  const [collectionFilter, setCollectionFilter] = useState("ALL");
+  const [sizeFilter, setSizeFilter] = useState("ALL");
+  const [warehousePage, setWarehousePage] = useState(1);
+  const [myStockPage, setMyStockPage] = useState(1);
+  const itemsPerPage = 8;
+
   // Stock request modal state
   const [selectedStock, setSelectedStock] = useState<{
     name: string;
@@ -28,7 +36,7 @@ export default function StockManagement() {
     color: string;
     qty: number;
   } | null>(null);
-  const [requestQty, setRequestQty] = useState("20");
+  const [requestQty, setRequestQty] = useState("0");
   const [requestNotes, setRequestNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -37,7 +45,7 @@ export default function StockManagement() {
 
   const handleOpenRequest = (stock: { name: string; sku: string; size: string; color: string; qty: number }) => {
     setSelectedStock(stock);
-    setRequestQty("20");
+    setRequestQty("0");
     setRequestNotes("");
   };
 
@@ -45,7 +53,8 @@ export default function StockManagement() {
     e.preventDefault();
     if (!selectedStock) return;
 
-    const qty = parseInt(requestQty) || 20;
+    const qty = parseInt(requestQty, 10);
+    if (isNaN(qty) || qty <= 0) return;
     setIsSubmitting(true);
     try {
       await requestStockFromAdmin(selectedStock.sku, qty, {
@@ -86,26 +95,98 @@ export default function StockManagement() {
   // Combine context global search with local tab search
   const effectiveQuery = (localSearch || searchQuery).trim().toLowerCase();
 
-  // Filter My Allocated Stock
-  const filteredMyStock = (myStock || []).filter((item) => {
-    if (!effectiveQuery) return true;
-    const matchName = item.productName.toLowerCase().includes(effectiveQuery);
-    const matchSku = item.sku.toLowerCase().includes(effectiveQuery);
-    const matchSize = item.size.toLowerCase().includes(effectiveQuery);
-    const matchColor = item.color.toLowerCase().includes(effectiveQuery);
-    const matchCategory = item.category.toLowerCase().includes(effectiveQuery);
-    return matchName || matchSku || matchSize || matchColor || matchCategory;
-  });
+  // Distinct Collections and Sizes from both myStock and stockLevels
+  const availableCollections = useMemo(() => {
+    const set = new Set<string>();
+    (stockLevels || []).forEach((item) => {
+      if (item.category) set.add(item.category);
+    });
+    (myStock || []).forEach((item) => {
+      if (item.category) set.add(item.category);
+    });
+    return Array.from(set).sort();
+  }, [stockLevels, myStock]);
 
-  // Filter Warehouse Stock
-  const filteredStockLevels = (stockLevels || []).filter((stock) => {
-    if (!effectiveQuery) return true;
-    const matchName = stock.name.toLowerCase().includes(effectiveQuery);
-    const matchSku = stock.sku.toLowerCase().includes(effectiveQuery);
-    const matchSize = stock.size.toLowerCase().includes(effectiveQuery);
-    const matchColor = stock.color.toLowerCase().includes(effectiveQuery);
-    return matchName || matchSku || matchSize || matchColor;
-  });
+  const availableSizes = useMemo(() => {
+    const set = new Set<string>();
+    (stockLevels || []).forEach((item) => {
+      if (item.size && item.size !== "Standard") set.add(item.size);
+    });
+    (myStock || []).forEach((item) => {
+      if (item.size && item.size !== "Standard") set.add(item.size);
+    });
+    return Array.from(set).sort();
+  }, [stockLevels, myStock]);
+
+  // Filter My Allocated Stock with Collection filter, Size filter, and Search
+  const filteredMyStock = useMemo(() => {
+    return (myStock || []).filter((item) => {
+      if (collectionFilter !== "ALL") {
+        const itemCat = (item.category || "").toLowerCase();
+        const itemName = (item.productName || "").toLowerCase();
+        const target = collectionFilter.toLowerCase();
+        if (!itemCat.includes(target) && !itemName.includes(target)) {
+          return false;
+        }
+      }
+      if (sizeFilter !== "ALL" && item.size !== sizeFilter) {
+        return false;
+      }
+      if (effectiveQuery) {
+        const matchName = item.productName.toLowerCase().includes(effectiveQuery);
+        const matchSku = item.sku.toLowerCase().includes(effectiveQuery);
+        const matchSize = item.size.toLowerCase().includes(effectiveQuery);
+        const matchColor = item.color.toLowerCase().includes(effectiveQuery);
+        const matchCategory = item.category.toLowerCase().includes(effectiveQuery);
+        if (!matchName && !matchSku && !matchSize && !matchColor && !matchCategory) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [myStock, collectionFilter, sizeFilter, effectiveQuery]);
+
+  // Paginated My Stock
+  const totalMyStockPages = Math.max(1, Math.ceil(filteredMyStock.length / itemsPerPage));
+  const paginatedMyStock = useMemo(() => {
+    const startIndex = (myStockPage - 1) * itemsPerPage;
+    return filteredMyStock.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredMyStock, myStockPage, itemsPerPage]);
+
+  // Filter Warehouse Stock with Search, Collection filter, and Size filter
+  const filteredStockLevels = useMemo(() => {
+    return (stockLevels || []).filter((stock) => {
+      if (collectionFilter !== "ALL") {
+        const itemCat = (stock.category || "").toLowerCase();
+        const itemName = (stock.name || "").toLowerCase();
+        const target = collectionFilter.toLowerCase();
+        if (!itemCat.includes(target) && !itemName.includes(target)) {
+          return false;
+        }
+      }
+      if (sizeFilter !== "ALL" && stock.size !== sizeFilter) {
+        return false;
+      }
+      if (effectiveQuery) {
+        const matchName = stock.name.toLowerCase().includes(effectiveQuery);
+        const matchSku = stock.sku.toLowerCase().includes(effectiveQuery);
+        const matchSize = stock.size.toLowerCase().includes(effectiveQuery);
+        const matchColor = stock.color.toLowerCase().includes(effectiveQuery);
+        const matchCat = (stock.category || "").toLowerCase().includes(effectiveQuery);
+        if (!matchName && !matchSku && !matchSize && !matchColor && !matchCat) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [stockLevels, collectionFilter, sizeFilter, effectiveQuery]);
+
+  // Paginated Warehouse Stock
+  const totalWarehousePages = Math.max(1, Math.ceil(filteredStockLevels.length / itemsPerPage));
+  const paginatedWarehouseStock = useMemo(() => {
+    const startIndex = (warehousePage - 1) * itemsPerPage;
+    return filteredStockLevels.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredStockLevels, warehousePage, itemsPerPage]);
 
   // Summary Metrics
   const totalMyAllocatedUnits = (myStock || []).reduce((sum, item) => sum + item.qty, 0);
@@ -301,37 +382,131 @@ export default function StockManagement() {
           </button>
         </div>
 
-        {/* Search Input */}
-        <div style={{ position: "relative", minWidth: "260px" }}>
-          <input
-            type="text"
-            placeholder="Filter by product, SKU, color..."
-            value={localSearch}
-            onChange={(e) => setLocalSearch(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px 12px 8px 32px",
-              borderRadius: "6px",
-              background: "rgba(255, 255, 255, 0.04)",
-              border: "1px solid var(--emp-border)",
-              color: "#ffffff",
-              fontSize: "12.5px",
-              outline: "none",
-            }}
-          />
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--emp-text-muted)" }}
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </div>
+            {/* Search Input */}
+            <div style={{ position: "relative", minWidth: "240px" }}>
+              <input
+                type="text"
+                placeholder="Search by name, SKU, color..."
+                value={localSearch}
+                onChange={(e) => {
+                  setLocalSearch(e.target.value);
+                  setWarehousePage(1);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px 8px 32px",
+                  borderRadius: "6px",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  border: "1px solid var(--emp-border)",
+                  color: "#ffffff",
+                  fontSize: "12.5px",
+                  outline: "none",
+                }}
+              />
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--emp-text-muted)" }}
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </div>
+
+            {/* Filter Dropdowns for Stock Catalog Tabs */}
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              {/* Collection Filter */}
+              <select
+                value={collectionFilter}
+                onChange={(e) => {
+                  setCollectionFilter(e.target.value);
+                  setWarehousePage(1);
+                  setMyStockPage(1);
+                }}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  border: "1px solid var(--emp-border)",
+                  color: "#ffffff",
+                  fontSize: "12.5px",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="ALL" style={{ background: "#1a1a1a", color: "#fff" }}>All Collections</option>
+                <option value="oversized" style={{ background: "#1a1a1a", color: "#fff" }}>Oversized Collection</option>
+                <option value="polo" style={{ background: "#1a1a1a", color: "#fff" }}>Polo Collection</option>
+                {availableCollections
+                  .filter((c) => !["oversized", "polo"].includes(c.toLowerCase()))
+                  .map((col) => (
+                    <option key={col} value={col} style={{ background: "#1a1a1a", color: "#fff" }}>
+                      {col}
+                    </option>
+                  ))}
+              </select>
+
+              {/* Size Filter */}
+              <select
+                value={sizeFilter}
+                onChange={(e) => {
+                  setSizeFilter(e.target.value);
+                  setWarehousePage(1);
+                  setMyStockPage(1);
+                }}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  border: "1px solid var(--emp-border)",
+                  color: "#ffffff",
+                  fontSize: "12.5px",
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="ALL" style={{ background: "#1a1a1a", color: "#fff" }}>All Sizes</option>
+                {availableSizes.length > 0
+                  ? availableSizes.map((sz) => (
+                      <option key={sz} value={sz} style={{ background: "#1a1a1a", color: "#fff" }}>
+                        Size: {sz}
+                      </option>
+                    ))
+                  : ["XS", "S", "M", "L", "XL", "2XL", "3XL"].map((sz) => (
+                      <option key={sz} value={sz} style={{ background: "#1a1a1a", color: "#fff" }}>
+                        Size: {sz}
+                      </option>
+                    ))}
+              </select>
+
+              {(collectionFilter !== "ALL" || sizeFilter !== "ALL" || localSearch) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCollectionFilter("ALL");
+                    setSizeFilter("ALL");
+                    setLocalSearch("");
+                    setWarehousePage(1);
+                    setMyStockPage(1);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--emp-text-muted)",
+                    fontSize: "12px",
+                    textDecoration: "underline",
+                    cursor: "pointer",
+                    padding: "4px 8px",
+                  }}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
       </div>
 
       <div className="emp-grid-2col">
@@ -377,76 +552,141 @@ export default function StockManagement() {
                   </button>
                 </div>
               ) : (
-                <table className="emp-table">
-                  <thead>
-                    <tr>
-                      <th>Garment & Variant</th>
-                      <th>SKU</th>
-                      <th>Branch</th>
-                      <th>My Quantity</th>
-                      <th>Status</th>
-                      <th style={{ textAlign: "right" }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredMyStock.map((item) => {
-                      const effectiveLimit = item.reorderLevel ? Math.min(item.reorderLevel, 3) : 3;
-                      const isLow = item.qty <= effectiveLimit;
-                      const isOut = item.qty === 0;
-
-                      return (
-                        <tr key={item.inventoryId}>
-                          <td>
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                              {item.imageUrl ? (
-                                <img
-                                  src={item.imageUrl}
-                                  alt={item.productName}
-                                  style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover" }}
-                                />
-                              ) : null}
-                              <div>
-                                <span style={{ fontWeight: 700 }}>{item.productName}</span>
-                                <div style={{ fontSize: "11px", color: "var(--emp-text-muted)", marginTop: "2px" }}>
-                                  Size: <strong style={{ color: "#fff" }}>{item.size}</strong> | Color: <strong style={{ color: "#fff" }}>{item.color}</strong>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--emp-text-muted)" }}>
-                            {item.sku}
-                          </td>
-                          <td style={{ fontSize: "12px", color: "var(--emp-text-muted)" }}>
-                            {item.branchName}
-                          </td>
-                          <td style={{ fontWeight: 800, fontSize: "15px" }}>
-                            {item.qty} units
-                          </td>
-                          <td>
-                            {isOut ? (
-                              <span className="emp-badge red">Out of Stock</span>
-                            ) : isLow ? (
-                              <span className="emp-badge" style={{ backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>
-                                Low Stock
-                              </span>
-                            ) : (
-                              <span className="emp-badge green">Available</span>
-                            )}
-                          </td>
-                          <td style={{ textAlign: "right" }}>
-                            <button
-                              className="emp-prep-btn-secondary"
-                              style={{ padding: "6px 12px", fontSize: "11.5px", borderColor: isLow ? "#ff7800" : "var(--emp-border)" }}
-                              onClick={() => handleOpenRequest({ name: item.productName, sku: item.sku, size: item.size, color: item.color, qty: item.qty })}
-                            >
-                              Request Restock
-                            </button>
-                          </td>
+                <div>
+                  <div style={{ maxHeight: "420px", overflowY: "auto" }}>
+                    <table className="emp-table">
+                      <thead>
+                        <tr>
+                          <th>Garment & Variant</th>
+                          <th>SKU</th>
+                          <th>Branch</th>
+                          <th>My Quantity</th>
+                          <th>Status</th>
+                          <th style={{ textAlign: "right" }}>Action</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {paginatedMyStock.map((item) => {
+                          const effectiveLimit = item.reorderLevel ? Math.min(item.reorderLevel, 3) : 3;
+                          const isLow = item.qty <= effectiveLimit;
+                          const isOut = item.qty === 0;
+
+                          return (
+                            <tr key={item.inventoryId}>
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                  {item.imageUrl ? (
+                                    <img
+                                      src={item.imageUrl}
+                                      alt={item.productName}
+                                      style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover" }}
+                                    />
+                                  ) : null}
+                                  <div>
+                                    <span style={{ fontWeight: 700 }}>{item.productName}</span>
+                                    <div style={{ fontSize: "11px", color: "var(--emp-text-muted)", marginTop: "2px" }}>
+                                      Size: <strong style={{ color: "#fff" }}>{item.size}</strong> | Color: <strong style={{ color: "#fff" }}>{item.color}</strong>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--emp-text-muted)" }}>
+                                {item.sku}
+                              </td>
+                              <td style={{ fontSize: "12px", color: "var(--emp-text-muted)" }}>
+                                {item.branchName}
+                              </td>
+                              <td style={{ fontWeight: 800, fontSize: "15px" }}>
+                                {item.qty} units
+                              </td>
+                              <td>
+                                {isOut ? (
+                                  <span className="emp-badge red">Out of Stock</span>
+                                ) : isLow ? (
+                                  <span className="emp-badge" style={{ backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>
+                                    Low Stock
+                                  </span>
+                                ) : (
+                                  <span className="emp-badge green">Available</span>
+                                )}
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                <button
+                                  className="emp-prep-btn-secondary"
+                                  style={{ padding: "6px 12px", fontSize: "11.5px", borderColor: isLow ? "#ff7800" : "var(--emp-border)" }}
+                                  onClick={() => handleOpenRequest({ name: item.productName, sku: item.sku, size: item.size, color: item.color, qty: item.qty })}
+                                >
+                                  Request Restock
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* My Stock Pagination */}
+                  {totalMyStockPages > 1 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "12px 16px",
+                        borderTop: "1px solid var(--emp-border)",
+                        fontSize: "12px",
+                        color: "var(--emp-text-muted)",
+                        background: "rgba(255,255,255,0.01)",
+                      }}
+                    >
+                      <div>
+                        Showing {(myStockPage - 1) * itemsPerPage + 1} to{" "}
+                        {Math.min(myStockPage * itemsPerPage, filteredMyStock.length)} of{" "}
+                        {filteredMyStock.length} items
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => setMyStockPage((p) => Math.max(1, p - 1))}
+                          disabled={myStockPage === 1}
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: "4px",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid var(--emp-border)",
+                            color: myStockPage === 1 ? "var(--emp-text-muted)" : "#fff",
+                            cursor: myStockPage === 1 ? "not-allowed" : "pointer",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          Previous
+                        </button>
+                        <span style={{ padding: "0 6px", color: "#fff", fontWeight: 700 }}>
+                          {myStockPage} / {totalMyStockPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setMyStockPage((p) => Math.min(totalMyStockPages, p + 1))}
+                          disabled={myStockPage === totalMyStockPages}
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: "4px",
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid var(--emp-border)",
+                            color: myStockPage === totalMyStockPages ? "var(--emp-text-muted)" : "#fff",
+                            cursor: myStockPage === totalMyStockPages ? "not-allowed" : "pointer",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )
             ) : filteredStockLevels.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 20px" }}>
@@ -471,85 +711,150 @@ export default function StockManagement() {
                 </button>
               </div>
             ) : (
-              <table className="emp-table">
-                <thead>
-                  <tr>
-                    <th>Product Details</th>
-                    <th>SKU</th>
-                    <th>Warehouse Stock</th>
-                    <th>Status</th>
-                    <th style={{ textAlign: "right" }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStockLevels.map((stock) => {
-                    return (
-                      <tr key={stock.id}>
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            {stock.imageUrl ? (
-                              <img
-                                src={stock.imageUrl}
-                                alt={stock.name}
-                                style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }}
-                              />
-                            ) : null}
-                            <div>
-                              <span style={{ fontWeight: 700 }}>{stock.name}</span>
-                              <div style={{ fontSize: "11px", color: "var(--emp-text-muted)", marginTop: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span>Size: <strong style={{ color: "#fff" }}>{stock.size}</strong></span>
-                                <span>|</span>
-                                <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                  Color:{" "}
-                                  {stock.colorHex ? (
-                                    <span
-                                      style={{
-                                        display: "inline-block",
-                                        width: "10px",
-                                        height: "10px",
-                                        borderRadius: "50%",
-                                        backgroundColor: stock.colorHex,
-                                        border: "1px solid rgba(255,255,255,0.4)",
-                                      }}
-                                    />
-                                  ) : null}
-                                  <strong style={{ color: "#fff" }}>{stock.color}</strong>
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--emp-text-muted)" }}>
-                          {stock.sku}
-                        </td>
-                        <td style={{ fontWeight: 800, fontSize: "15px" }}>
-                          {stock.qty} units
-                        </td>
-                        <td>
-                          {stock.qty === 0 ? (
-                            <span className="emp-badge red">Out of Stock</span>
-                          ) : stock.qty <= 3 ? (
-                            <span className="emp-badge" style={{ backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>
-                              Low Stock
-                            </span>
-                          ) : (
-                            <span className="emp-badge green">In Stock</span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          <button
-                            className="emp-prep-btn-secondary"
-                            style={{ padding: "6px 12px", fontSize: "11.5px", borderColor: stock.qty <= 3 ? "#ff7800" : "var(--emp-border)" }}
-                            onClick={() => handleOpenRequest(stock)}
-                          >
-                            Request Stock
-                          </button>
-                        </td>
+              <div>
+                <div style={{ maxHeight: "420px", overflowY: "auto" }}>
+                  <table className="emp-table">
+                    <thead>
+                      <tr>
+                        <th>Product Details</th>
+                        <th>SKU</th>
+                        <th>Warehouse Stock</th>
+                        <th>Status</th>
+                        <th style={{ textAlign: "right" }}>Action</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {paginatedWarehouseStock.map((stock) => {
+                        return (
+                          <tr key={stock.id}>
+                            <td>
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                {stock.imageUrl ? (
+                                  <img
+                                    src={stock.imageUrl}
+                                    alt={stock.name}
+                                    style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }}
+                                  />
+                                ) : null}
+                                <div>
+                                  <span style={{ fontWeight: 700 }}>{stock.name}</span>
+                                  <div style={{ fontSize: "11px", color: "var(--emp-text-muted)", marginTop: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span>Size: <strong style={{ color: "#fff" }}>{stock.size}</strong></span>
+                                    <span>|</span>
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                      Color:{" "}
+                                      {stock.colorHex ? (
+                                        <span
+                                          style={{
+                                            display: "inline-block",
+                                            width: "10px",
+                                            height: "10px",
+                                            borderRadius: "50%",
+                                            backgroundColor: stock.colorHex,
+                                            border: "1px solid rgba(255,255,255,0.4)",
+                                          }}
+                                        />
+                                      ) : null}
+                                      <strong style={{ color: "#fff" }}>{stock.color}</strong>
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--emp-text-muted)" }}>
+                              {stock.sku}
+                            </td>
+                            <td style={{ fontWeight: 800, fontSize: "15px" }}>
+                              {stock.qty} units
+                            </td>
+                            <td>
+                              {stock.qty === 0 ? (
+                                <span className="emp-badge red">Out of Stock</span>
+                              ) : stock.qty <= 3 ? (
+                                <span className="emp-badge" style={{ backgroundColor: "rgba(255, 120, 0, 0.1)", color: "#ff7800", border: "1px solid rgba(255, 120, 0, 0.2)" }}>
+                                  Low Stock
+                                </span>
+                              ) : (
+                                <span className="emp-badge green">In Stock</span>
+                              )}
+                            </td>
+                            <td style={{ textAlign: "right" }}>
+                              <button
+                                className="emp-prep-btn-secondary"
+                                style={{ padding: "6px 12px", fontSize: "11.5px", borderColor: stock.qty <= 3 ? "#ff7800" : "var(--emp-border)" }}
+                                onClick={() => handleOpenRequest(stock)}
+                              >
+                                Request Stock
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Warehouse Table Pagination */}
+                {totalWarehousePages > 1 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "12px 16px",
+                      borderTop: "1px solid var(--emp-border)",
+                      fontSize: "12px",
+                      color: "var(--emp-text-muted)",
+                      background: "rgba(255,255,255,0.01)",
+                    }}
+                  >
+                    <div>
+                      Showing {(warehousePage - 1) * itemsPerPage + 1} to{" "}
+                      {Math.min(warehousePage * itemsPerPage, filteredStockLevels.length)} of{" "}
+                      {filteredStockLevels.length} items
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() => setWarehousePage((p) => Math.max(1, p - 1))}
+                        disabled={warehousePage === 1}
+                        style={{
+                          padding: "5px 12px",
+                          borderRadius: "4px",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid var(--emp-border)",
+                          color: warehousePage === 1 ? "var(--emp-text-muted)" : "#fff",
+                          cursor: warehousePage === 1 ? "not-allowed" : "pointer",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Previous
+                      </button>
+                      <span style={{ padding: "0 6px", color: "#fff", fontWeight: 700 }}>
+                        {warehousePage} / {totalWarehousePages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setWarehousePage((p) => Math.min(totalWarehousePages, p + 1))}
+                        disabled={warehousePage === totalWarehousePages}
+                        style={{
+                          padding: "5px 12px",
+                          borderRadius: "4px",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid var(--emp-border)",
+                          color: warehousePage === totalWarehousePages ? "var(--emp-text-muted)" : "#fff",
+                          cursor: warehousePage === totalWarehousePages ? "not-allowed" : "pointer",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

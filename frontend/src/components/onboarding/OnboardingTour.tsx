@@ -18,7 +18,7 @@ interface OnboardingTourProps {
   userId?: string | null;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "");
 
 export function getStorageKey(role: TourRole, userId?: string | null): string {
   if (role === "customer") {

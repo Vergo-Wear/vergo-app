@@ -267,7 +267,7 @@ export default function ShippingPage() {
     setDeliveryLoading(true);
     setDeliveryError(null);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     fetch(`${apiUrl}/delivery-fees/calculate?district=${encodeURIComponent(district)}&totalQuantity=${calcQuantity}`)
       .then(async (res) => {
         if (!isMounted) return;

@@ -48,7 +48,7 @@ const DEFAULT_REVIEWS: ReviewItem[] = [
   },
 ];
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "");
 
 export default function Reviews() {
   const [reviews, setReviews] = useState<ReviewItem[]>(DEFAULT_REVIEWS);

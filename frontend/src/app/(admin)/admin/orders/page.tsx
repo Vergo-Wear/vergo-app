@@ -662,7 +662,19 @@ export default function OrdersDashboard() {
       border: "border-emerald-500/30",
       icon: Icons.CheckCircle,
     },
+    Approved: {
+      color: "text-emerald-400",
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500/30",
+      icon: Icons.CheckCircle,
+    },
     "Admin Rejected": {
+      color: "text-red-400",
+      bg: "bg-red-500/10",
+      border: "border-red-500/30",
+      icon: Icons.XCircle,
+    },
+    Rejected: {
       color: "text-red-400",
       bg: "bg-red-500/10",
       border: "border-red-500/30",
@@ -1453,7 +1465,12 @@ export default function OrdersDashboard() {
                     <p className="text-[#555] uppercase tracking-wider text-[9px] mb-1">
                       Status
                     </p>
-                    <p className={`font-bold uppercase ${statusConfig[getDerivedStatus(selectedOrder)].color}`}>
+                    <p
+                      className={`font-bold uppercase ${
+                        statusConfig[getDerivedStatus(selectedOrder)]?.color ||
+                        "text-zinc-400"
+                      }`}
+                    >
                       {getDerivedStatus(selectedOrder)}
                     </p>
                   </div>
@@ -1560,21 +1577,23 @@ export default function OrdersDashboard() {
                       <div className="inline-block mt-0.5">
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded tracking-wide border uppercase ${
+                            getDerivedStatus(selectedOrder) === "Admin Approved" ||
                             getDerivedStatus(selectedOrder) === "Approved" ||
                             selectedOrder.confirmation_status === "Confirmed"
-                              ? statusConfig["Approved"].bg +
+                              ? (statusConfig["Admin Approved"]?.bg || "bg-emerald-500/10") +
                                 " " +
-                                statusConfig["Approved"].color +
+                                (statusConfig["Admin Approved"]?.color || "text-emerald-400") +
                                 " " +
-                                statusConfig["Approved"].border
-                              : statusConfig["Rejected"].bg +
+                                (statusConfig["Admin Approved"]?.border || "border-emerald-500/30")
+                              : (statusConfig["Admin Rejected"]?.bg || "bg-red-500/10") +
                                 " " +
-                                statusConfig["Rejected"].color +
+                                (statusConfig["Admin Rejected"]?.color || "text-red-400") +
                                 " " +
-                                statusConfig["Rejected"].border
+                                (statusConfig["Admin Rejected"]?.border || "border-red-500/30")
                           }`}
                         >
-                          {getDerivedStatus(selectedOrder) === "Approved" ||
+                          {getDerivedStatus(selectedOrder) === "Admin Approved" ||
+                          getDerivedStatus(selectedOrder) === "Approved" ||
                           selectedOrder.confirmation_status === "Confirmed"
                             ? "Approved"
                             : "Rejected"}

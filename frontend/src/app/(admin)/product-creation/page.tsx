@@ -142,7 +142,7 @@ export default function ProductCreationPage() {
         if (!token) return setSaveError("Admin authentication is required.");
         if (!productName.trim() || variants.length === 0) return setSaveError("Add a product name and generate at least one variant.");
         setIsSaving(true); setSaveError(null);
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+        const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
         const response = await fetch(`${apiUrl}/admin/products`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

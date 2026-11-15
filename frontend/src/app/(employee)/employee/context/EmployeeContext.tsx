@@ -78,6 +78,7 @@ export interface NotificationItem {
 export interface StockItem {
   id: string;
   name: string;
+  category?: string;
   sku: string;
   size: string;
   color: string;
@@ -232,7 +233,7 @@ interface RawOrder {
     } | null;
   }>;
 }
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "");
 const EmployeeContext = createContext<EmployeeContextType | undefined>(
   undefined,
 );
@@ -399,6 +400,7 @@ export function EmployeeProvider({ children }: { children: React.ReactNode }) {
           items.push({
             id: v.sku || variantId || `${productId}-${sizeName}-${colorName}`,
             name: p.name,
+            category: p.category?.name || p.category || (typeof p.category === 'object' ? p.category?.title : undefined),
             sku:
               v.sku ||
               (variantId

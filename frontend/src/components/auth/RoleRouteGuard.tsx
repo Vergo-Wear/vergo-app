@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type VergoRole = "admin" | "employee" | "customer";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "");
 
 function normalizeRole(rawRole: string | undefined): VergoRole | null {
   const role = rawRole?.trim().toLowerCase();

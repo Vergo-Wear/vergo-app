@@ -361,7 +361,7 @@ export default function PaymentPage() {
     if (!token) return;
 
     const controller = new AbortController();
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     setIsCheckingActiveReservation(true);
     void fetch(`${apiUrl}/orders/bank-transfer/reservations/current`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -520,7 +520,7 @@ export default function PaymentPage() {
     const token = sessionStorage.getItem("vergo_access_token");
     if (!token) return;
     const controller = new AbortController();
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     void fetch(`${apiUrl}/orders/bank-transfer/reservations/${reservationId}`, {
       method: "PATCH",
       headers: {
@@ -589,7 +589,7 @@ export default function PaymentPage() {
 
     setIsSubmitting(true);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
 
     const payload = createCheckoutPayload(
       paymentMethod === "cod" ? "cod" : "bank_transfer",
@@ -1372,7 +1372,7 @@ function BankTransferFlow({
   }, [toast]);
 
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     const token = sessionStorage.getItem("vergo_access_token");
 
     void fetch(`${apiUrl}/orders/bank-transfer/reservations/${reservationId}`, {
@@ -1394,7 +1394,7 @@ function BankTransferFlow({
   }, [reservationId]);
 
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     void fetch(`${apiUrl}/customization`, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) return;
@@ -1551,7 +1551,7 @@ function BankTransferFlow({
     formData.append("receipt", selectedFile);
     formData.append("checkout", JSON.stringify(checkoutPayload));
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     const token = sessionStorage.getItem("vergo_access_token");
 
     try {
@@ -1610,7 +1610,7 @@ function BankTransferFlow({
     setIsCancelling(true);
     setCancelError(null);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "");
     const token = sessionStorage.getItem("vergo_access_token");
 
     try {
