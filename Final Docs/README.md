@@ -19,6 +19,7 @@ Final Docs/
 ├── 05_TEST_CASES_AND_QUALITY_ASSURANCE.md # QA Strategy, Unit Test Suites, Manual Test Matrix
 ├── 06_DATABASE_AND_STORAGE_ARCHITECTURE.md# Live 40-Table Schema, Two-Phase Checkout & Cloudinary CDN
 ├── 07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md # Citypak API, Waybills, Tracking & 7 Concurrency Locks
+├── CONTRIBUTORS_README.md                 # Contributor Roles, Responsibilities & Contributions Ledger
 └── README.md                              # Master Index (This File)
 ```
 
@@ -68,7 +69,7 @@ In addition to the primary academic report requirements, the following deep-dive
 
 1. **[03_API_SPECIFICATION.md](./03_API_SPECIFICATION.md):**
    - Detailed endpoint definitions, HTTP verbs, URL routes, request payloads, query parameters, responses, and standard status codes.
-   - Covers Authentication, Product Catalogue, Shopping Cart, Orders, Payment Slips, Delivery Rules, Employee Queue, and Admin Management.
+   - Covers Authentication, Product Catalogue, Shopping Cart, Orders, Payment Slips, Delivery Rules, Employee Fulfillment, Resend Transactional Notifications, and Admin Management.
 
 2. **[04_SECURITY_ARCHITECTURE.md](./04_SECURITY_ARCHITECTURE.md):**
    - STRIDE threat modeling analysis.
@@ -77,23 +78,26 @@ In addition to the primary academic report requirements, the following deep-dive
    - PostgreSQL Row Level Security (RLS) data isolation policies.
    - Helmet HTTP security headers, CORS origin whitelisting, and DTO validation.
    - Concurrency protection: Atomic check-and-lock stock reservation to prevent race conditions.
-   - Cloudinary secure media upload and private file access.
+   - Cloudinary secure media upload, private file access, and post-rejection asset sanitization.
+   - Email template variable string sanitization preventing template injection and schema mismatches.
 
 3. **[05_TEST_CASES_AND_QUALITY_ASSURANCE.md](./05_TEST_CASES_AND_QUALITY_ASSURANCE.md):**
    - Comprehensive test strategy following the test pyramid.
-   - Breakdown of the 14 automated Jest test suites in the backend.
-   - 20+ manual and end-to-end test cases with Preconditions, Steps, Expected Results, and Status.
-   - Concurrency stress testing scenarios and documented bug fix history.
+   - Breakdown of automated Jest test suites in the backend (Authentication, Orders, Notifications, Stock Reservation, Citypak).
+   - 25+ manual and end-to-end test cases with Preconditions, Steps, Expected Results, and Status.
+   - Concurrency stress testing scenarios, Resend email dispatch validations, and documented bug fix history.
 
 4. **[06_DATABASE_AND_STORAGE_ARCHITECTURE.md](./06_DATABASE_AND_STORAGE_ARCHITECTURE.md):**
    - Full Data Dictionary for all 40 database tables based on PostgreSQL DDL and Supabase ER schema.
    - Complete Mermaid Entity-Relationship (ER) diagram with all foreign keys and cardinalities.
    - Two-Phase Checkout & Stock Reservation Lifecycle (`pending_checkout` ➔ `stock_reservation` ➔ `payment_proof` ➔ `orders` ➔ `inventory_commitment`).
    - Logistics & Courier Tracking Schema (`delivery`, `delivery_waybill`, `delivery_tracking_event`, `courier_pickup_request`, `courier_pickup_delivery`, `courier_shipper_profile`).
+   - Multi-branch inventory tracking, employee stock allocations, and stock distribution audit records.
    - Cloudinary Media Storage architecture (`CloudinaryService`, upload streams, folder namespaces, public ID extraction, asset invalidation, CDN responsive delivery).
 
 5. **[07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md](./07_COURIER_LOGISTICS_AND_CONCURRENCY_HANDLING.md):**
    - **Citypak Falcon API Integration**: Consignment creation, non-ASCII regex sanitation (`/[^\x00-\x7F]+/`), thermal 4x6 & A4 barcode waybill streaming, real-time tracking, HMAC-SHA256 signature verified webhooks, and bulk courier rider pickups.
+   - **Fulfillment Handover & Automated Notifications**: Staging parcels to "Handed to Courier" / "Pickedup Citypak" with real-time Resend delivery email triggers to customers.
    - **7 Core Concurrency Patterns**: Flash-drop check-and-decrement stock locks, multi-employee competitive order claiming with conditional SQL assignment, post-commit Cloudinary asset destruction, primary address partial unique index locks, idempotent webhook upserts, and cron worker race condition isolation.
 
 ---

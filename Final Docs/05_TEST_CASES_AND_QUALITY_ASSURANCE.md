@@ -50,7 +50,7 @@ The project includes 14 automated spec test suites implemented in TypeScript:
 | `admin.service.spec.ts` | `AdminService` | Revenue aggregation, employee commission math, low-stock threshold query. |
 | `reviews.service.spec.ts` | `ReviewsService` | Verified-order purchase check, rating average calculation, moderation filters. |
 | `addresses.service.spec.ts` | `AddressesService` | Address book insertion, partial unique index enforcement (single primary address). |
-| `notifications.service.spec.ts` | `NotificationsService` | Email template compilation, message payload formatting, delivery status. |
+| `notifications.service.spec.ts` | `NotificationsService` | Resend API template compilation, string parameter sanitization, delivery status dispatch. |
 | `user-role.spec.ts` | `UserRoleService` | Role mapping, guard decorator validation. |
 | `app.controller.spec.ts` | `AppController` | Server health check, uptime, version response. |
 
@@ -130,7 +130,10 @@ npm run test:e2e
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **TC-EMP-01** | View Unclaimed Orders | Logged in as `employee` | 1. Open `/employee/orders` | Orders with status `Ready to Process` are listed chronologically. | **PASS** |
 | **TC-EMP-02** | Claim Order Concurrency Lock | Order is unclaimed | 1. Employee A clicks "Claim Order"<br>2. Employee B simultaneously attempts to claim same order | Order assigned to Employee A (`Claimed by Employee`); Employee B receives notice that order is already claimed. | **PASS** |
-| **TC-EMP-03** | Fulfillment Milestone Advancement | Order claimed by employee | 1. Open `/employee/product-prep`<br>2. Check off items and click "Ready for Dispatch" | Order status advances to `Ready`. | **PASS** |
+| **TC-EMP-03** | Product Prep Tamper-Proof Form Fields | Order claimed by employee | 1. Open `/employee/product-prep`<br>2. Attempt to edit Payment Method or COD Amount inputs | Input fields are strictly disabled / read-only; editing is blocked to protect payment integrity. | **PASS** |
+| **TC-EMP-04** | Employee Personal Stock Inventory & Filtering | Employee has assigned branch stock | 1. Navigate to `/employee/stock`<br>2. Filter by Collection "Men" and Size "L"<br>3. Search SKU | Table height is constrained with internal scrolling; records filter immediately and pagination updates cleanly. | **PASS** |
+| **TC-EMP-05** | Employee Stock Request Email Trigger | Variant stock below quota | 1. In `/employee/stock`, click "Request Stock"<br>2. Enter quantity 10 and note<br>3. Submit modal | Resend template `stock-request` is sent to store admin email; variable values sanitized as strings; in-app notification saved. | **PASS** |
+| **TC-EMP-06** | Courier Handover & Customer Email Dispatch | Parcel ready for dispatch | 1. Open `/employee/ready-orders`<br>2. Click "Pickedup Citypak" button | Status updates to `Handed to Courier`; button fades to prevent double-clicks; Resend `delivery-notification` email is dispatched to customer. | **PASS** |
 
 ---
 
@@ -138,8 +141,9 @@ npm run test:e2e
 
 | Test Case ID | Test Scenario | Preconditions | Execution Steps | Expected Result | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **TC-LOG-01** | Consignment Manifest Generation | Order in `Ready` status | 1. Open `/employee/delivery-prep`<br>2. Click "Dispatch to Courier" | Airway bill tracking number generated; status moves to `Sent for Delivery`. | **PASS** |
+| **TC-LOG-01** | Consignment Manifest & Thermal Waybill | Order in `Ready` status | 1. Open `/employee/ready-orders`<br>2. Click "Print Waybill" | Thermal Code 128 barcode waybill (4x6 PDF) streams directly for printing. | **PASS** |
 | **TC-LOG-02** | Courier Delivery Webhook | Package in transit | 1. Citypak sends inbound webhook `DELIVERED` | Order status updates to `Completed`; customer tracking screen displays "Delivered". | **PASS** |
+| **TC-LOG-03** | Admin Stock Distribution to Employee | Variant has available central inventory | 1. Admin navigates to `/admin/inventory`<br>2. Selects employee and variant, enters quantity<br>3. Confirms allocation | Inventory balances updated; Resend `stock-distribution` email delivered to employee. | **PASS** |
 
 ---
 
@@ -173,3 +177,5 @@ npm run test:e2e
 | **BUG-002** | URL Normalization | Next.js double slashes (`//product-catalogue`) failed router matching | Client-side dynamic route concatenation bug | Added Express URL normalization middleware in NestJS `main.ts` stripping leading duplicate slashes | **FIXED** |
 | **BUG-003** | Primary Address | Multiple addresses set as `is_primary = true` simultaneously | Lack of conditional uniqueness constraint | Created partial unique index `user_addresses_one_primary_per_customer` in PostgreSQL | **FIXED** |
 | **BUG-004** | Guest Cart | Guest cart lost on page navigation | Pure React state without session storage | Backed guest cart by browser `sessionStorage` until registration | **FIXED** |
+| **BUG-005** | Resend Variable Validation | Resend API threw validation error: Variable QUANTITY must be a string | Template payload passed numeric integer quantity | Added automatic string sanitization across all Resend template parameters in `EmailService` | **FIXED** |
+| **BUG-006** | Prep COD Tampering | Workshop employees could accidentally edit COD Collection and Payment Type inputs | Uncontrolled mutable `<input>` elements in product prep GUI | Added `disabled` attribute and read-only styling locking financial inputs during preparation | **FIXED** |
