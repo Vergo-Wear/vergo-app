@@ -21,12 +21,28 @@ All frontend commands must be run inside the `frontend` folder.
 
 This frontend uses:
 
-* Next.js
-* React
-* TypeScript
-* Tailwind CSS
-* Node.js
-* npm
+* **Next.js 16 (App Router)**
+* **React 19**
+* **TypeScript**
+* **Tailwind CSS 4**
+* **Leaflet / React-Leaflet** (Delivery mapping & address pinning)
+* **React Joyride** (Interactive user onboarding guided tour)
+* **Node.js (LTS v20+ / v22+)**
+* **npm (v10+)**
+
+## Key Portals & Workflows
+
+1. **Customer Storefront (`src/app/(store)`):**
+   - Product catalog with live multi-criteria filtering, size/color selectors, and dynamic variant pricing.
+   - Persistent shopping cart and two-phase checkout (COD & Bank Transfer with deposit receipt upload).
+   - Real-time order tracking with Citypak courier status updates and customer reviews with photo uploads.
+2. **Workshop Employee Portal (`src/app/(employee)`):**
+   - Active orders queue with atomic order claiming locks.
+   - Product Preparation staging: tamper-proof locked COD & payment fields, milestone progress updates.
+   - Personal Stock Inventory: paginated, collection- and size-filterable inventory management with interactive admin restock requests.
+   - Ready Orders: thermal Code 128 waybill printing, invoice generation, Citypak courier handover dispatch, and parcel tracking.
+3. **Admin Control Center (`src/app/(admin)`):**
+   - Analytics dashboard, orders approval modal with bank slip audit, multi-branch inventory distribution, and employee performance monitoring.
 
 ## Getting Started
 
@@ -343,9 +359,19 @@ Basic frontend structure:
 ```text
 vergo-app/
 └── frontend/
-    ├── app/
-    │   └── page.tsx
-    ├── public/
+    ├── public/                    # Static assets, branding, and icons
+    ├── src/
+    │   ├── app/
+    │   │   ├── (admin)/           # Store administration and analytics portal
+    │   │   ├── (employee)/        # Workshop fulfillment, prep, stock & ready orders
+    │   │   ├── (store)/           # Customer storefront, catalog, cart, checkout & profile
+    │   │   ├── layout.tsx         # Root layout with fonts & theme
+    │   │   └── page.tsx           # Store landing page
+    │   ├── components/            # Shared UI components (Modals, Buttons, Navbars)
+    │   ├── context/               # Global state providers (Auth, Cart, Employee, Admin)
+    │   ├── hooks/                 # Custom React data fetching & utility hooks
+    │   ├── lib/                   # API clients & helper utilities
+    │   └── styles/                # Tailwind CSS stylesheets
     ├── package.json
     ├── README.md
     └── .env.local

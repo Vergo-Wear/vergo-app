@@ -98,11 +98,12 @@ When an employee completes garment preparation and packages an order (`/employee
 2. **Volumetric & Weight Calculation:** Accepts package weight in grams (`weightGrams`), piece count (`numberOfPieces`), and dimensions (`lengthCm`, `widthCm`, `heightCm`).
 3. **COD Amount Resolution:** If the payment method was `Cash on Delivery`, the consignment registers `codAmount = orders.total_amount`. If paid via Bank Transfer, `codAmount = 0`.
 4. **Falcon API Dispatch:** Sends a payload to Citypak `POST /client/orders` containing sender, recipient, package, and cash collection parameters.
-5. **Atomic Persistence:** In a single database transaction:
+5. **Atomic Persistence & Courier Handover Dispatch:** In a single database transaction:
    - Updates `public.delivery` with `waybillNumber`, `courierReference`, `submittedAt`, and `submissionStatus = 'Submitted'`.
    - Inserts waybill barcode records into `public.delivery_waybill`.
-   - Advances order status to `Sent for Delivery`.
-   - Dispatches customer notification (Email/SMS) containing the live tracking link.
+   - Advances order status to `Ready for Courier Pickup` (and subsequently `Handed to Courier` upon rider collection).
+   - Workshop staff trigger courier collection handover with one click via **Pickedup Citypak** on the ready orders dashboard (`/employee/ready-orders`).
+   - The UI immediately applies a fading transition to the button to prevent duplicate submissions, while the backend fires an automated Resend transactional email using published template `delivery-notification` to inform the customer that their package is on the way with tracking reference.
 
 ---
 

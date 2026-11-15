@@ -7,9 +7,10 @@ A full-stack, enterprise-grade custom order management and e-commerce web platfo
 ## Tech Stack
 
 - **Frontend:** Next.js 16.2.9 (App Router), React 19.2.4, TypeScript, Tailwind CSS 4, Leaflet, React Joyride.
-- **Backend:** NestJS 11.0.1, TypeScript, Express, Helmet, Class-Validator Pipes, Nodemailer, Axios.
+- **Backend:** NestJS 11.0.1, TypeScript, Express, Helmet, Class-Validator Pipes, Resend API SDK, Nodemailer fallback, Axios.
 - **Database & Auth:** Supabase PostgreSQL 15+ with Prisma ORM 6.2.0, Row Level Security (RLS), and Supabase Auth.
 - **Media Storage:** Cloudinary Media Cloud (SDK v2) for product photography, fabric swatches, and bank deposit slips.
+- **Transactional Email:** Resend API integration with published HTML templates (`new-order-notification`, `order-received`, `order-approved`, `order-rejection`, `delivery-notification`, `employee-account-creation`, `stock-request`, `stock-distribution`) and automatic payload string sanitization.
 - **Logistics Integration:** Citypak Couriers (Falcon Client Panel API v0.2.5) with thermal 4x6 waybill PDF streaming, tracking webhooks, and pickup dispatch.
 
 ---
@@ -33,20 +34,24 @@ A full-stack, enterprise-grade custom order management and e-commerce web platfo
    - 24-hour expiration countdown timer; automated cron releases reserved inventory back to available stock if unverified.
    - Admin audit modal for one-click approval or rejection with reason notes.
 
-4. **Workshop Employee Fulfillment Queue:**
+4. **Workshop Employee Fulfillment Queue & Personal Stock:**
    - Real-time order claiming queue with zero-collision conditional update locks.
-   - Preparation milestone checklist: `Ready to Process` ➔ `Claimed by Employee` ➔ `Preparing` ➔ `Ready`.
+   - Preparation milestone checklist: `Ready to Process` ➔ `Claimed by Employee` ➔ `Preparing` ➔ `Ready for Courier Pickup` ➔ `Handed to Courier`.
+   - Production prep security: locked/disabled fields for COD amount & payment method preventing accidental tampering.
+   - Employee Personal Stock Inventory: scroll-limited table with pagination, collection/size filtering, and search.
+   - Interactive Restock Request workflow dispatching Resend `stock-request` notifications to store administration.
    - Employee attendance tracking and parcel fulfillment commission payouts.
 
 5. **Citypak Logistics & Courier Integration:**
    - Automated consignment registration with parcel dimensions, weight, and COD cash collection.
    - On-demand streaming of thermal Code 128 barcode waybills (`4X6` adhesive labels & `A4` batch manifests).
    - Real-time parcel milestone updates via HMAC-SHA256 signature-verified webhooks.
+   - "Pickedup Citypak" courier handover dispatch with automated Resend customer delivery email notifications.
    - Bulk courier truck pickup scheduling per branch.
 
 6. **Executive Admin Dashboard:**
    - KPI metrics: daily/monthly revenue, profit margins, sales velocity, low-stock warnings.
-   - Multi-branch inventory tracking with branch-level reorder thresholds.
+   - Multi-branch inventory tracking with branch-level reorder thresholds and stock distribution to employees with Resend `stock-distribution` alerts.
    - Product and variant creation wizard with SKU generation.
    - Customer feedback and review moderation.
 

@@ -166,6 +166,14 @@ export class CreateOrderDto {
 ```
 The `whitelist: true` option automatically strips unexpected properties, preventing Mass Assignment vulnerabilities.
 
+### 6.3 Email Template Parameter Sanitization & Non-Blocking Isolation
+In transactional notifications (powered by Resend API), template variable injection and schema mismatch vulnerabilities are mitigated:
+- **Strict String Sanitization:** The Resend API template engine mandates that all variable key-value pairs are strings. `EmailService` automatically sanitizes incoming numeric, date, and text parameters (`String(value)`), converting `null` and `undefined` to empty strings (`''`) to prevent upstream JSON payload rejections.
+- **Transactional Decoupling (Fault Isolation):** Email notifications are executed outside critical database commit boundaries. If an external email provider suffers rate limits, network timeouts, or invalid template states, the exception is caught and logged as a warning; it **never** rolls back or aborts saved orders, payment approvals, or inventory transactions.
+
+### 6.4 Client-Side Tamper Resistance in Workshop Prep
+In the employee product preparation screen (`/employee/product-prep`), financial and order properties (such as **Payment Type** and **COD Collection Amount**) are rendered with read-only/disabled HTML input states and verified server-side, preventing accidental or unauthorized alteration of courier collection values during parcel packaging.
+
 ---
 
 ## 7. Concurrency Control & Atomic Stock Locking

@@ -327,15 +327,36 @@ All endpoints follow RESTful conventions:
   }
   ```
 
-### 8.3 Update Preparation Milestone
-- **Route:** `PATCH /employee/orders/:orderId/milestone`
+### 8.3 Update Preparation Milestone & Courier Handover
+- **Route:** `PATCH /orders/manage/:orderId/status`
 - **Headers:** `Authorization: Bearer <employee-token>`
-- **Request Body:** `{ "status": "Ready" }`
-- **Success Response (`200 OK`):** Milestone logged; customer notified via email/SMS.
+- **Request Body Options:**
+  - Transition to Preparing: `{ "status": "Preparing" }`
+  - Staged for Courier: `{ "status": "Ready for Courier Pickup" }`
+  - Courier Handover: `{ "status": "Handed to Courier" }` (or `"Handed to Citypak Courier"`)
+  - Completed: `{ "status": "Completed" }`
+  - Returned: `{ "status": "Returned" }`
+- **Success Response (`200 OK`):** Milestone saved; when marked `Handed to Courier`, an automated Resend `delivery-notification` email is dispatched to the customer.
+
+### 8.4 Employee Stock Restock Request
+- **Route:** `POST /notifications/stock-request`
+- **Headers:** `Authorization: Bearer <employee-token>`
+- **Request Body:**
+  ```json
+  {
+    "sku": "VG-HD-BLK-L",
+    "productName": "Vergo Signature Heavyweight Hoodie",
+    "quantity": 10,
+    "size": "L",
+    "color": "Jet Black",
+    "notes": "Low inventory on floor shelf for weekend fulfillment"
+  }
+  ```
+- **Success Response (`201 Created`):** In-app notification created for system administrators and an automated Resend email using template `stock-request` is delivered to `VERGO_ADMIN_EMAIL`.
 
 ---
 
-## 9. Administrator Management Endpoints
+## 9. Administrator Management & Stock Distribution Endpoints
 
 ### 9.1 Dashboard Analytics Summary
 - **Route:** `GET /admin/analytics/overview`
@@ -352,7 +373,33 @@ All endpoints follow RESTful conventions:
   }
   ```
 
-### 9.2 Add New Product & Generate Variants
+### 9.2 Distribute Stock to Employee
+- **Route:** `POST /admin/inventory/distribute`
+- **Headers:** `Authorization: Bearer <admin-token>`
+- **Request Body:**
+  ```json
+  {
+    "employeeId": "e9812401-2291-4cf1-8729-105191294812",
+    "variantId": "b1829401-4491-4df2-8921-201948192801",
+    "quantity": 15,
+    "sourceBranchId": "a901f41e-5819-4bfe-9831-285641778104"
+  }
+  ```
+- **Success Response (`200 OK`):**
+  ```json
+  {
+    "success": true,
+    "message": "Stock successfully allocated to employee.",
+    "distributedStock": {
+      "variantId": "b1829401-4491-4df2-8921-201948192801",
+      "employeeId": "e9812401-2291-4cf1-8729-105191294812",
+      "quantity": 15
+    }
+  }
+  ```
+  *Note:* Triggers automated Resend `stock-distribution` email to the employee's registered email address with full allocation details.
+
+### 9.3 Add New Product & Generate Variants
 - **Route:** `POST /admin/products`
 - **Headers:** `Authorization: Bearer <admin-token>`
 - **Request Body:**
