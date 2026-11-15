@@ -951,9 +951,10 @@ export default function ProductPrep() {
                       <label style={{ fontSize: "10px", color: "var(--emp-text-muted)" }}>Payment Type *</label>
                       <select
                         className="emp-search-input"
-                        style={{ width: "100%", marginTop: "2px", color: "#ffffff", background: "rgba(255,255,255,0.05)" }}
+                        style={{ width: "100%", marginTop: "2px", color: "#ffffff", background: "rgba(255,255,255,0.05)", opacity: 0.6, cursor: "not-allowed" }}
                         value={paymentType}
                         onChange={(e) => handlePaymentTypeChange(e.target.value as "COD" | "Prepaid")}
+                        disabled
                       >
                         <option value="COD" style={{ background: "#1a1a1a", color: "#ffffff" }}>COD (Cash On Delivery)</option>
                         <option value="Prepaid" style={{ background: "#1a1a1a", color: "#ffffff" }}>Prepaid (Bank Transfer / Online)</option>
@@ -967,11 +968,13 @@ export default function ProductPrep() {
                         style={{
                           width: "100%",
                           marginTop: "2px",
-                          opacity: paymentType === "Prepaid" ? 0.5 : 1,
+                          opacity: 0.6,
+                          cursor: "not-allowed",
                         }}
                         value={paymentType === "Prepaid" ? "0" : codAmountInput}
                         onChange={(e) => setCodAmountInput(e.target.value)}
-                        disabled={paymentType === "Prepaid"}
+                        disabled
+                        readOnly
                       />
                     </div>
                   </div>
